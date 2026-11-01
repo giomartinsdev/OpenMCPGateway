@@ -1,0 +1,48 @@
+[project]
+name = "openmcp-gateway"
+version = "0.1.0"
+description = "Auth, authorisation, rate limiting and observability in front of any MCP server"
+requires-python = ">=3.14"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "fastmcp>=4.1.4",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "asyncpg>=0.30",
+  "argon2-cffi>=23.1",
+  "pyyaml>=6.0",
+  "pydantic>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-bdd>=7.3",
+  "httpx>=0.27",
+  "testcontainers[postgres]>=4.8",
+  "ruff>=0.7",
+]
+
+[project.scripts]
+omg = "gateway.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gateway"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

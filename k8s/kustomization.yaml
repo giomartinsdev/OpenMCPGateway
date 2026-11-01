@@ -1,0 +1,17 @@
+# OpenMCPGateway in Kubernetes.
+#
+# Before applying: copy `secret.example.yaml` to `secret.yaml`, fill it in, and
+# edit the host in `ingress.yaml`. `secret.yaml` is git-ignored.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: support
+
+resources:
+  - deployment.yaml
+  - secret.example.yaml
+  - ingress.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: openmcp-gateway

@@ -1,0 +1,40 @@
+# Self-host in two commands:
+#   docker compose up -d --build
+#   open http://localhost:8000  → create the first operator account
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: omg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omg}
+      POSTGRES_DB: omg
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omg -d omg"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  gateway:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      OMG_DATABASE_URL: postgresql://omg:${POSTGRES_PASSWORD:-omg}@db:5432/omg
+      # openssl rand -hex 32
+      OMG_SESSION_SECRET: ${OMG_SESSION_SECRET:?set OMG_SESSION_SECRET to 32+ random bytes}
+      # Must match how browsers reach this instance: OAuth metadata is built from it.
+      OMG_BASE_URL: ${OMG_BASE_URL:-http://localhost:8000}
+      # Optional: GitHub OAuth App for gateways configured with `idp: github`
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    ports:
+      - "${OMG_PORT:-8000}:8000"
+
+volumes:
+  pgdata:

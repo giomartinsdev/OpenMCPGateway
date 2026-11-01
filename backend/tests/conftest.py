@@ -1,0 +1,189 @@
+"""Fixtures: a real Postgres, a real ASGI app, and one event loop for all of it.
+
+Two deliberate choices:
+
+* **No mocks for storage.** Event-sourcing bugs hide precisely where mocks are
+  permissive — transactions, unique constraints, JSONB round-trips. Every
+  scenario runs against a real `postgres:17` container.
+* **A single background event loop.** pytest-bdd steps are synchronous, but
+  asyncpg pools and ASGI apps are bound to the loop they were created on.
+  `asyncio.run` per step would create a new loop each time and break the pool,
+  so all async work is submitted to one thread-owned loop via `run()`.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import concurrent.futures
+import threading
+from typing import Any, Coroutine, TypeVar
+
+import pytest
+from testcontainers.community.postgres import PostgresContainer
+
+from gateway.application.container import Container
+from gateway.config import Settings
+
+T = TypeVar("T")
+
+
+class LoopRunner:
+    """Owns one event loop on a background thread; `run()` blocks until done."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(
+            target=self._serve, name="test-loop", daemon=True
+        )
+        self._thread.start()
+
+    def _serve(self) -> None:
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+
+    def run(self, coro: Coroutine[Any, Any, T], timeout: float = 60) -> T:
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+        return future.result(timeout=timeout)
+
+    def stop(self) -> None:
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self._thread.join(timeout=5)
+
+
+@pytest.fixture(scope="session")
+def runner():
+    loop_runner = LoopRunner()
+    try:
+        yield loop_runner
+    finally:
+        loop_runner.stop()
+
+
+@pytest.fixture(scope="session")
+def postgres():
+    container = PostgresContainer("postgres:17-alpine")
+    container.start()
+    try:
+        # testcontainers returns a SQLAlchemy-style URL; asyncpg wants plain.
+        yield container.get_connection_url().replace(
+            "postgresql+psycopg2", "postgresql"
+        )
+    finally:
+        container.stop()
+
+
+@pytest.fixture(scope="session")
+def base_url() -> str:
+    return "https://gateway.test"
+
+
+@pytest.fixture(scope="session")
+def settings(postgres, base_url) -> Settings:
+    return Settings(
+        database_url=postgres,
+        session_secret="test-secret-key-at-least-32-bytes-long!!",
+        base_url=base_url,
+    )
+
+
+@pytest.fixture()
+def container(runner, settings) -> Container:
+    instance = runner.run(Container.create(settings))
+    try:
+        yield instance
+    finally:
+        runner.run(_stop_servers())
+        runner.run(instance.close())
+
+
+@pytest.fixture(autouse=True)
+def clean_database(runner, postgres):
+    """Each scenario starts from an empty log.
+
+    Scenarios reuse slugs, so state must not leak between them. Truncating is the
+    honest option: replaying a shared log would let one scenario's events decide
+    another's outcome.
+    """
+    yield
+    runner.run(_truncate(postgres))
+
+
+async def _truncate(dsn: str) -> None:
+    import asyncpg
+
+    conn = await asyncpg.connect(dsn)
+    try:
+        # Before the first Container.create the schema does not exist yet; that
+        # is a clean database, not an error.
+        exists = await conn.fetchval("SELECT to_regclass('public.events')")
+        if exists is None:
+            return
+        await conn.execute(
+            "TRUNCATE events, projection_checkpoints, gateway_slugs, operator_emails, "
+            "rm_gateways, rm_principals, rm_api_keys, rm_request_stats, rm_requests_tail "
+            "RESTART IDENTITY CASCADE"
+        )
+    finally:
+        await conn.close()
+
+
+@pytest.fixture()
+def live_server(runner, container) -> str:
+    """Serve the real ASGI app on a random port; yield its base URL.
+
+    The app is started on the background loop so requests and the recorder task
+    share the container's loop.
+    """
+    return runner.run(_start_server(container))
+
+
+async def _start_server(container: Container) -> str:
+    import socket
+
+    import uvicorn
+
+    from gateway.interface.app import GatewayDispatcher, create_admin_app
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+    admin = create_admin_app(container.settings)
+    admin.state.container = container
+    app = GatewayDispatcher(admin)
+
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    )
+    task = asyncio.create_task(server.serve())
+    for _ in range(200):
+        if server.started:
+            break
+        await asyncio.sleep(0.05)
+    assert server.started, "uvicorn did not start"
+
+    _register_shutdown(container, server, task)
+    return f"http://127.0.0.1:{port}"
+
+
+_SERVERS: list[tuple[Any, Any]] = []
+
+
+def _register_shutdown(container: Container, server: Any, task: Any) -> None:
+    """Record the server so the container fixture can stop it before closing.
+
+    `Container` is a slots dataclass, so its methods cannot be patched; a
+    module-level registry keeps the teardown order explicit instead.
+    """
+    del container
+    _SERVERS.append((server, task))
+
+
+async def _stop_servers() -> None:
+    while _SERVERS:
+        server, task = _SERVERS.pop()
+        server.should_exit = True
+        try:
+            await task
+        except Exception:  # noqa: BLE001 - teardown must not mask failures
+            pass

@@ -1,0 +1,104 @@
+# One replica on purpose. The rate limiter is in-process, so N pods would mean an
+# effective limit of N × requests_per_minute; the event log is shared, but the
+# budget is not. Scaling out needs a Redis-backed limiter first (see the
+# `ponytail:` note in proxy/runtime.py).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openmcp-gateway
+  namespace: support
+  labels:
+    app.kubernetes.io/name: openmcp-gateway
+spec:
+  replicas: 1
+  # Gateway traffic is a live MCP session stream; a rolling replace is fine, but
+  # never run two generations at once while the limiter is process-local.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openmcp-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openmcp-gateway
+    spec:
+      imagePullSecrets:
+        - name: registry-credentials
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: registry.giomartins.dev:5000/openmcp-gateway:v0.1.0
+          env:
+            - name: OMG_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openmcp-gateway
+                  key: database-url
+            - name: OMG_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openmcp-gateway
+                  key: session-secret
+            # Drives the OAuth metadata URLs clients are told to use. Wrong value
+            # here means a client follows a link that does not exist.
+            - name: OMG_BASE_URL
+              value: https://mcp-gateway.giomartins.dev
+            - name: OMG_CONFIG_FILE
+              value: ""
+          ports:
+            - name: http
+              containerPort: 8000
+          # /healthz never needs auth: a probe that requires a credential fails at
+          # the exact moment the server is unhealthy and hides the real cause.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            # One uvicorn worker plus a FastMCP proxy app per gateway. Measured
+            # idle; the proxy holds one MCP session stream per connected client.
+            requests:
+              cpu: 30m
+              memory: 160Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openmcp-gateway
+  namespace: support
+  labels:
+    app.kubernetes.io/name: openmcp-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: openmcp-gateway
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

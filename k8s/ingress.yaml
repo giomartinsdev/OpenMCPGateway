@@ -1,0 +1,27 @@
+# MCP traffic is server-sent-event streaming in both directions, so buffering and
+# a short read timeout both break long tool calls. Same settings as the other MCP
+# routes in this cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-openmcp-gateway
+  namespace: support
+  annotations:
+    nginx.org/client-max-body-size: "50m"
+    nginx.org/proxy-buffering: "false"
+    nginx.org/proxy-read-timeout: "3600"
+    nginx.org/proxy-send-timeout: "3600"
+    nginx.org/location-snippets: "proxy_http_version 1.1;"
+spec:
+  ingressClassName: nic
+  rules:
+    - host: mcp-gateway.giomartins.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openmcp-gateway
+                port:
+                  number: 8000
