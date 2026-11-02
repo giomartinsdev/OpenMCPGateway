@@ -25,6 +25,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 
+from gateway.domain.events import TENANT_OF_DEPLOYMENT
+
 metadata = MetaData()
 
 # --------------------------------------------------------------------------
@@ -77,10 +79,30 @@ operator_emails = Table(
     Column("aggregate_id", Text, nullable=False, unique=True),
 )
 
+# The join code is looked up by value, so it needs its own unique index: a
+# tenant list scan per join is a full table read, and two tenants sharing a code
+# would make "join" ambiguous.
+rm_tenants = Table(
+    "rm_tenants",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("join_code", Text, nullable=False, unique=True),
+    Column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    ),
+)
+
 rm_roles = Table(
     "rm_roles",
     metadata,
     Column("id", Text, primary_key=True),
+    # Roles are a tenant's policy: two tenants may both have an "Auditor" with
+    # different permissions, and one must never see the other's.
+    Column(
+        "tenant_id", Text, nullable=False, default=TENANT_OF_DEPLOYMENT,
+        server_default=TENANT_OF_DEPLOYMENT,
+    ),
     Column("name", Text, nullable=False),
     Column("permissions", JSONB, nullable=False, default=list),
     Column("deleted", Boolean, nullable=False, default=False, server_default=false()),
@@ -97,6 +119,8 @@ rm_operators = Table(
     metadata,
     Column("id", Text, primary_key=True),
     Column("email", Text, nullable=False, unique=True),
+    # Nullable: a new account has no tenant until it creates or joins one.
+    Column("tenant_id", Text),
     Column("role_ids", JSONB, nullable=False, default=list),
     Column("is_admin", Boolean, nullable=False, default=False, server_default=false()),
     Column(
@@ -115,6 +139,10 @@ rm_gateways = Table(
     "rm_gateways",
     metadata,
     Column("id", Text, primary_key=True),
+    Column(
+        "tenant_id", Text, nullable=False, default=TENANT_OF_DEPLOYMENT,
+        server_default=TENANT_OF_DEPLOYMENT,
+    ),
     Column("slug", Text, nullable=False),
     Column("name", Text, nullable=False),
     Column("target_url", Text, nullable=False),
@@ -199,10 +227,12 @@ Index(
     unique=True,
     postgresql_where=rm_gateways.c.deleted == false(),
 )
+Index("rm_operators_tenant_idx", rm_operators.c.tenant_id)
 Index("rm_stats_bucket_idx", rm_request_stats.c.bucket.desc())
 Index("rm_tail_time_idx", rm_requests_tail.c.occurred_at.desc())
 
 __all__ = [
+    "TENANT_OF_DEPLOYMENT",
     "events",
     "gateway_slugs",
     "metadata",
@@ -215,4 +245,5 @@ __all__ = [
     "rm_request_stats",
     "rm_requests_tail",
     "rm_roles",
+    "rm_tenants",
 ]

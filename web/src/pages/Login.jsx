@@ -57,12 +57,12 @@ export function Login({ onLogin }) {
         </div>
         <form className="card" onSubmit={submit}>
           <h2 style={{ marginBottom: 4 }}>
-            {mode === "login" ? "Sign in" : "Create the first account"}
+            {mode === "login" ? "Sign in" : "Create an account"}
           </h2>
           <p className="hint" style={{ marginBottom: 16 }}>
             {mode === "login"
               ? "Operator access to gateways, keys and traffic."
-              : "The first account becomes an administrator."}
+              : "Then create your own tenant or join one you were invited to."}
           </p>
           <Notice kind="err">{error}</Notice>
           <div className="field">
@@ -96,7 +96,7 @@ export function Login({ onLogin }) {
           <button className="primary" style={{ width: "100%", marginTop: 4 }} disabled={busy}>
             {busy ? "Working…" : mode === "login" ? "Sign in" : "Create account"}
           </button>
-          {mode === "login" && methods.google && (
+          {methods.google && (
             <>
               <div className="divider">
                 <span>or</span>
@@ -113,14 +113,14 @@ export function Login({ onLogin }) {
         <div className="login-foot">
           {mode === "login" ? (
             <>
-              Fresh install?{" "}
+              New here?{" "}
               <a href="#register" onClick={(e) => { e.preventDefault(); setMode("register"); }}>
-                Create the first account
+                Create an account
               </a>
             </>
           ) : (
             <>
-              Already set up?{" "}
+              Already have an account?{" "}
               <a href="#login" onClick={(e) => { e.preventDefault(); setMode("login"); }}>
                 Sign in
               </a>

@@ -79,14 +79,45 @@ change it would be absurd.
 
 The password form keeps working, so a misconfigured IdP never locks you out. If no
 client is configured the Google button is not rendered. Signing in creates the
-operator on first success — which is why the allowlist gates it. Only an
-administrator can change these settings, and registration is closed after the first
-account; otherwise anyone who found the URL could become an operator.
+account on first success; what it can see depends on the tenant it then creates or
+joins. Only an administrator can change these settings.
 
-### Tenants and roles
+`OMG_OPERATOR_ALLOWLIST` is an address book, not a gate: those addresses skip the
+tenant choice and land in the installation's own tenant (`TENANT_OF_DEPLOYMENT`)
+with the viewer role. Everyone else gets an account with no tenant and is asked
+what to do next.
 
-One deployment is one tenant (`TENANT_OF_DEPLOYMENT`). The first account creates
-it and is its administrator; everyone added after that joins the same tenant.
+### Tenants
+
+The first thing an account sees after signing up is not the panel but a choice:
+**create a tenant** or **join one with a code**.
+
+* Creating a tenant makes the account its `owner`. It is the only path that grants
+  ownership, and it needs no permission because the account has none yet.
+* Joining needs the tenant's **join code** — eight characters, no `O/0` or `I/1`,
+  shown under **Members**. Joining lands on `viewer`. There is no email delivery
+  in this process, so a code the owner can paste into chat is the whole invitation
+  flow.
+* An account that has not chosen yet has `tenant_id: null`, no permissions, and
+  `403 onboarding: create or join a tenant first` on every gateway route.
+
+Everything is scoped by that tenant: gateways, roles, the member list, traffic
+stats, the audit log. Reads take the tenant as an argument (`list_gateways(tenant_id)`
+and friends), so a missing filter is a type error rather than a leak, and
+`/api/gateways/{id}/...` resolves the gateway *through* the tenant — a guessed id
+from another tenant is a 404, not a 403 that confirms the id exists.
+
+Gateways written before tenancy (and accounts too) fold to `TENANT_OF_DEPLOYMENT`,
+and a boot step (`adopt_legacy_tenants`) gives that tenant a real row so it has a
+join code. That is why upgrading an existing installation loses nothing.
+
+Public slugs stay global: `/g/{slug}/mcp` is the URL clients are configured with,
+and a per-tenant namespace would need a tenant segment in the path. Two tenants
+cannot both own `rancher`.
+
+### Roles
+
+Roles are per tenant.
 
 Permissions are a **closed catalog** (`backend/src/gateway/domain/permissions.py`),
 not free-form strings: `gateways:read`, `gateways:write`, `keys:read`, `keys:write`,
@@ -107,7 +138,7 @@ decision and every installation needs them:
 Everything else is defined by the tenant under **Roles**: name plus a set of
 permissions. `members:read/write`, `roles:read/write` and `settings:read/write` are
 deliberately not in `viewer` — a member list is an address book and sign-in settings
-name an identity provider.
+name an identity provider. Sign-in settings are deployment-wide; roles are not.
 
 A new member added without an explicit role lands on **`viewer`**: an omission must
 narrow access, never widen it. An administrator adds people under **Members**, and
@@ -125,22 +156,24 @@ re-login, no stale session. `/api/auth/me` returns `role_ids`, role names and th
 flat `permissions` list the panel uses to decide what to render — while every route
 checks the permission again on the server, since a hidden button is not a rule.
 
-Members get in two ways: an administrator adds them under **Members**, or an
-allowlisted address signs in with Google and joins with the default role. Neither
-path creates an administrator, so the tenant never ends up with two owners.
+A tenant gets members three ways: the creator owns it, an administrator adds
+someone under **Members**, or someone joins with the join code. Only the first path
+grants ownership, so a tenant never ends up with two owners.
 
-The tenant id is derived, not stored: one deployment is one tenant, so an extra
-column would be a constant with a migration attached. It is carried in the session
-nonetheless (`/api/auth/me` returns `tenant_id`), which is what makes a real
-multi-tenant install a change to the session rather than to every endpoint.
+The session deliberately does not carry the tenant: an account signs up, then
+creates or joins one, and a claim about the past cannot answer "which tenant is
+this request about". It is read fresh per request, which is also why joining takes
+effect on the next click.
 
 The flow is verified against a real OIDC provider in the tests
 (`tests/steps/fake_google.py`), including the failures that matter: a callback with
 a state this browser never received, an `id_token` minted for a different client, an
-unverified address, and an email outside the allowlist. The RBAC scenarios live in
-`backend/tests/features/roles.feature`, and a Playwright suite
-(`web/e2e/specs/rbac.spec.js`) walks the same path through the real UI against a
-real Postgres:
+unverified address, and a stranger who gets an account with no tenant. The tenancy
+scenarios live in `backend/tests/features/tenants.feature` (including two tenants
+that must not see each other's gateways, members or roles), RBAC in
+`backend/tests/features/roles.feature`, and Playwright suites
+(`web/e2e/specs/rbac.spec.js`, `web/e2e/specs/tenants.spec.js`) walk the same paths
+through the real UI against a real Postgres:
 
 ```bash
 cd web && npm run build && npx playwright install chromium && npm run e2e
@@ -195,8 +228,8 @@ caveat. See `ponytail:` comments in `backend/src/gateway/proxy/runtime.py`.
 The UI and a file are equivalent — both reach the same command handler.
 
 ```bash
-omg export > gateways.yaml          # never includes secrets
-omg apply gateways.yaml             # reconcile; prints any newly issued keys
+omg export --tenant tn_local > gateways.yaml   # never includes secrets
+omg apply gateways.yaml --tenant tn_local      # reconcile; prints new keys
 ```
 
 `/config` in the UI does the same with a diff-free "validate, then apply".

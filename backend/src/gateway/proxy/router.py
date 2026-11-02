@@ -135,7 +135,7 @@ class GatewayRouter(BaseModel):
 
     async def refresh(self) -> None:
         """Reconcile live gateways with the read model."""
-        gateways = await self.read_models.list_gateways()
+        gateways = await self.read_models.all_gateways()
         async with self.lock:
             desired: dict[str, tuple[dict[str, Any], dict[str, str]]] = {}
             for gateway in gateways:

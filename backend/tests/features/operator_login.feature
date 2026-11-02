@@ -44,11 +44,13 @@ Feature: Operator login with Google
     Then the callback is refused
     And the operator has no session
 
-  Scenario: A stranger with a valid Google account is refused
+  Scenario: A stranger with a valid Google account gets an empty account
+    # Signing up is open, and it grants nothing: the account has no tenant, so
+    # every gateway route refuses it until it creates one or joins with a code.
     Given the identity provider will vouch for "stranger@elsewhere.test"
     When the operator completes a Google login
-    Then the callback is refused
-    And the operator has no session
+    Then the operator has a session
+    And the operator has no tenant
 
   Scenario: Signing in twice reuses the same operator
     Given the identity provider will vouch for "ops@example.dev"

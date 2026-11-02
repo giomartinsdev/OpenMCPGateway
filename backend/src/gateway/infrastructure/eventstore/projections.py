@@ -33,6 +33,7 @@ from gateway.domain.events import (
     GatewayEnabled,
     GatewayRateLimitSet,
     GatewayUpdated,
+    OperatorJoinedTenant,
     OperatorRegistered,
     OperatorRolesAssigned,
     PrincipalAllowed,
@@ -40,6 +41,7 @@ from gateway.domain.events import (
     RequestObserved,
     RoleDefined,
     RoleDeleted,
+    TenantCreated,
 )
 from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
 from gateway.domain.readmodels import (
@@ -50,10 +52,12 @@ from gateway.domain.readmodels import (
     RequestRow,
     RoleRow,
     SeriesPoint,
+    TenantRow,
     TrafficStats,
 )
 from gateway.infrastructure.db.database import Database
 from gateway.infrastructure.db.tables import (
+    events,
     rm_api_keys,
     rm_gateways,
     rm_operators,
@@ -61,6 +65,7 @@ from gateway.infrastructure.db.tables import (
     rm_request_stats,
     rm_requests_tail,
     rm_roles,
+    rm_tenants,
 )
 
 Handler = Callable[[AsyncSession, Event], Awaitable[None]]
@@ -95,6 +100,8 @@ class ProjectionRunner:
             RequestObserved.EVENT: _on_request,
             OperatorRegistered.EVENT: _on_operator_registered,
             OperatorRolesAssigned.EVENT: _on_roles_assigned,
+            OperatorJoinedTenant.EVENT: _on_joined_tenant,
+            TenantCreated.EVENT: _on_tenant_created,
             RoleDefined.EVENT: _on_role_defined,
             RoleDeleted.EVENT: _on_role_deleted,
         }
@@ -120,6 +127,7 @@ async def _on_gateway_created(session: AsyncSession, event: Event) -> None:
         pg_insert(rm_gateways)
         .values(
             id=event.aggregate_id,
+            tenant_id=event.tenant_id,
             slug=event.slug,
             name=event.name,
             target_url=event.target_url,
@@ -314,6 +322,7 @@ async def _on_operator_registered(session: AsyncSession, event: Event) -> None:
     statement = pg_insert(rm_operators).values(
         id=event.aggregate_id,
         email=event.email,
+        tenant_id=event.tenant_id,
         role_ids=list(event.role_ids),
         is_admin=event.is_admin,
         created_at=event.occurred_at,
@@ -327,6 +336,25 @@ async def _on_operator_registered(session: AsyncSession, event: Event) -> None:
                 "is_admin": statement.excluded.is_admin,
             },
         )
+    )
+
+async def _on_joined_tenant(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, OperatorJoinedTenant)
+    await session.execute(
+        update(rm_operators)
+        .where(rm_operators.c.id == event.aggregate_id)
+        .values(tenant_id=event.tenant_id, role_ids=list(event.role_ids))
+    )
+
+async def _on_tenant_created(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, TenantCreated)
+    await session.execute(
+        pg_insert(rm_tenants).values(
+            id=event.aggregate_id,
+            name=event.name,
+            join_code=event.join_code,
+            created_at=event.occurred_at,
+        ).on_conflict_do_nothing(index_elements=[rm_tenants.c.id])
     )
 
 
@@ -343,6 +371,7 @@ async def _on_role_defined(session: AsyncSession, event: Event) -> None:
     assert isinstance(event, RoleDefined)
     statement = pg_insert(rm_roles).values(
         id=event.aggregate_id,
+        tenant_id=event.tenant_id,
         name=event.name,
         permissions=list(event.permissions),
         deleted=False,
@@ -380,7 +409,27 @@ class ReadModels:
     def __init__(self, database: Database) -> None:
         self._db = database
 
-    async def list_gateways(self) -> list[GatewayRow]:
+    async def list_gateways(self, tenant_id: str) -> list[GatewayRow]:
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(rm_gateways)
+                    .where(
+                        (rm_gateways.c.tenant_id == tenant_id)
+                        & rm_gateways.c.deleted.is_(False)
+                    )
+                    .order_by(rm_gateways.c.created_at)
+                )
+            ).mappings()
+            return [GatewayRow.model_validate(dict(row)) for row in rows]
+
+    async def all_gateways(self) -> list[GatewayRow]:
+        """Every live gateway, whoever owns it — the proxy's view.
+
+        The proxy serves by public slug, and a slug is global, so it cannot ask
+        "for this tenant". Named for what it is: an unscoped read is a deliberate
+        call site, not an omission.
+        """
         async with self._db.session() as session:
             rows = (
                 await session.execute(
@@ -391,16 +440,28 @@ class ReadModels:
             ).mappings()
             return [GatewayRow.model_validate(dict(row)) for row in rows]
 
-    async def get_gateway(self, gateway_id: str) -> GatewayRow | None:
+    async def get_gateway(
+        self, gateway_id: str, tenant_id: str
+    ) -> GatewayRow | None:
+        """Scoped by tenant in the query, not checked afterwards.
+
+        A caller that forgot a filter would otherwise read another tenant's
+        gateway; here the filter is what makes the row exist at all.
+        """
         async with self._db.session() as session:
             row = (
                 await session.execute(
-                    select(rm_gateways).where(rm_gateways.c.id == gateway_id)
+                    select(rm_gateways).where(
+                        (rm_gateways.c.id == gateway_id)
+                        & (rm_gateways.c.tenant_id == tenant_id)
+                    )
                 )
             ).mappings().first()
         return GatewayRow.model_validate(dict(row)) if row else None
 
     async def get_by_slug(self, slug: str) -> GatewayRow | None:
+        """Unscoped on purpose: this is the proxy's public lookup, where the slug
+        in the URL is the only input. `tenant_id` rides along for the router."""
         async with self._db.session() as session:
             row = (
                 await session.execute(
@@ -411,6 +472,36 @@ class ReadModels:
                 )
             ).mappings().first()
         return GatewayRow.model_validate(dict(row)) if row else None
+
+    async def tenant(self, tenant_id: str) -> TenantRow | None:
+        async with self._db.session() as session:
+            row = (
+                await session.execute(
+                    select(rm_tenants).where(rm_tenants.c.id == tenant_id)
+                )
+            ).mappings().first()
+        return TenantRow.model_validate(dict(row)) if row else None
+
+    async def tenant_by_code(self, join_code: str) -> TenantRow | None:
+        async with self._db.session() as session:
+            row = (
+                await session.execute(
+                    select(rm_tenants).where(
+                        func.upper(rm_tenants.c.join_code) == join_code.strip().upper()
+                    )
+                )
+            ).mappings().first()
+        return TenantRow.model_validate(dict(row)) if row else None
+
+    async def join_code_taken(self, join_code: str) -> bool:
+        async with self._db.session() as session:
+            return (
+                await session.scalar(
+                    select(rm_tenants.c.id).where(
+                        func.upper(rm_tenants.c.join_code) == join_code.upper()
+                    )
+                )
+            ) is not None
 
     async def principals(self, gateway_id: str) -> list[PrincipalRow]:
         async with self._db.session() as session:
@@ -462,7 +553,8 @@ class ReadModels:
             )
 
     async def request_tail(
-        self, gateway_id: str | None, limit: int = 100
+        self, gateway_id: str | None, limit: int = 100,
+        *, tenant_id: str | None = None,
     ) -> list[RequestRow]:
         query = select(
             rm_requests_tail.c.gateway_id,
@@ -477,6 +569,10 @@ class ReadModels:
         )
         if gateway_id is not None:
             query = query.where(rm_requests_tail.c.gateway_id == gateway_id)
+        if tenant_id is not None:
+            query = query.where(
+                rm_requests_tail.c.gateway_id.in_(_tenant_gateways(tenant_id))
+            )
         async with self._db.session() as session:
             rows = (
                 await session.execute(
@@ -485,37 +581,45 @@ class ReadModels:
             ).mappings()
             return [RequestRow.model_validate(dict(row)) for row in rows]
 
-    async def list_roles(self) -> list[RoleRow]:
-        """Custom roles, newest first. Built-ins are added by the API layer."""
+    async def list_roles(self, tenant_id: str) -> list[RoleRow]:
+        """This tenant's custom roles. Built-ins are added by the API layer."""
         async with self._db.session() as session:
             rows = (
                 await session.execute(
                     select(rm_roles)
-                    .where(rm_roles.c.deleted.is_(False))
+                    .where(
+                        (rm_roles.c.tenant_id == tenant_id)
+                        & rm_roles.c.deleted.is_(False)
+                    )
                     .order_by(rm_roles.c.name)
                 )
             ).mappings()
             return [RoleRow.model_validate(dict(row)) for row in rows]
 
-    async def role_permissions(self) -> dict[str, tuple[str, ...]]:
+    async def role_permissions(
+        self, tenant_id: str
+    ) -> dict[str, tuple[str, ...]]:
         """Role id -> permissions, for permission resolution. Deleted roles are
         excluded, so deleting a role genuinely revokes it."""
         async with self._db.session() as session:
             rows = (
                 await session.execute(
                     select(rm_roles.c.id, rm_roles.c.permissions).where(
-                        rm_roles.c.deleted.is_(False)
+                        (rm_roles.c.tenant_id == tenant_id)
+                        & rm_roles.c.deleted.is_(False)
                     )
                 )
             ).all()
         return {role_id: tuple(perms or ()) for role_id, perms in rows}
 
-    async def role_holder_counts(self) -> dict[str, int]:
+    async def role_holder_counts(self, tenant_id: str) -> dict[str, int]:
         """Holders per role id, in one read. The panel lists every role at once."""
         async with self._db.session() as session:
             rows = (
                 await session.execute(
-                    select(rm_operators.c.role_ids, rm_operators.c.is_admin)
+                    select(rm_operators.c.role_ids, rm_operators.c.is_admin).where(
+                        rm_operators.c.tenant_id == tenant_id
+                    )
                 )
             ).all()
         counts: dict[str, int] = {}
@@ -527,12 +631,14 @@ class ReadModels:
                 counts[role_id] = counts.get(role_id, 0) + 1
         return counts
 
-    async def role_holder_count(self, role_id: str) -> int:
+    async def role_holder_count(self, role_id: str, tenant_id: str) -> int:
         """How many live accounts hold this role. Blocks deleting a role in use."""
         async with self._db.session() as session:
             rows = (
                 await session.execute(
-                    select(rm_operators.c.role_ids, rm_operators.c.is_admin)
+                    select(rm_operators.c.role_ids, rm_operators.c.is_admin).where(
+                        rm_operators.c.tenant_id == tenant_id
+                    )
                 )
             ).all()
         count = 0
@@ -543,23 +649,27 @@ class ReadModels:
             count += role_id in effective
         return count
 
-    async def list_operators(self) -> list[OperatorRow]:
+    async def list_operators(self, tenant_id: str) -> list[OperatorRow]:
         async with self._db.session() as session:
             rows = (
                 await session.execute(
                     select(
                         rm_operators.c.id,
                         rm_operators.c.email,
+                        rm_operators.c.tenant_id,
                         rm_operators.c.role_ids,
                         rm_operators.c.is_admin,
                         rm_operators.c.created_at,
-                    ).order_by(rm_operators.c.created_at)
+                    )
+                    .where(rm_operators.c.tenant_id == tenant_id)
+                    .order_by(rm_operators.c.created_at)
                 )
             ).mappings()
             return [
                 OperatorRow(
                     operator_id=row["id"],
                     email=row["email"],
+                    tenant_id=row["tenant_id"],
                     is_admin=row["is_admin"],
                     role_ids=tuple(row["role_ids"] or ())
                     or ((OWNER_ROLE,) if row["is_admin"] else DEFAULT_ROLE_IDS),
@@ -567,6 +677,50 @@ class ReadModels:
                 )
                 for row in rows
             ]
+
+    async def backfill_legacy_operators(self, tenant_id: str) -> int:
+        """Put pre-tenancy accounts into `tenant_id`. Returns how many moved.
+
+        "Pre-tenancy" is a fact in the log, not a guess: events written before
+        the field existed have no `tenant_id` key at all, while a new signup
+        stores it as `null`. So key existence — not a timestamp, not a boot
+        marker — is what separates them, and running this on every boot is
+        therefore safe: an account that deliberately has no tenant keeps having
+        none.
+        """
+        legacy = (
+            select(events.c.aggregate_id)
+            .where(
+                (events.c.event_type == OperatorRegistered.EVENT)
+                & ~events.c.payload.has_key("tenant_id")
+            )
+        )
+        async with self._db.session() as session, session.begin():
+            result = await session.execute(
+                update(rm_operators)
+                .where(
+                    rm_operators.c.tenant_id.is_(None)
+                    & rm_operators.c.id.in_(legacy)
+                )
+                .values(tenant_id=tenant_id)
+            )
+        return result.rowcount or 0
+
+    async def operator_tenant(self, operator_id: str) -> str | None:
+        """The tenant an account belongs to, read fresh.
+
+        Not from the cookie: a member who joined after signing in must not keep
+        being told they have no tenant, and a session is a claim about the past.
+        """
+        async with self._db.session() as session:
+            row = (
+                await session.execute(
+                    select(rm_operators.c.tenant_id).where(
+                        rm_operators.c.id == operator_id
+                    )
+                )
+            ).first()
+        return row[0] if row else None
 
     async def operator_roles(self, operator_id: str) -> tuple[str, ...] | None:
         async with self._db.session() as session:
@@ -583,7 +737,8 @@ class ReadModels:
         return tuple(role_ids or ()) or ((OWNER_ROLE,) if is_admin else DEFAULT_ROLE_IDS)
 
     async def stats(
-        self, gateway_id: str | None = None, minutes: int = 60
+        self, gateway_id: str | None = None, minutes: int = 60,
+        *, tenant_id: str | None = None,
     ) -> TrafficStats:
         """Aggregate traffic: totals, per-outcome, per-IP, latency.
 
@@ -602,6 +757,10 @@ class ReadModels:
         ).where(rm_request_stats.c.bucket >= func.now() - _interval(minutes))
         if gateway_id is not None:
             query = query.where(rm_request_stats.c.gateway_id == gateway_id)
+        if tenant_id is not None:
+            query = query.where(
+                rm_request_stats.c.gateway_id.in_(_tenant_gateways(tenant_id))
+            )
         async with self._db.session() as session:
             rows = (await session.execute(query)).mappings()
 
@@ -638,6 +797,16 @@ class ReadModels:
                 for bucket, count in sorted(series.items())
             ],
         )
+
+
+def _tenant_gateways(tenant_id: str) -> Any:
+    """Gateway ids owned by a tenant, as a subquery.
+
+    Traffic rows key on the gateway, not the tenant, so the filter is a join in
+    disguise: it keeps one query per dashboard instead of a read of the gateway
+    list followed by an `IN (...)` built in Python.
+    """
+    return select(rm_gateways.c.id).where(rm_gateways.c.tenant_id == tenant_id)
 
 
 def _interval(minutes: int) -> Any:

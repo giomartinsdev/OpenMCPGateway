@@ -17,7 +17,7 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from gateway.application.container import Container
-from gateway.domain.events import AuthMode, IdentityProvider
+from gateway.domain.events import TENANT_OF_DEPLOYMENT, AuthMode, IdentityProvider
 from tests.steps.support import BackendServer, Context
 
 scenarios("../features/proxy_authorisation.feature")
@@ -50,6 +50,7 @@ def _make_gateway(container, runner, operator: str, *, target: str,
                   rate_limit: int = 0, slug: str = "demo") -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug, name=slug.title(), target_url=target, actor=operator,
             auth_mode=auth_mode, idp=idp,
         )
@@ -58,7 +59,7 @@ def _make_gateway(container, runner, operator: str, *, target: str,
                 gateway_id, requests_per_minute=rate_limit, actor=operator
             )
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 
@@ -93,6 +94,7 @@ def gateway_api_key_real(container, runner, operator: str, backend: BackendServe
 def gateway_oauth(container, runner, operator: str, slug: str) -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug, name=slug.title(), target_url="http://127.0.0.1:1/mcp",
             actor=operator, auth_mode=AuthMode.OAUTH, idp=IdentityProvider.GITHUB,
         )
@@ -105,7 +107,7 @@ def gateway_oauth(container, runner, operator: str, slug: str) -> dict:
             actor=operator,
         )
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 
@@ -489,6 +491,7 @@ def oauth_gateway_without_credentials(container, runner, operator: str,
 
     async def create() -> None:
         await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug, name=slug.title(), target_url="http://127.0.0.1:1/mcp",
             actor=operator, auth_mode=AuthMode.OAUTH,
             idp=IdentityProvider.GITHUB,

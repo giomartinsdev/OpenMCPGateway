@@ -10,13 +10,12 @@ from pydantic import Field
 from gateway.domain.events.base import AuthMode, Event, IdentityProvider
 
 TENANT_OF_DEPLOYMENT = "tn_local"
-"""The installation's tenant id.
+"""The tenant that accounts and gateways written before tenants existed belong to.
 
-Derived, not stored: one deployment is one tenant, and every operator and
-gateway in the log belongs to it. Storing it would mean a migration for the
-accounts that predate tenants, and a second id that can disagree with this one.
-A future multi-tenant install replaces this with the session's tenant, which is
-why the field is carried in the session now even though it is constant.
+An event is history and is never rewritten, so streams that predate tenancy have
+no tenant field at all. This constant is what their absence means: everything
+that used to be the installation is now one tenant, and new accounts name their
+own (or none, until they create or join one).
 """
 
 # --------------------------------------------------------------------------
@@ -38,6 +37,10 @@ class OperatorRegistered(Event):
     # event is history: it is read, never rewritten. `role_ids` wins when set.
     is_admin: bool = False
     role_ids: tuple[str, ...] = ()
+    # The default is the legacy tenant, not "none": a stream that predates
+    # tenancy has no field here, and reading that as "no tenant" would drop every
+    # existing account into onboarding. A new signup says `None` explicitly.
+    tenant_id: str | None = TENANT_OF_DEPLOYMENT
 
 
 class OperatorRolesAssigned(Event):
@@ -49,9 +52,29 @@ class OperatorRolesAssigned(Event):
     role_ids: tuple[str, ...] = ()
 
 
+class OperatorJoinedTenant(Event):
+    """An account picks a tenant. The roles come with it: joining is what grants
+    the first ones, and it is the only moment where both facts must agree."""
+
+    EVENT = "operator.joined_tenant"
+
+    tenant_id: str
+    role_ids: tuple[str, ...] = ()
+
+
+class TenantCreated(Event):
+    EVENT = "tenant.created"
+
+    name: str
+    # Uppercase, unambiguous alphabet (no O/0, I/1). This string is read aloud
+    # and retyped, so every pair that can be confused is a support ticket.
+    join_code: str = ""
+
+
 class RoleDefined(Event):
     EVENT = "role.defined"
 
+    tenant_id: str = TENANT_OF_DEPLOYMENT
     name: str
     permissions: tuple[str, ...] = ()
 
@@ -74,6 +97,7 @@ class OperatorLoggedIn(Event):
 class GatewayCreated(Event):
     EVENT = "gateway.created"
 
+    tenant_id: str = TENANT_OF_DEPLOYMENT
     slug: str
     name: str
     target_url: str
@@ -200,6 +224,8 @@ class SignInConfigured(Event):
 WRITE_EVENTS: tuple[type[Event], ...] = (
     OperatorRegistered,
     OperatorRolesAssigned,
+    OperatorJoinedTenant,
+    TenantCreated,
     OperatorLoggedIn,
     RoleDefined,
     RoleDeleted,
@@ -230,6 +256,7 @@ __all__ = [
     "GatewayEnabled",
     "GatewayRateLimitSet",
     "GatewayUpdated",
+    "OperatorJoinedTenant",
     "OperatorLoggedIn",
     "OperatorRegistered",
     "OperatorRolesAssigned",
@@ -238,4 +265,5 @@ __all__ = [
     "RoleDefined",
     "RoleDeleted",
     "SignInConfigured",
+    "TenantCreated",
 ]

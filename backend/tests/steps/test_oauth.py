@@ -17,7 +17,7 @@ import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from gateway.domain.events import AuthMode, IdentityProvider
+from gateway.domain.events import TENANT_OF_DEPLOYMENT, AuthMode, IdentityProvider
 
 scenarios("../features/oauth_discovery.feature")
 
@@ -26,6 +26,7 @@ scenarios("../features/oauth_discovery.feature")
 def gateway(container, runner, operator: str) -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug="demo",
             name="Demo",
             target_url="http://127.0.0.1:1/mcp",
@@ -42,7 +43,7 @@ def gateway(container, runner, operator: str) -> dict:
             actor=operator,
         )
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 
@@ -51,6 +52,7 @@ def gateway(container, runner, operator: str) -> dict:
 def api_key_gateway(container, runner, operator: str) -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug="demo",
             name="Demo",
             target_url="http://127.0.0.1:1/mcp",
@@ -59,7 +61,7 @@ def api_key_gateway(container, runner, operator: str) -> dict:
         )
         await container.commands.issue_api_key(gateway_id, label="t", actor=operator)
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 
@@ -74,6 +76,7 @@ def api_key_gateway(container, runner, operator: str) -> dict:
 def oauth_gateway(container, runner, operator: str, slug: str) -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug,
             name=slug.title(),
             target_url="http://127.0.0.1:1/mcp",
@@ -90,7 +93,7 @@ def oauth_gateway(container, runner, operator: str, slug: str) -> dict:
             actor=operator,
         )
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 
@@ -102,6 +105,7 @@ def oauth_gateway(container, runner, operator: str, slug: str) -> dict:
 def api_key_auth_gateway(container, runner, operator: str, slug: str) -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug,
             name=slug.title(),
             target_url="http://127.0.0.1:1/mcp",
@@ -110,7 +114,7 @@ def api_key_auth_gateway(container, runner, operator: str, slug: str) -> dict:
         )
         await container.commands.issue_api_key(gateway_id, label="t", actor=operator)
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 
@@ -266,6 +270,7 @@ def as_not_served(live_server: str) -> None:
 def oauth_gateway_with_scope(container, runner, operator: str, scope: str) -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug="demo", name="Demo", target_url="http://127.0.0.1:1/mcp",
             actor=operator, auth_mode=AuthMode.OAUTH,
             idp=IdentityProvider.GITHUB,
@@ -280,7 +285,7 @@ def oauth_gateway_with_scope(container, runner, operator: str, scope: str) -> di
             actor=operator,
         )
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 

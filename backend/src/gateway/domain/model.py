@@ -36,6 +36,7 @@ from gateway.domain.events import (
     GatewayRateLimitSet,
     GatewayUpdated,
     IdentityProvider,
+    OperatorJoinedTenant,
     OperatorRegistered,
     OperatorRolesAssigned,
     PrincipalAllowed,
@@ -43,6 +44,7 @@ from gateway.domain.events import (
     RoleDefined,
     RoleDeleted,
     SignInConfigured,
+    TenantCreated,
 )
 from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE, normalise
 
@@ -75,12 +77,10 @@ class Operator(_Aggregate):
     password_hash: str = ""
     is_admin: bool = False
     role_ids: tuple[str, ...] = ()
+    #: `None` until the account creates or joins a tenant. An account in that
+    #: state can sign in and see the onboarding choice, and nothing else.
+    tenant_id: str | None = None
     exists: bool = False
-
-    @property
-    def tenant_id(self) -> str:
-        """The tenant this account belongs to. Derived, see `TENANT_OF_DEPLOYMENT`."""
-        return TENANT_OF_DEPLOYMENT
 
     @property
     def role(self) -> str:
@@ -108,8 +108,12 @@ class Operator(_Aggregate):
                 state.password_hash = event.password_hash
                 state.is_admin = event.is_admin
                 state.role_ids = tuple(event.role_ids)
+                state.tenant_id = event.tenant_id
                 state.exists = True
             elif isinstance(event, OperatorRolesAssigned):
+                state.role_ids = tuple(event.role_ids)
+            elif isinstance(event, OperatorJoinedTenant):
+                state.tenant_id = event.tenant_id
                 state.role_ids = tuple(event.role_ids)
         return state
 
@@ -122,9 +126,32 @@ class Operator(_Aggregate):
             )
         ]
 
+    def decide_join_tenant(
+        self, *, tenant_id: str, role_ids: Sequence[str]
+    ) -> list[Event]:
+        if not self.exists:
+            raise DomainError("operator does not exist")
+        if self.tenant_id == tenant_id:
+            raise DomainError("this account already belongs to that tenant")
+        if self.tenant_id is not None:
+            # Leaving would be a different command with a different question
+            # (what happens to the gateways), not a side effect of joining.
+            raise DomainError(
+                "this account already belongs to a tenant; leaving is not supported"
+            )
+        if not tenant_id:
+            raise DomainError("tenant_id is required")
+        return [
+            OperatorJoinedTenant(
+                aggregate_id=self.id,
+                tenant_id=tenant_id,
+                role_ids=tuple(dict.fromkeys(role_ids)),
+            )
+        ]
+
     def decide_register(
         self, *, email: str, password_hash: str, is_admin: bool = False,
-        role_ids: Sequence[str] = (),
+        role_ids: Sequence[str] = (), tenant_id: str | None = None,
     ) -> list[Event]:
         if self.exists:
             raise DomainError("operator already registered")
@@ -139,9 +166,53 @@ class Operator(_Aggregate):
                 password_hash=password_hash,
                 is_admin=is_admin,
                 role_ids=tuple(dict.fromkeys(role_ids)),
+                tenant_id=tenant_id,
             )
         ]
 
+
+# --------------------------------------------------------------------------
+# Tenant
+# --------------------------------------------------------------------------
+#
+# A tenant owns gateways and roles, and is what an account belongs to. Before
+# this it was a constant: one deployment was one tenant, which made "sign up"
+# mean "join the installation". The join code is the whole membership flow —
+# there is no invitation email to send from a process that has no mail server.
+
+JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+class Tenant(_Aggregate):
+    id: str = ""
+    name: str = ""
+    join_code: str = ""
+    exists: bool = False
+
+    @classmethod
+    def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> Tenant:
+        state = cls(id=aggregate_id)
+        for event in events:
+            if isinstance(event, TenantCreated):
+                state.name = event.name
+                state.join_code = event.join_code
+                state.exists = True
+        return state
+
+    def decide_create(self, *, name: str, join_code: str) -> list[Event]:
+        if self.exists:
+            raise DomainError("tenant already exists")
+        clean = name.strip()
+        if not clean:
+            raise DomainError("tenant name is required")
+        if len(clean) > 64:
+            raise DomainError("tenant name must be 64 characters or fewer")
+        if not join_code or len(join_code) < 8:
+            raise DomainError("join code must be at least 8 characters")
+        return [
+            TenantCreated(
+                aggregate_id=self.id, name=clean, join_code=join_code.upper()
+            )
+        ]
 
 # --------------------------------------------------------------------------
 # Gateway
@@ -150,6 +221,10 @@ class Operator(_Aggregate):
 
 class Gateway(_Aggregate):
     id: str = ""
+    #: Which tenant owns this gateway. Empty on streams written before tenancy;
+    #: folded from the event so a gateway created before the change still reads
+    #: as the legacy tenant's (see `from_events`).
+    tenant_id: str = TENANT_OF_DEPLOYMENT
     slug: str = ""
     name: str = ""
     target_url: str = ""
@@ -179,6 +254,7 @@ class Gateway(_Aggregate):
     def _apply(self, event: Event) -> None:
         match event:
             case GatewayCreated():
+                self.tenant_id = event.tenant_id
                 self.slug = event.slug
                 self.name = event.name
                 self.target_url = event.target_url
@@ -249,6 +325,7 @@ class Gateway(_Aggregate):
     def decide_create(
         self,
         *,
+        tenant_id: str,
         slug: str,
         name: str,
         target_url: str,
@@ -271,6 +348,7 @@ class Gateway(_Aggregate):
         return [
             GatewayCreated(
                 aggregate_id=self.id,
+                tenant_id=tenant_id,
                 slug=slug,
                 name=name.strip(),
                 target_url=target_url,
@@ -449,6 +527,7 @@ class Gateway(_Aggregate):
 
 class Role(_Aggregate):
     id: str = ""
+    tenant_id: str = TENANT_OF_DEPLOYMENT
     name: str = ""
     permissions: tuple[str, ...] = ()
     deleted: bool = False
@@ -459,6 +538,7 @@ class Role(_Aggregate):
         state = cls(id=aggregate_id)
         for event in events:
             if isinstance(event, RoleDefined):
+                state.tenant_id = event.tenant_id
                 state.name = event.name
                 state.permissions = tuple(event.permissions)
                 state.deleted = False
@@ -467,7 +547,9 @@ class Role(_Aggregate):
                 state.deleted = True
         return state
 
-    def decide_define(self, *, name: str, permissions: Sequence[str]) -> list[Event]:
+    def decide_define(
+        self, *, tenant_id: str, name: str, permissions: Sequence[str]
+    ) -> list[Event]:
         if self.deleted:
             raise DomainError("role was deleted; define a new one under another name")
         clean_name = name.strip()
@@ -475,9 +557,12 @@ class Role(_Aggregate):
             raise DomainError("role name is required")
         if len(clean_name) > 64:
             raise DomainError("role name must be 64 characters or fewer")
+        if self.exists and self.tenant_id != tenant_id:
+            raise DomainError("role belongs to another tenant")
         return [
             RoleDefined(
                 aggregate_id=self.id,
+                tenant_id=tenant_id,
                 name=clean_name,
                 permissions=normalise(permissions),
             )
@@ -574,10 +659,12 @@ class SignInSettings(_Aggregate):
 
 
 __all__ = [
+    "JOIN_CODE_ALPHABET",
     "SLUG_RE",
     "DomainError",
     "Gateway",
     "Operator",
     "Role",
     "SignInSettings",
+    "Tenant",
 ]

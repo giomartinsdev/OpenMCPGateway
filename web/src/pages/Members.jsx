@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Badge, Card, Empty, Notice, can, relative } from "../ui.jsx";
+import { Badge, Card, Empty, Endpoint, Notice, can, relative } from "../ui.jsx";
 
 // People, not settings. The sign-in configuration lives in Settings; this is
 // who belongs to the tenant and what each of them may do.
@@ -14,6 +14,7 @@ export function Members({ me }) {
   const [form, setForm] = useState({ email: "", password: "", roleIds: [] });
   const [editing, setEditing] = useState(null); // {operator, roleIds}
   const [busy, setBusy] = useState(false);
+  const [tenant, setTenant] = useState(null);
 
   async function load() {
     try {
@@ -22,6 +23,9 @@ export function Members({ me }) {
       // Listing members does not imply listing roles: a recruiter may add
       // people without seeing the permission table.
       if (can(me, "roles:read")) setRoles((await api.roles()).roles);
+      // The join code is the invitation that costs nothing to send: no mail
+      // server, no per-person link, just a string the owner shares.
+      setTenant(await api.tenant());
     } catch (err) {
       setError(err.message);
     }
@@ -89,6 +93,16 @@ export function Members({ me }) {
 
       <Notice kind="err">{banner?.kind === "err" ? banner.text : ""}</Notice>
       <Notice kind="ok">{banner?.kind === "ok" ? banner.text : ""}</Notice>
+
+      {tenant && (
+        <Card title="Join code">
+          <p className="hint" style={{ marginTop: 0 }}>
+            Anyone with this code can join {tenant.name} as a viewer. Share it with
+            the people who should see this tenant's gateways.
+          </p>
+          <Endpoint value={tenant.join_code} />
+        </Card>
+      )}
 
       <Card title="Who belongs to this tenant">
         {operators.length === 0 ? (
@@ -210,8 +224,8 @@ export function Members({ me }) {
             </button>
             <p className="hint" style={{ marginBottom: 0, marginTop: 10 }}>
               No role selected means {defaultRole?.name ?? "viewer"}: reads the
-              gateways and traffic, changes nothing. Registration is closed after
-              the first account, so this is the only way in.
+              gateways and traffic, changes nothing. A colleague can also join by
+              themselves, with the tenant's join code.
             </p>
           </form>
         </Card>

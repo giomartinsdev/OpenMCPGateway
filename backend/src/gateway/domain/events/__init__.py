@@ -23,6 +23,7 @@ from gateway.domain.events.write import (
     GatewayEnabled,
     GatewayRateLimitSet,
     GatewayUpdated,
+    OperatorJoinedTenant,
     OperatorLoggedIn,
     OperatorRegistered,
     OperatorRolesAssigned,
@@ -31,6 +32,7 @@ from gateway.domain.events.write import (
     RoleDefined,
     RoleDeleted,
     SignInConfigured,
+    TenantCreated,
 )
 
 ALL_EVENTS: tuple[type[Event], ...] = (*WRITE_EVENTS, *READ_EVENTS)
@@ -53,6 +55,7 @@ __all__ = [
     "GatewayRateLimitSet",
     "GatewayUpdated",
     "IdentityProvider",
+    "OperatorJoinedTenant",
     "OperatorLoggedIn",
     "OperatorRegistered",
     "OperatorRolesAssigned",
@@ -62,4 +65,5 @@ __all__ = [
     "RoleDefined",
     "RoleDeleted",
     "SignInConfigured",
+    "TenantCreated",
 ]

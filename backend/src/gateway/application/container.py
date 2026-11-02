@@ -16,9 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from gateway.application.commands import CommandHandler
 from gateway.application.ports import EventStore
 from gateway.config import Settings
+from gateway.domain.events import TENANT_OF_DEPLOYMENT
 from gateway.infrastructure.db.database import Database
 from gateway.infrastructure.eventstore.postgres import PostgresEventStore
 from gateway.infrastructure.eventstore.projections import ProjectionRunner, ReadModels
+from gateway.log import log
 from gateway.observability import RequestRecorder
 from gateway.proxy.router import GatewayRouter
 from gateway.proxy.runtime import RateLimiter
@@ -71,6 +73,7 @@ class Container(BaseModel):
         )
         await container.router.refresh()
         await bootstrap_admin(container)
+        await adopt_legacy_tenants(container)
         return container
 
     async def refresh_router(self) -> None:
@@ -116,10 +119,40 @@ async def bootstrap_admin(container: Container) -> None:
     existing = await container.store.fetch_operator_by_email(settings.admin_email)
     if existing:
         return
+    await container.commands.ensure_tenant(
+        tenant_id=TENANT_OF_DEPLOYMENT, name="Default"
+    )
     await container.commands.register_operator(
         email=settings.admin_email,
         password=settings.admin_password.get_secret_value(),
         is_admin=True,
+        tenant_id=TENANT_OF_DEPLOYMENT,
+    )
+
+
+async def adopt_legacy_tenants(container: Container) -> None:
+    """Give the pre-tenancy accounts a real tenant row.
+
+    Their streams say nothing about tenants, which folds to
+    `TENANT_OF_DEPLOYMENT`; but a tenant with no row has no join code, so nobody
+    could be invited into the installation that has been running all along.
+    Runs on every boot and is idempotent both ways: the backfill only touches
+    rows that are still null, and `ensure_tenant` is a no-op once the stream
+    exists.
+    """
+    adopted = await container.read_models.backfill_legacy_operators(
+        TENANT_OF_DEPLOYMENT
+    )
+    if adopted:
+        log.info(
+            "tenancy.adopted_legacy_accounts",
+            tenant_id=TENANT_OF_DEPLOYMENT,
+            accounts=adopted,
+        )
+    if not adopted and await container.read_models.tenant(TENANT_OF_DEPLOYMENT):
+        return
+    await container.commands.ensure_tenant(
+        tenant_id=TENANT_OF_DEPLOYMENT, name="Default"
     )
 
 
@@ -132,4 +165,10 @@ async def lifespan_container(settings: Settings) -> Any:
         await container.close()
 
 
-__all__ = ["Container", "bootstrap_admin", "lifespan_container", "replay_projections"]
+__all__ = [
+    "Container",
+    "adopt_legacy_tenants",
+    "bootstrap_admin",
+    "lifespan_container",
+    "replay_projections",
+]

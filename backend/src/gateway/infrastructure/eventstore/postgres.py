@@ -187,8 +187,19 @@ class PostgresEventStore:
             rows = (await session.execute(query)).mappings()
             return [(row["global_seq"], _to_event(row)) for row in rows]
 
-    async def recent_events(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        query = select(events).order_by(events.c.global_seq.desc()).limit(limit)
+    async def recent_events(
+        self, *, limit: int = 100, aggregate_ids: Sequence[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Newest events first, redacted.
+
+        `aggregate_ids` is how the audit page stays inside one tenant: the log is
+        shared, so the caller names the streams it owns. The store does not know
+        what a tenant is — it only knows how to read by aggregate.
+        """
+        query = select(events)
+        if aggregate_ids is not None:
+            query = query.where(events.c.aggregate_id.in_(list(aggregate_ids)))
+        query = query.order_by(events.c.global_seq.desc()).limit(limit)
         async with self._db.session() as session:
             rows = (await session.execute(query)).mappings()
             return [
@@ -279,6 +290,31 @@ class PostgresEventStore:
                     operator_emails.c.email == email.lower()
                 )
             )
+
+    async def fetch_tenant_by_code(self, join_code: str) -> dict[str, str] | None:
+        """Tenant id and name for a join code, case-insensitively.
+
+        Codes are shown uppercase and typed by hand, so a lowercase entry must
+        work; the read model stores what the event carried.
+        """
+        query = select(events.c.aggregate_id).where(
+            (events.c.event_type == "tenant.created")
+            & (func.upper(events.c.payload["join_code"].astext) == join_code.strip().upper())
+        )
+        async with self._db.session() as session:
+            row = (await session.execute(query)).first()
+            if row is None:
+                return None
+            tenant_id = row[0]
+            name = await session.scalar(
+                select(events.c.payload["name"].astext).where(
+                    events.c.aggregate_id == tenant_id
+                )
+            )
+        return {"id": tenant_id, "name": name or ""}
+
+    async def join_code_taken(self, join_code: str) -> bool:
+        return await self.fetch_tenant_by_code(join_code) is not None
 
     async def count_operators(self) -> int:
         async with self._db.session() as session:

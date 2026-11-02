@@ -19,7 +19,16 @@ from gateway.domain.events import (
     IdentityProvider,
     OperatorLoggedIn,
 )
-from gateway.domain.model import DomainError, Gateway, Operator, Role, SignInSettings
+from gateway.domain.model import (
+    JOIN_CODE_ALPHABET,
+    DomainError,
+    Gateway,
+    Operator,
+    Role,
+    SignInSettings,
+    Tenant,
+)
+from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
 from gateway.infrastructure.eventstore.postgres import ConcurrencyError
 from gateway.infrastructure.eventstore.projections import ProjectionRunner
 from gateway.infrastructure.security import generate_api_key, hash_password
@@ -72,11 +81,13 @@ class CommandHandler:
     async def register_operator(
         self, *, email: str, password: str, is_admin: bool = False,
         role_ids: Sequence[str] | None = None,
+        tenant_id: str | None = None,
     ) -> str:
         """Create an account. `role_ids` wins over `is_admin` when both are given.
 
         `is_admin` remains for the bootstrap path and for any caller that predates
-        roles; it folds to the owner role in the aggregate.
+        roles; it folds to the owner role in the aggregate. `tenant_id=None` is a
+        new signup with no tenant yet — it sees onboarding and nothing else.
         """
         existing = await self._store.fetch_operator_by_email(email)
         if existing:
@@ -88,6 +99,7 @@ class CommandHandler:
             password_hash=hash_password(password),
             is_admin=is_admin,
             role_ids=() if role_ids is None else tuple(role_ids),
+            tenant_id=tenant_id,
         )
         await self._commit(operator_id, events, 0, actor=email)
         await self._store.index_operator_email(email, operator_id)
@@ -96,6 +108,7 @@ class CommandHandler:
     async def register_sso_operator(
         self, *, email: str, subject: str, is_admin: bool = False,
         role_ids: Sequence[str] | None = None,
+        tenant_id: str | None = None,
     ) -> str:
         """Create an operator whose password nobody knows.
 
@@ -111,6 +124,7 @@ class CommandHandler:
             password=secrets.token_urlsafe(48),
             is_admin=is_admin,
             role_ids=role_ids,
+            tenant_id=tenant_id,
         )
 
     async def authenticate_operator(
@@ -149,16 +163,103 @@ class CommandHandler:
             actor=actor,
         )
 
+    # -- tenants ----------------------------------------------------------
+
+    async def ensure_tenant(self, *, tenant_id: str, name: str) -> None:
+        """Create a tenant if the log has no such stream yet. Boot-time only.
+
+        Two callers need a tenant that predates the concept: the env bootstrap
+        admin, and accounts that were written when one deployment was one tenant.
+        Both must get a real row, because a tenant without one has no join code
+        and its members cannot invite anyone.
+        """
+        stream = await self._store.load_stream(tenant_id)
+        tenant = Tenant.from_events(tenant_id, stream)
+        if tenant.exists:
+            return
+        events = tenant.decide_create(name=name, join_code=await self._free_join_code())
+        await self._commit(
+            tenant_id, events, stream[-1].sequence if stream else 0, actor="system"
+        )
+
+    async def create_tenant(
+        self, *, name: str, owner_id: str, actor: str = "system"
+    ) -> dict[str, str]:
+        """Create a tenant and make the account its owner, in that order.
+
+        One command because the two must not be separable: a tenant with no owner
+        is unreachable, and an account pointing at a tenant that does not exist
+        reads as "no tenant" on the next request.
+        """
+        stream = await self._store.load_stream(owner_id)
+        operator = Operator.from_events(owner_id, stream)
+        if not operator.exists:
+            raise DomainError("operator does not exist")
+        if operator.tenant_id is not None:
+            raise DomainError(
+                "this account already belongs to a tenant; leaving is not supported"
+            )
+
+        tenant_id = f"tn_{secrets.token_hex(8)}"
+        draft = Tenant(id=tenant_id)
+        events = draft.decide_create(
+            name=name, join_code=await self._free_join_code()
+        )
+        await self._commit(tenant_id, events, 0, actor=actor)
+
+        joined = operator.decide_join_tenant(
+            tenant_id=tenant_id, role_ids=(OWNER_ROLE,)
+        )
+        await self._commit(
+            owner_id, joined, stream[-1].sequence if stream else 0, actor=actor
+        )
+        return {"tenant_id": tenant_id, "name": name, "join_code": events[0].join_code}
+
+    async def join_tenant(
+        self, *, join_code: str, operator_id: str, actor: str = "system"
+    ) -> dict[str, str]:
+        """Add an account to the tenant whose code it knows.
+
+        The same refusal for "no such code" and "already a member": telling them
+        apart turns a guess into a search, and neither is the caller's business.
+        """
+        tenant = await self._store.fetch_tenant_by_code(join_code)
+        stream = await self._store.load_stream(operator_id)
+        operator = Operator.from_events(operator_id, stream)
+        if tenant is None or not operator.exists:
+            raise DomainError("that join code is not valid")
+        events = operator.decide_join_tenant(
+            tenant_id=tenant["id"], role_ids=DEFAULT_ROLE_IDS
+        )
+        await self._commit(
+            operator_id, events, stream[-1].sequence if stream else 0, actor=actor
+        )
+        return {"tenant_id": tenant["id"], "tenant_name": tenant["name"]}
+
+    async def _free_join_code(self) -> str:
+        """A code nobody else has, checked before the tenant exists.
+
+        Retried rather than assumed: 32^8 is large, and a collision would be a
+        tenant whose code joins someone else's.
+        """
+        for _ in range(5):
+            code = "".join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(8))
+            if not await self._store.join_code_taken(code):
+                return code
+        raise DomainError("could not allocate a join code; try again")
+
     # -- roles ------------------------------------------------------------
 
     async def define_role(
-        self, *, role_id: str | None = None, name: str,
+        self, *, tenant_id: str, role_id: str | None = None, name: str,
         permissions: Sequence[str], actor: str = "system",
     ) -> str:
         role_id = role_id or f"role_{secrets.token_hex(6)}"
         stream = await self._store.load_stream(role_id)
         role = Role.from_events(role_id, stream)
-        events = role.decide_define(name=name, permissions=permissions)
+        events = role.decide_define(
+            tenant_id=tenant_id, name=name, permissions=permissions
+        )
         await self._commit(
             role_id, events, stream[-1].sequence if stream else 0, actor=actor
         )
@@ -203,6 +304,7 @@ class CommandHandler:
     async def create_gateway(
         self,
         *,
+        tenant_id: str,
         slug: str,
         name: str,
         target_url: str,
@@ -217,6 +319,7 @@ class CommandHandler:
         # The aggregate is empty, so decide_create validates from scratch.
         draft = Gateway(id=gateway_id)
         events = draft.decide_create(
+            tenant_id=tenant_id,
             slug=slug,
             name=name,
             target_url=target_url,

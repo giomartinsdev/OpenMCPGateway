@@ -8,6 +8,8 @@ it twice would be a duplicate-step error, hence this single home.
 import pytest
 from pytest_bdd import given, parsers
 
+from gateway.domain.events import TENANT_OF_DEPLOYMENT
+
 OPERATOR_EMAIL = "ops@example.dev"
 OPERATOR_PASSWORD = "correct-horse-battery"
 
@@ -31,10 +33,14 @@ def operator(container, runner) -> str:
 )
 def operator_step(container, runner, email: str, password: str) -> str:
     async def ensure() -> str:
+        await container.commands.ensure_tenant(
+            tenant_id=TENANT_OF_DEPLOYMENT, name="Default"
+        )
         if await container.store.fetch_operator_by_email(email):
             return email
         await container.commands.register_operator(
-            email=email, password=password, is_admin=True
+            email=email, password=password, is_admin=True,
+            tenant_id=TENANT_OF_DEPLOYMENT,
         )
         return email
 

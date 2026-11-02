@@ -4,7 +4,7 @@ import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from tests.steps.support import SecureCookieClient
+from tests.steps.support import SecureCookieClient, owner_account, register
 
 scenarios("../features/admin_signin_settings.feature")
 
@@ -35,18 +35,14 @@ def _login(browser: httpx.Client, email: str) -> httpx.Response:
 
 @given(parsers.parse('an administrator "{email}" with password "{password}"'))
 def administrator(browser: httpx.Client, email: str, password: str) -> None:
-    """The first account is the administrator; the API makes that decision."""
+    """Administrator means owner of a tenant, not owner of the deployment."""
     assert password == PASSWORD
-    _register(browser, email)
-    assert _login(browser, email).status_code == 200
-
+    owner_account(browser, email)
 
 @given(parsers.parse('an operator "{email}" with password "{password}"'))
 def plain_operator(browser: httpx.Client, email: str, password: str) -> None:
     assert password == PASSWORD
-    assert _register(browser, email).status_code == 201
-
-
+    register(browser, email)
 @when("the administrator reads the sign-in settings", target_fixture="panel")
 def read_settings(browser: httpx.Client) -> dict:
     response = browser.get("/api/settings/sign-in")

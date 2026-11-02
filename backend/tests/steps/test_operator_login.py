@@ -10,6 +10,7 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from gateway.application.container import Container
+from gateway.domain.events import TENANT_OF_DEPLOYMENT
 from tests.steps.fake_google import FakeGoogle
 
 scenarios("../features/operator_login.feature")
@@ -247,7 +248,26 @@ def not_duplicated(container: Container, runner, google: FakeGoogle) -> None:
 
 @then(parsers.parse('"{email}" was created by the allowlist'))
 def created_by_allowlist(container: Container, runner, email: str) -> None:
-    assert runner.run(container.store.fetch_operator_by_email(email)), email
+    """The allowlist is an address book, not a gate: it joins you to the
+    installation's own tenant instead of asking which one."""
+    operator_id = runner.run(container.store.fetch_operator_by_email(email))
+    assert operator_id, email
+    assert runner.run(
+        container.read_models.operator_tenant(operator_id)
+    ) == TENANT_OF_DEPLOYMENT, email
+
+@then("the operator has no tenant")
+def no_tenant(completed: list[httpx.Response], container: Container,
+              runner) -> None:
+    from gateway.interface.sessions import read_session
+
+    token = next(_session_cookie(r) for r in completed if _session_cookie(r))
+    session = read_session(
+        token, secret=container.settings.session_secret.get_secret_value()
+    )
+    assert runner.run(
+        container.read_models.operator_tenant(session.operator_id)
+    ) is None
 
 
 @when("an administrator saves the panel client for the fake provider")

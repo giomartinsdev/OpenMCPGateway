@@ -10,6 +10,7 @@ import { Audit } from "./pages/Audit.jsx";
 import { Settings } from "./pages/Settings.jsx";
 import { Members } from "./pages/Members.jsx";
 import { Roles } from "./pages/Roles.jsx";
+import { Onboarding } from "./pages/Onboarding.jsx";
 
 // Hash routing: 15 lines instead of a router dependency, and it survives being
 // served from any reverse-proxy path without a rewrite rule for every route.
@@ -51,6 +52,9 @@ export function App() {
 
   if (me === undefined) return <div className="login-wrap hint">Loading…</div>;
   if (me === null) return <Login onLogin={setMe} />;
+  // A signed-in account with no tenant has nothing to administer yet. Every
+  // route below would answer 403, so the choice *is* the page.
+  if (!me.tenant_id) return <Onboarding me={me} onReady={setMe} />;
 
   const segment = path.split("/").filter(Boolean);
   const isGatewayDetail = segment[0] === "gateways" && segment[1];
@@ -94,7 +98,10 @@ export function App() {
           <div className="who">
             {me.email}
             <div style={{ marginTop: 2 }}>
-              {(me.roles ?? []).join(", ") || "no role"} · {me.tenant_id}
+              {me.tenant_name || "tenant"}
+            <div style={{ marginTop: 2 }}>
+              {(me.roles ?? []).join(", ") || "no role"}
+            </div>
             </div>
           </div>
           <button

@@ -44,5 +44,13 @@ class EventStore(Protocol):
 
     async def resolve_slug(self, slug: str) -> str | None: ...
 
+    async def fetch_tenant_by_code(self, join_code: str) -> dict[str, str] | None: ...
+
+    async def join_code_taken(self, join_code: str) -> bool: ...
+
+    async def recent_events(
+        self, *, limit: int = 100, aggregate_ids: Sequence[str] | None = None
+    ) -> list[dict]: ...
+
 
 __all__ = ["EventStore"]

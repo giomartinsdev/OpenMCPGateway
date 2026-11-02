@@ -13,6 +13,7 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from gateway.configfile import ConfigFileError, apply_document, parse_document
+from gateway.domain.events import TENANT_OF_DEPLOYMENT
 from gateway.domain.model import DomainError
 from tests.steps.support import Context
 
@@ -38,10 +39,11 @@ def ctx() -> Context:
 def gateway_row(container, runner, operator: str, slug: str, target: str) -> dict:
     async def create() -> dict:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug, name=slug.title(), target_url=target, actor=operator
         )
         await container.refresh_router()
-        return await container.read_models.get_gateway(gateway_id)
+        return await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
 
     return runner.run(create())
 
@@ -121,6 +123,7 @@ gateways:
 def register_gateway(container, runner, operator: str, slug: str, target: str) -> str:
     async def create() -> str:
         gateway_id = await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug, name=slug.title(), target_url=target, actor=operator
         )
         await container.refresh_router()
@@ -137,6 +140,7 @@ def register_duplicate(container, runner, operator: str, slug: str) -> str:
     async def attempt() -> str:
         try:
             await container.commands.create_gateway(
+                tenant_id=TENANT_OF_DEPLOYMENT,
                 slug=slug, name="Again", target_url="http://backend.test/mcp",
                 actor=operator,
             )
@@ -157,6 +161,7 @@ def register_invalid(container, runner, slug: str, target: str) -> str:
     async def attempt() -> str:
         try:
             await container.commands.create_gateway(
+                tenant_id=TENANT_OF_DEPLOYMENT,
                 slug=slug, name=slug, target_url=target, actor="test"
             )
         except DomainError as exc:
@@ -179,21 +184,30 @@ def delete_gateway(container, runner, operator: str, slug: str) -> None:
 @when("the file is applied", target_fixture="apply_result")
 def apply_file(container, runner, operator: str, document) -> dict:
     return runner.run(
-        apply_document(document, container.commands, container.read_models, actor=operator)
+        apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
+        )
     )
 
 
 @when("the document is applied", target_fixture="apply_result")
 def apply_first(container, runner, operator: str, document) -> dict:
     return runner.run(
-        apply_document(document, container.commands, container.read_models, actor=operator)
+        apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
+        )
     )
 
 
 @when("the same document is applied again", target_fixture="reapply_result")
 def apply_again(container, runner, operator: str, document) -> dict:
     return runner.run(
-        apply_document(document, container.commands, container.read_models, actor=operator)
+        apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
+        )
     )
 
 
@@ -211,7 +225,10 @@ gateways:
 """
     )
     return runner.run(
-        apply_document(document, container.commands, container.read_models, actor=operator)
+        apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
+        )
     )
 
 
@@ -230,7 +247,10 @@ gateways:
 """
     )
     return runner.run(
-        apply_document(document, container.commands, container.read_models, actor=operator)
+        apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
+        )
     )
 
 
@@ -240,7 +260,8 @@ gateways:
 @then(parsers.parse('gateway "{slug}" is listed'))
 def gateway_listed(container, runner, slug: str) -> None:
     async def check() -> list[str]:
-        return [gw["slug"] for gw in await container.read_models.list_gateways()]
+        gateways = await container.read_models.list_gateways(TENANT_OF_DEPLOYMENT)
+        return [gw["slug"] for gw in gateways]
 
     names = runner.run(check())
     assert slug in names, f"{slug} not in {names}"
@@ -249,7 +270,7 @@ def gateway_listed(container, runner, slug: str) -> None:
 @then(parsers.parse('its public endpoint is "{endpoint}"'))
 def endpoint_is(container, runner, gateway_id: str, endpoint: str) -> None:
     async def check() -> str:
-        row = await container.read_models.get_gateway(gateway_id)
+        row = await container.read_models.get_gateway(gateway_id, TENANT_OF_DEPLOYMENT)
         return f"{container.settings.base_url}/g/{row['slug']}/mcp"
 
     assert runner.run(check()) == endpoint
@@ -273,7 +294,8 @@ def target_invalid(error: str) -> None:
 @then(parsers.parse('gateway "{slug}" is not listed'))
 def gateway_not_listed(container, runner, slug: str) -> None:
     async def check() -> list[str]:
-        return [gw["slug"] for gw in await container.read_models.list_gateways()]
+        gateways = await container.read_models.list_gateways(TENANT_OF_DEPLOYMENT)
+        return [gw["slug"] for gw in gateways]
 
     assert slug not in runner.run(check())
 
@@ -282,6 +304,7 @@ def gateway_not_listed(container, runner, slug: str) -> None:
 def slug_reusable(container, runner, operator: str, slug: str) -> None:
     async def create() -> str:
         return await container.commands.create_gateway(
+            tenant_id=TENANT_OF_DEPLOYMENT,
             slug=slug, name="Reused", target_url="http://backend.test/mcp",
             actor=operator,
         )
@@ -331,7 +354,10 @@ def parsing_failed(parse_error: str) -> None:
 @then("applying fails because the gateway is incomplete")
 def apply_failed(container, runner, operator: str, document) -> None:
     result = runner.run(
-        apply_document(document, container.commands, container.read_models, actor=operator)
+        apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
+        )
     )
     assert "client_id" in " ".join(result["errors"])
 

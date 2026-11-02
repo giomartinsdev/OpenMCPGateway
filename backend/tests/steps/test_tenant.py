@@ -8,7 +8,7 @@ import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from tests.steps.support import SecureCookieClient
+from tests.steps.support import SecureCookieClient, owner_account
 
 scenarios("../features/tenant.feature")
 
@@ -44,12 +44,14 @@ def _login(browser: httpx.Client, email: str) -> httpx.Response:
 
 # -- given / when ----------------------------------------------------------
 
-@given("the first account registered", target_fixture="owner_created")
-def first_account_registered(owner: httpx.Client) -> dict:
-    response = _register(owner, OWNER)
-    assert response.status_code == 201, response.text
-    assert _login(owner, OWNER).status_code == 200, "owner could not sign in"
-    return {"browser": owner, "email": OWNER, **response.json()}
+@given("an owner registered and created a tenant", target_fixture="owner_created")
+def owner_registered(owner: httpx.Client) -> dict:
+    """Signing up grants an identity; creating a tenant is what makes it an owner.
+
+    The two are separate commands on purpose — that separation is what lets a
+    stranger sign in without administering anything.
+    """
+    return owner_account(owner, OWNER)
 
 @when("the owner reads who it is", target_fixture="owner_identity")
 def owner_reads_self(owner_created: dict) -> dict:

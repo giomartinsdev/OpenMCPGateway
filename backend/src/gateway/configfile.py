@@ -161,8 +161,9 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
 
 
 async def apply_document(document: ConfigDocument, commands: Any,
-                         read_models: Any, *, actor: str = "config-file") -> dict:
-    """Reconcile the declared gateways against current state.
+                         read_models: Any, *, tenant_id: str,
+                         actor: str = "config-file") -> dict:
+    """Reconcile the declared gateways against current state, inside one tenant.
 
     Returns a summary of what changed, which the CLI prints and the API returns
     so a failed sync is obvious instead of silent.
@@ -173,7 +174,9 @@ async def apply_document(document: ConfigDocument, commands: Any,
     errors: list[str] = []
     issued_keys: list[dict[str, str]] = []
 
-    existing = {gw["slug"]: gw for gw in await read_models.list_gateways()}
+    existing = {
+        gw["slug"]: gw for gw in await read_models.list_gateways(tenant_id)
+    }
     declared = {spec.slug for spec in document.gateways}
 
     for spec in document.gateways:
@@ -181,6 +184,7 @@ async def apply_document(document: ConfigDocument, commands: Any,
         try:
             if current is None:
                 gateway_id = await commands.create_gateway(
+                    tenant_id=tenant_id,
                     slug=spec.slug,
                     name=spec.name,
                     target_url=spec.target_url,

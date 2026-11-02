@@ -9,7 +9,7 @@ import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from tests.steps.support import SecureCookieClient
+from tests.steps.support import SecureCookieClient, owner_account
 
 scenarios("../features/roles.feature")
 
@@ -84,10 +84,7 @@ def _sign_in(ctx: dict, browser: httpx.Client, email: str) -> httpx.Client:
 
 @given("the owner registered", target_fixture="owner_created")
 def owner_registered(owner: httpx.Client) -> dict:
-    response = _register(owner, OWNER)
-    assert response.status_code == 201, response.text
-    _sign_in({}, owner, OWNER)
-    return {"browser": owner, "email": OWNER, **response.json()}
+    return owner_account(owner, OWNER)
 
 @given(parsers.parse('the administrator added the member "{email}"'),
        target_fixture="member")

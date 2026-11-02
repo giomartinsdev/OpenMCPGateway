@@ -115,6 +115,52 @@ class SecureCookieClient(httpx.Client):
         return response
 
 
+PASSWORD = "correct-horse-battery"
+
+def register(browser: httpx.Client, email: str) -> dict[str, Any]:
+    """Create an account and stay signed in. No tenant: signup grants identity only."""
+    response = browser.post(
+        "/api/auth/register", json={"email": email, "password": PASSWORD}
+    )
+    assert response.status_code == 201, response.text
+    return {"browser": browser, "email": email, **response.json()}
+
+def create_tenant(browser: httpx.Client, name: str) -> dict[str, Any]:
+    """Create a tenant as the signed-in account, which becomes its owner.
+
+    Re-reads `/api/auth/me` afterwards, like the panel does: the tenant response
+    is what changed, and the roles that came with it are only visible through the
+    identity endpoint.
+    """
+    response = browser.post("/api/tenants", json={"name": name})
+    assert response.status_code == 201, response.text
+    me = browser.get("/api/auth/me")
+    assert me.status_code == 200, me.text
+    identity = me.json()
+    return {
+        **response.json(),
+        "role_ids": identity["role_ids"],
+        "is_admin": identity["is_admin"],
+        "browser": browser,
+    }
+
+def owner_account(browser: httpx.Client, email: str,
+                  tenant: str = "Acme") -> dict[str, Any]:
+    """The usual test setup: an account that owns a tenant, able to do anything.
+
+    Almost every scenario wants a working panel, not the onboarding screen, so
+    this names the two commands as one helper instead of repeating them.
+    """
+    account = register(browser, email)
+    account.update(create_tenant(browser, tenant))
+    account.update(
+        {
+            "role_ids": ["role_owner"],
+            "is_admin": True,
+        }
+    )
+    return account
+
 class _RequireBearer:
     """Reject anything without the expected bearer, before FastMCP sees it."""
 

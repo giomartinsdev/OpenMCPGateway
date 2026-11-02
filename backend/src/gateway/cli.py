@@ -80,7 +80,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
         container = await _container(settings)
         try:
             result = await apply_document(
-                document, container.commands, container.read_models, actor="cli"
+                document,
+                container.commands,
+                container.read_models,
+                tenant_id=args.tenant,
+                actor="cli",
             )
             for key in ("created", "updated", "unchanged", "pruned"):
                 if result[key]:
@@ -98,7 +102,6 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    del args
     settings = _settings()
 
     async def run() -> int:
@@ -107,7 +110,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             from gateway.interface.api import _gateway_yaml
 
             lines: list[str] = []
-            for gateway in await container.read_models.list_gateways():
+            for gateway in await container.read_models.list_gateways(args.tenant):
                 principals = await container.read_models.principals(gateway["id"])
                 keys = await container.read_models.api_keys(gateway["id"])
                 lines.append(_gateway_yaml(gateway, principals, keys))
@@ -130,7 +133,8 @@ def cmd_operator_add(args: argparse.Namespace) -> int:
         container = await _container(settings)
         try:
             operator_id = await container.commands.register_operator(
-                email=args.email, password=password, is_admin=args.admin
+                email=args.email, password=password, is_admin=args.admin,
+                tenant_id=args.tenant,
             )
             print(f"created {args.email} ({operator_id})")
             return 0
@@ -151,9 +155,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     apply_cmd = sub.add_parser("apply", help="reconcile gateways from a YAML file")
     apply_cmd.add_argument("file")
+    apply_cmd.add_argument("--tenant", required=True)
     apply_cmd.set_defaults(func=cmd_apply)
 
     export_cmd = sub.add_parser("export", help="print current gateways as YAML")
+    export_cmd.add_argument("--tenant", required=True)
     export_cmd.set_defaults(func=cmd_export)
 
     operator = sub.add_parser("operator", help="manage operator accounts")
@@ -162,6 +168,9 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("email")
     add.add_argument("--password", help="skip the prompt (CI only)")
     add.add_argument("--admin", action="store_true")
+    add.add_argument(
+        "--tenant", help="tenant to place the account in (omit for no tenant yet)"
+    )
     add.set_defaults(func=cmd_operator_add)
 
     return parser

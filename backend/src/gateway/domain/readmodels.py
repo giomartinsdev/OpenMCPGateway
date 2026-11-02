@@ -48,6 +48,7 @@ class ReadRow(BaseModel):
 
 class GatewayRow(ReadRow):
     id: str
+    tenant_id: str
     slug: str
     name: str
     target_url: str
@@ -76,8 +77,15 @@ class ApiKeyRow(ReadRow):
     subject: str
     issued_at: datetime | None = None
 
+class TenantRow(ReadRow):
+    id: str
+    name: str
+    join_code: str
+    created_at: datetime | None = None
+
 class RoleRow(ReadRow):
     id: str
+    tenant_id: str
     name: str
     permissions: list[str] = []
     deleted: bool = False
@@ -87,6 +95,7 @@ class RoleRow(ReadRow):
 class OperatorRow(ReadRow):
     operator_id: str
     email: str
+    tenant_id: str | None = None
     is_admin: bool = False
     role_ids: tuple[str, ...] = ()
     created_at: datetime | None = None
@@ -129,5 +138,6 @@ __all__ = [
     "RequestRow",
     "RoleRow",
     "SeriesPoint",
+    "TenantRow",
     "TrafficStats",
 ]

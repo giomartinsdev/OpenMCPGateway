@@ -7,15 +7,21 @@ import { expect, test } from "@playwright/test";
 // someone, watch their access change.
 const OWNER = { email: "owner@e2e.test", password: "owner-password-123" };
 const MEMBER = { email: "member@e2e.test", password: "member-password-123" };
+const TENANT = "E2E Co";
 
 test.describe.configure({ mode: "serial" });
 
-async function registerFirstAccount(page) {
+async function registerOwner(page) {
+  // Signing up grants an identity and nothing else; the tenant is the next
+  // screen, and choosing to create one is what makes this account its owner.
   await page.goto("/");
-  await page.getByRole("link", { name: /create the first account/i }).click();
+  await page.getByRole("link", { name: /create an account/i }).click();
   await page.getByLabel("Email").fill(OWNER.email);
   await page.getByLabel("Password").fill(OWNER.password);
-  await page.getByRole("button", { name: /create account/i }).click();
+  await page.getByRole("button", { name: /^create account$/i }).click();
+  await expect(page.getByRole("heading", { name: "Create a tenant" })).toBeVisible();
+  await page.getByLabel("Tenant name").fill(TENANT);
+  await page.getByRole("button", { name: "Create tenant" }).click();
   await expect(page.getByRole("heading", { name: "Gateways", level: 1 })).toBeVisible();
 }
 
@@ -27,15 +33,15 @@ async function signIn(page, account) {
   await expect(page.getByRole("heading", { name: "Gateways", level: 1 })).toBeVisible();
 }
 
-test("the first account owns the tenant and sees every screen", async ({ page }) => {
-  await registerFirstAccount(page);
+test("the account that creates a tenant owns it and sees every screen", async ({ page }) => {
+  await registerOwner(page);
 
   const nav = page.getByRole("navigation");
   for (const label of ["Gateways", "Traffic", "Audit log", "Config as code", "Members", "Roles", "Settings"]) {
     await expect(nav.getByRole("link", { name: label })).toBeVisible();
   }
   await expect(page.locator(".who")).toContainText("owner");
-  await expect(page.locator(".who")).toContainText("tn_local");
+  await expect(page.locator(".who")).toContainText(TENANT);
 });
 
 test("an administrator defines a role by ticking permissions", async ({ page }) => {

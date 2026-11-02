@@ -118,7 +118,7 @@ export function Settings() {
             </div>
           </div>
           <div className="field">
-            <label>Who may sign in</label>
+            <label>Known addresses</label>
             <textarea
               rows={3}
               value={form.operator_allowlist}
@@ -126,8 +126,9 @@ export function Settings() {
               placeholder="you@example.com, teammate@example.com"
             />
             <div className="hint" style={{ marginTop: 4 }}>
-              Comma separated. Signing in creates the operator, so an empty list
-              means nobody new can get in.
+              Comma separated. These addresses skip the tenant choice and land in
+              this installation's tenant. Anyone else who signs in with Google
+              gets an empty account and is asked to create or join a tenant.
             </div>
           </div>
           <button className="primary" disabled={busy}>

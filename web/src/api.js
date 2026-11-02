@@ -32,8 +32,11 @@ export const api = {
   me: () => call("GET", "/auth/me"),
   login: (email, password) => call("POST", "/auth/login", { email, password }),
   register: (email, password) => call("POST", "/auth/register", { email, password }),
-  // An administrator adding a member to the tenant. Registration above is only
-  // open for the very first account.
+  // Onboarding: an account belongs nowhere until one of these succeeds.
+  createTenant: (name) => call("POST", "/tenants", { name }),
+  joinTenant: (code) => call("POST", "/tenants/join", { code }),
+  tenant: () => call("GET", "/tenants/current"),
+  // An administrator adding a member straight into this tenant.
   operators: () => call("GET", "/operators"),
   // No role_ids means the default role: an omission must never widen access.
   addOperator: (email, password, roleIds = []) =>
