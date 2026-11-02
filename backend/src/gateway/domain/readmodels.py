@@ -76,6 +76,21 @@ class ApiKeyRow(ReadRow):
     subject: str
     issued_at: datetime | None = None
 
+class RoleRow(ReadRow):
+    id: str
+    name: str
+    permissions: list[str] = []
+    deleted: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+class OperatorRow(ReadRow):
+    operator_id: str
+    email: str
+    is_admin: bool = False
+    role_ids: tuple[str, ...] = ()
+    created_at: datetime | None = None
+
 
 class RequestRow(ReadRow):
     gateway_id: str
@@ -108,9 +123,11 @@ class TrafficStats(ReadRow):
 __all__ = [
     "ApiKeyRow",
     "GatewayRow",
+    "OperatorRow",
     "PrincipalRow",
     "ReadRow",
     "RequestRow",
+    "RoleRow",
     "SeriesPoint",
     "TrafficStats",
 ]

@@ -128,8 +128,8 @@ def member_cannot_read_settings(member_created: dict) -> None:
 def lists_members(owner_created: dict) -> None:
     response = owner_created["browser"].get("/api/operators")
     assert response.status_code == 200, response.text
-    members = {m["email"]: m["role"] for m in response.json()["operators"]}
-    assert members == {OWNER: "admin", MEMBER: "member"}, members
+    members = {m["email"]: m["role_ids"] for m in response.json()["operators"]}
+    assert members == {OWNER: ["role_owner"], MEMBER: ["role_viewer"]}, members
 
 @then("the member cannot configure a gateway")
 def member_cannot_configure(member_created: dict, gateway: dict) -> None:

@@ -19,7 +19,7 @@ from gateway.domain.events import (
     IdentityProvider,
     OperatorLoggedIn,
 )
-from gateway.domain.model import DomainError, Gateway, Operator, SignInSettings
+from gateway.domain.model import DomainError, Gateway, Operator, Role, SignInSettings
 from gateway.infrastructure.eventstore.postgres import ConcurrencyError
 from gateway.infrastructure.eventstore.projections import ProjectionRunner
 from gateway.infrastructure.security import generate_api_key, hash_password
@@ -70,22 +70,32 @@ class CommandHandler:
     # -- operators --------------------------------------------------------
 
     async def register_operator(
-        self, *, email: str, password: str, is_admin: bool = False
+        self, *, email: str, password: str, is_admin: bool = False,
+        role_ids: Sequence[str] | None = None,
     ) -> str:
+        """Create an account. `role_ids` wins over `is_admin` when both are given.
+
+        `is_admin` remains for the bootstrap path and for any caller that predates
+        roles; it folds to the owner role in the aggregate.
+        """
         existing = await self._store.fetch_operator_by_email(email)
         if existing:
             raise DomainError("email already registered")
         operator_id = f"op_{secrets.token_hex(8)}"
         operator = Operator(id=operator_id)
         events = operator.decide_register(
-            email=email, password_hash=hash_password(password), is_admin=is_admin
+            email=email,
+            password_hash=hash_password(password),
+            is_admin=is_admin,
+            role_ids=() if role_ids is None else tuple(role_ids),
         )
         await self._commit(operator_id, events, 0, actor=email)
         await self._store.index_operator_email(email, operator_id)
         return operator_id
 
     async def register_sso_operator(
-        self, *, email: str, subject: str, is_admin: bool = False
+        self, *, email: str, subject: str, is_admin: bool = False,
+        role_ids: Sequence[str] | None = None,
     ) -> str:
         """Create an operator whose password nobody knows.
 
@@ -100,6 +110,7 @@ class CommandHandler:
             email=email,
             password=secrets.token_urlsafe(48),
             is_admin=is_admin,
+            role_ids=role_ids,
         )
 
     async def authenticate_operator(
@@ -124,6 +135,42 @@ class CommandHandler:
         )
         log.info("operator.logged_in", email=email, ip=ip)
         return operator
+
+    async def assign_roles(
+        self, operator_id: str, *, role_ids: Sequence[str], actor: str = "system"
+    ) -> list[Event]:
+        events_in_stream = await self._store.load_stream(operator_id)
+        operator = Operator.from_events(operator_id, events_in_stream)
+        events = operator.decide_assign_roles(role_ids)
+        return await self._commit(
+            operator_id,
+            events,
+            events_in_stream[-1].sequence if events_in_stream else 0,
+            actor=actor,
+        )
+
+    # -- roles ------------------------------------------------------------
+
+    async def define_role(
+        self, *, role_id: str | None = None, name: str,
+        permissions: Sequence[str], actor: str = "system",
+    ) -> str:
+        role_id = role_id or f"role_{secrets.token_hex(6)}"
+        stream = await self._store.load_stream(role_id)
+        role = Role.from_events(role_id, stream)
+        events = role.decide_define(name=name, permissions=permissions)
+        await self._commit(
+            role_id, events, stream[-1].sequence if stream else 0, actor=actor
+        )
+        return role_id
+
+    async def delete_role(self, role_id: str, *, actor: str = "system") -> list[Event]:
+        stream = await self._store.load_stream(role_id)
+        role = Role.from_events(role_id, stream)
+        events = role.decide_delete()
+        return await self._commit(
+            role_id, events, stream[-1].sequence if stream else 0, actor=actor
+        )
 
     # -- sign-in settings -------------------------------------------------
 

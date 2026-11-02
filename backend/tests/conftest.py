@@ -124,7 +124,8 @@ async def _truncate(dsn: str) -> None:
                 text(
                     "TRUNCATE events, projection_checkpoints, gateway_slugs, "
                     "operator_emails, rm_gateways, rm_principals, rm_api_keys, "
-                    "rm_request_stats, rm_requests_tail RESTART IDENTITY CASCADE"
+                    "rm_request_stats, rm_requests_tail, rm_roles, rm_operators "
+                    "RESTART IDENTITY CASCADE"
                 )
             )
     finally:

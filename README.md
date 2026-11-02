@@ -86,25 +86,65 @@ account; otherwise anyone who found the URL could become an operator.
 ### Tenants and roles
 
 One deployment is one tenant (`TENANT_OF_DEPLOYMENT`). The first account creates
-it and is its administrator; everyone added after that is a **member**: they see
-the same gateways, traffic and audit log, and cannot change any of it. Every
-mutating route checks the role on the server, because a hidden button is not an
-authorisation rule.
+it and is its administrator; everyone added after that joins the same tenant.
 
-Members get in two ways: an administrator adds them under **Settings → Who
-belongs to this tenant**, or an allowlisted address signs in with Google and joins
-as a member. The second path does not create administrators, so the tenant never
-ends up with two owners.
+Permissions are a **closed catalog** (`backend/src/gateway/domain/permissions.py`),
+not free-form strings: `gateways:read`, `gateways:write`, `keys:read`, `keys:write`,
+`traffic:read`, `audit:read`, `config:read`, `config:write`, `members:read`,
+`members:write`, `roles:read`, `roles:write`, `settings:read`, `settings:write`.
+A typo is refused with a 422 naming the field, because the alternative is a role
+that grants nothing and says nothing — discovered days later as a 403 on a button
+the panel offered.
+
+Two roles are built in and cannot be deleted or edited, because neither is a policy
+decision and every installation needs them:
+
+| Role | Id | Permissions |
+| --- | --- | --- |
+| `owner` | `role_owner` | everything |
+| `viewer` | `role_viewer` | the read permissions above (`gateways`, `keys`, `traffic`, `audit`, `config`) |
+
+Everything else is defined by the tenant under **Roles**: name plus a set of
+permissions. `members:read/write`, `roles:read/write` and `settings:read/write` are
+deliberately not in `viewer` — a member list is an address book and sign-in settings
+name an identity provider.
+
+A new member added without an explicit role lands on **`viewer`**: an omission must
+narrow access, never widen it. An administrator adds people under **Members**, and
+can change their roles at any time.
+
+Delegation may only narrow: nobody can grant a permission they do not hold
+themselves (`_grantable` in `interface/api.py`), otherwise `members:write` would be
+a path to `settings:write` — add an account holding the owner role, sign in as it,
+done. The default role is exempt, so a recruiter who may add people but not read
+gateways can still create a viewer account.
+
+Permissions are resolved **per request** from the read models, not carried in the
+cookie. Editing a role or reassigning someone takes effect on their next click; no
+re-login, no stale session. `/api/auth/me` returns `role_ids`, role names and the
+flat `permissions` list the panel uses to decide what to render — while every route
+checks the permission again on the server, since a hidden button is not a rule.
+
+Members get in two ways: an administrator adds them under **Members**, or an
+allowlisted address signs in with Google and joins with the default role. Neither
+path creates an administrator, so the tenant never ends up with two owners.
 
 The tenant id is derived, not stored: one deployment is one tenant, so an extra
 column would be a constant with a migration attached. It is carried in the session
-nonetheless (`/api/auth/me` returns `tenant_id` and `role`), which is what makes
-a real multi-tenant install a change to the session rather than to every endpoint.
+nonetheless (`/api/auth/me` returns `tenant_id`), which is what makes a real
+multi-tenant install a change to the session rather than to every endpoint.
 
 The flow is verified against a real OIDC provider in the tests
 (`tests/steps/fake_google.py`), including the failures that matter: a callback with
 a state this browser never received, an `id_token` minted for a different client, an
-unverified address, and an email outside the allowlist.
+unverified address, and an email outside the allowlist. The RBAC scenarios live in
+`backend/tests/features/roles.feature`, and a Playwright suite
+(`web/e2e/specs/rbac.spec.js`) walks the same path through the real UI against a
+real Postgres:
+
+```bash
+cd web && npm run build && npx playwright install chromium && npm run e2e
+```
 
 ### Kubernetes
 

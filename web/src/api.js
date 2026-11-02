@@ -35,7 +35,17 @@ export const api = {
   // An administrator adding a member to the tenant. Registration above is only
   // open for the very first account.
   operators: () => call("GET", "/operators"),
-  addOperator: (email, password) => call("POST", "/operators", { email, password }),
+  // No role_ids means the default role: an omission must never widen access.
+  addOperator: (email, password, roleIds = []) =>
+    call("POST", "/operators", { email, password, role_ids: roleIds }),
+  assignRoles: (operatorId, roleIds) =>
+    call("PUT", `/operators/${operatorId}/roles`, { role_ids: roleIds }),
+
+  roles: () => call("GET", "/roles"),
+  defineRole: (name, permissions) => call("POST", "/roles", { name, permissions }),
+  updateRole: (id, name, permissions) =>
+    call("PUT", `/roles/${id}`, { name, permissions }),
+  deleteRole: (id) => call("DELETE", `/roles/${id}`),
   logout: () => call("POST", "/auth/logout"),
   authMethods: () => call("GET", "/auth/methods"),
 

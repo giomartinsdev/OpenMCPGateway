@@ -11,6 +11,7 @@ exactly once at issue time and never stored.
 
 import hmac
 import json
+from collections.abc import Iterable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -21,6 +22,15 @@ from gateway.application.container import Container
 from gateway.configfile import ConfigFileError, apply_document, parse_document
 from gateway.domain.events import TENANT_OF_DEPLOYMENT, AuthMode, IdentityProvider
 from gateway.domain.model import DomainError, SignInSettings
+from gateway.domain.permissions import (
+    BUILTIN_ROLES,
+    DEFAULT_ROLE_IDS,
+    OWNER_ROLE,
+    PERMISSIONS,
+    PermissionCatalogError,
+    catalog_with_builtins,
+    expand,
+)
 from gateway.domain.readmodels import TrafficStats
 from gateway.infrastructure.eventstore.postgres import ConcurrencyError
 from gateway.interface.google_login import (
@@ -69,21 +79,117 @@ SessionDep = Annotated[Session, Depends(current_session)]
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-def admin_session(session: SessionDep) -> Session:
-    """Settings that decide who can administer this installation.
+class Principal(BaseModel):
+    """Who is asking, and what this request is allowed to do.
 
-    A plain operator must not be able to point sign-in at an IdP they control:
-    that is a privilege escalation dressed as a configuration change.
+    Permissions are resolved per request from the read models rather than carried
+    in the cookie: editing a role must take effect on the next click, not on the
+    next sign-in. Two small reads per admin request is the price, and the panel is
+    not a hot path.
     """
-    if not session.is_admin:
-        raise HTTPException(status_code=403, detail="administrators only")
-    return session
+
+    session: Session
+    permissions: frozenset[str] = frozenset()
 
 
-AdminDep = Annotated[Session, Depends(admin_session)]
+async def current_principal(request: Request, session: SessionDep) -> Principal:
+    container: Container = request.app.state.container
+    if container is None:
+        raise HTTPException(status_code=503, detail="starting up")
+    role_ids = await container.read_models.operator_roles(session.operator_id)
+    if role_ids is None:
+        # An account with no projected row (written before roles existed): the
+        # session's own flag is what it was granted with.
+        role_ids = (OWNER_ROLE,) if session.is_admin else DEFAULT_ROLE_IDS
+        catalog = catalog_with_builtins({})
+    else:
+        catalog = catalog_with_builtins(await container.read_models.role_permissions())
+    return Principal(session=session, permissions=frozenset(expand(role_ids, catalog)))
+
+
+PrincipalDep = Annotated[Principal, Depends(current_principal)]
+
+
+def require(permission: str) -> Any:
+    """A dependency that demands one permission and returns the session.
+
+    A factory rather than one function per permission: the list of permissions is
+    a data table (`domain.permissions`), and a function per entry would be a
+    second copy of it that can drift.
+    """
+
+    async def guard(principal: PrincipalDep) -> Session:
+        if permission not in principal.permissions:
+            raise HTTPException(
+                status_code=403, detail=f"this action requires '{permission}'"
+            )
+        return principal.session
+
+    return guard
+
+
+def _permits(principal: Principal, permission: str) -> None:
+    if permission not in principal.permissions:
+        raise HTTPException(
+            status_code=403, detail=f"this action requires '{permission}'"
+        )
+
+
+def _grantable(principal: Principal, permissions: Iterable[str],
+               default: Iterable[str] = ()) -> None:
+    """Refuse to hand out a permission the caller does not hold itself.
+
+    Without this, `members:write` is a path to `settings:write`: add an account,
+    log in as it, done. Delegation may only narrow — an administrator who can do
+    everything can grant anything, and everyone else grants a subset of their own.
+
+    `default` is exempt: the default role is the floor a new account lands on,
+    not a choice the caller made. A recruiter who may add people but not read
+    gateways still must be able to create an account, exactly as registration
+    would have.
+    """
+    beyond = sorted(set(permissions) - principal.permissions - set(default))
+    if beyond:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"you cannot grant permission(s) you do not hold: {', '.join(beyond)}"
+            ),
+        )
+
+
+def _permissions_of(
+    role_ids: Iterable[str], catalog: dict[str, tuple[str, ...]]
+) -> tuple[str, ...]:
+    return expand(role_ids, catalog)
+
+
+def _can(permission: str) -> Any:
+    """`Annotated[Session, Depends(...)]` under a name, for readable signatures."""
+    return Annotated[Session, Depends(require(permission))]
+
+
+CanReadGateways = _can("gateways:read")
+CanWriteGateways = _can("gateways:write")
+CanReadKeys = _can("keys:read")
+CanWriteKeys = _can("keys:write")
+CanReadTraffic = _can("traffic:read")
+CanReadAudit = _can("audit:read")
+CanReadConfig = _can("config:read")
+CanWriteConfig = _can("config:write")
+CanReadMembers = _can("members:read")
+CanWriteMembers = _can("members:write")
+CanReadRoles = _can("roles:read")
+CanWriteRoles = _can("roles:write")
+CanReadSettings = _can("settings:read")
+CanWriteSettings = _can("settings:write")
 
 
 def _translate(exc: Exception) -> HTTPException:
+    if isinstance(exc, PermissionCatalogError):
+        # A permission outside the catalog is a validation failure, like any
+        # other bad field, and must say which field.
+        return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, DomainError):
         return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, ConcurrencyError):
@@ -109,6 +215,19 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: str
     password: str = Field(min_length=12)
+
+class OperatorCreateRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=12)
+    # Empty means the default role: an omission must never widen access.
+    role_ids: list[str] = Field(default_factory=list)
+
+class RoleAssignRequest(BaseModel):
+    role_ids: list[str] = Field(default_factory=list)
+
+class RoleRequest(BaseModel):
+    name: str
+    permissions: list[str] = Field(default_factory=list)
 
 
 class GatewayCreateRequest(BaseModel):
@@ -196,13 +315,24 @@ async def logout(response: Response) -> dict[str, str]:
 
 
 @router.get("/auth/me")
-async def me(session: SessionDep) -> dict[str, Any]:
+async def me(principal: PrincipalDep,
+             container: ContainerDep) -> dict[str, Any]:
+    session = principal.session
+    role_ids = await container.read_models.operator_roles(session.operator_id)
+    if role_ids is None:
+        role_ids = (OWNER_ROLE,) if session.is_admin else DEFAULT_ROLE_IDS
+    roles = {role["id"]: role["name"] for role in await _all_roles(container)}
     return {
         "email": session.email,
         "operator_id": session.operator_id,
         "tenant_id": session.tenant_id,
         "role": session.role,
-        "is_admin": session.is_admin,
+        "role_ids": list(role_ids),
+        "roles": [roles.get(role_id, role_id) for role_id in role_ids],
+        "permissions": sorted(principal.permissions),
+        # What the panel checks to decide whether to render an action. Kept for
+        # the pages written before permissions, and it means exactly "owner".
+        "is_admin": OWNER_ROLE in role_ids,
     }
 
 
@@ -316,7 +446,7 @@ class SignInSettingsPayload(BaseModel):
 
 
 @router.get("/settings/sign-in")
-async def read_sign_in_settings(session: AdminDep,
+async def read_sign_in_settings(session: CanReadSettings,
                                container: ContainerDep) -> dict[str, Any]:
     del session
     settings = await container.commands.read_sign_in_settings()
@@ -332,7 +462,7 @@ async def read_sign_in_settings(session: AdminDep,
 
 
 @router.put("/settings/sign-in")
-async def write_sign_in_settings(payload: SignInSettingsPayload, session: AdminDep,
+async def write_sign_in_settings(payload: SignInSettingsPayload, session: CanWriteSettings,
                                  container: ContainerDep) -> dict[str, Any]:
     try:
         await container.commands.configure_sign_in(
@@ -451,51 +581,213 @@ async def register(payload: RegisterRequest, request: Request,
 
 
 @router.post("/operators", status_code=201)
-async def add_operator(payload: RegisterRequest, session: AdminDep,
+async def add_operator(payload: OperatorCreateRequest, principal: PrincipalDep,
                        container: ContainerDep) -> dict[str, Any]:
-    """An administrator adds a member to their tenant.
+    """Add an account to the tenant with an explicit set of roles.
 
     The alternative — leaving registration open — means anyone who finds the URL
-    joins the tenant that administers every gateway. A member is read-only: the
-    panel hides what they cannot do, and every mutating route checks the role
-    again, because a hidden button is not an authorisation rule.
+    joins the tenant that administers every gateway. No roles means the default
+    (viewer), so an omission narrows access instead of widening it.
     """
+    _permits(principal, "members:write")
+    session = principal.session
     try:
+        role_ids = await _resolve_roles(container, payload.role_ids)
+        catalog = await _catalog(container)
+        _grantable(
+            principal,
+            _permissions_of(role_ids, catalog),
+            _permissions_of(DEFAULT_ROLE_IDS, catalog),
+        )
         operator_id = await container.commands.register_operator(
             email=payload.email,
             password=payload.password,
             is_admin=False,
+            role_ids=role_ids,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise _translate(exc) from exc
     return {
         "operator_id": operator_id,
         "tenant_id": session.tenant_id,
-        "is_admin": False,
+        "is_admin": OWNER_ROLE in role_ids,
+        "role_ids": list(role_ids),
     }
 
+@router.get("/operators")
+async def list_operators(session: CanReadMembers,
+                         container: ContainerDep) -> dict[str, Any]:
+    """Who belongs to the tenant, with the role names resolved for display."""
+    del session
+    roles = {role["id"]: role["name"] for role in await _all_roles(container)}
+    return {
+        "operators": [
+            {**operator, "roles": [roles.get(r, r) for r in operator["role_ids"]]}
+            for operator in await container.read_models.list_operators()
+        ]
+    }
+
+@router.put("/operators/{operator_id}/roles")
+async def assign_roles(operator_id: str, payload: RoleAssignRequest,
+                       principal: PrincipalDep,
+                       container: ContainerDep) -> dict[str, Any]:
+    """Replace an account's roles. Takes effect on their next request: the
+    session carries role ids, and permissions are resolved per request."""
+    _permits(principal, "roles:write")
+    session = principal.session
+    try:
+        role_ids = await _resolve_roles(container, payload.role_ids)
+        _grantable(principal, _permissions_of(role_ids, await _catalog(container)))
+        await container.commands.assign_roles(
+            operator_id, role_ids=role_ids, actor=session.email
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _translate(exc) from exc
+    return {"status": "assigned", "role_ids": list(role_ids)}
+
+@router.get("/roles")
+async def list_roles(session: CanReadRoles,
+                     container: ContainerDep) -> dict[str, Any]:
+    del session
+    return {
+        "roles": await _all_roles(container),
+        "permissions": list(PERMISSIONS),
+    }
+
+@router.post("/roles", status_code=201)
+async def define_role(payload: RoleRequest, principal: PrincipalDep,
+                      container: ContainerDep) -> dict[str, str]:
+    _permits(principal, "roles:write")
+    session = principal.session
+    try:
+        _grantable(principal, payload.permissions)
+        role_id = await container.commands.define_role(
+            name=payload.name,
+            permissions=payload.permissions,
+            actor=session.email,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _translate(exc) from exc
+    return {"id": role_id}
+
+@router.put("/roles/{role_id}")
+async def update_role(role_id: str, payload: RoleRequest, principal: PrincipalDep,
+                      container: ContainerDep) -> dict[str, str]:
+    _permits(principal, "roles:write")
+    session = principal.session
+    if role_id in BUILTIN_ROLES:
+        raise HTTPException(
+            status_code=422, detail="built-in roles cannot be edited"
+        )
+    try:
+        _grantable(principal, payload.permissions)
+        await container.commands.define_role(
+            role_id=role_id,
+            name=payload.name,
+            permissions=payload.permissions,
+            actor=session.email,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _translate(exc) from exc
+    return {"status": "updated"}
+
+@router.delete("/roles/{role_id}")
+async def delete_role(role_id: str, principal: PrincipalDep,
+                      container: ContainerDep) -> dict[str, str]:
+    _permits(principal, "roles:write")
+    session = principal.session
+    if role_id in BUILTIN_ROLES:
+        raise HTTPException(status_code=422, detail="built-in roles cannot be deleted")
+    holders = await container.read_models.role_holder_count(role_id)
+    if holders:
+        raise HTTPException(
+            status_code=422,
+            detail=f"role is assigned to {holders} member(s); reassign them first",
+        )
+    try:
+        await container.commands.delete_role(role_id, actor=session.email)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _translate(exc) from exc
+    return {"status": "deleted"}
+
+
+async def _all_roles(container: Container) -> list[dict[str, Any]]:
+    """Built-ins first, then the tenant's own, with their permissions expanded.
+
+    Holder counts come along because the panel shows them next to the delete
+    button, and "why can I not delete this" answered in the same table beats a
+    second round trip that fails with a 422.
+    """
+    holder_counts = await container.read_models.role_holder_counts()
+    roles = [
+        {
+            "id": role_id,
+            "name": name,
+            "permissions": list(perms),
+            "builtin": True,
+            "holders": holder_counts.get(role_id, 0),
+        }
+        for role_id, (name, perms) in BUILTIN_ROLES.items()
+    ]
+    roles += [
+        {
+            "id": role["id"],
+            "name": role["name"],
+            "permissions": list(role["permissions"]),
+            "builtin": False,
+            "holders": holder_counts.get(role["id"], 0),
+        }
+        for role in await container.read_models.list_roles()
+    ]
+    return roles
+
+
+async def _catalog(container: Container) -> dict[str, tuple[str, ...]]:
+    """Role id -> permissions, built-ins included. What `expand` needs."""
+    return catalog_with_builtins(await container.read_models.role_permissions())
+
+
+async def _resolve_roles(container: Container, role_ids: list[str]) -> tuple[str, ...]:
+    """Validate role ids against what exists, defaulting to the viewer role.
+
+    Unknown ids are refused rather than dropped: silently granting less than the
+    administrator asked for is the failure that gets discovered as "the new hire
+    cannot do their job", days later.
+    """
+    if not role_ids:
+        return DEFAULT_ROLE_IDS
+    known = {role["id"] for role in await _all_roles(container)}
+    unknown = sorted(set(role_ids) - known)
+    if unknown:
+        raise DomainError(
+            f"unknown role(s): {', '.join(unknown)} — create them under Roles first"
+        )
+    return tuple(dict.fromkeys(role_ids))
 
 # --------------------------------------------------------------------------
 # Gateways
 # --------------------------------------------------------------------------
 
-@router.get("/operators")
-async def list_operators(session: AdminDep,
-                         container: ContainerDep) -> dict[str, Any]:
-    """Who belongs to the tenant. Administrator-only: it is an address book."""
-    del session
-    return {"operators": await container.store.list_operators()}
-
 
 @router.get("/gateways")
-async def list_gateways(session: SessionDep, container: ContainerDep) -> dict[str, Any]:
+async def list_gateways(session: CanReadGateways, container: ContainerDep) -> dict[str, Any]:
     del session
     gateways = await container.read_models.list_gateways()
     return {"gateways": [_public_gateway(container, gw) for gw in gateways]}
 
 
 @router.post("/gateways", status_code=201)
-async def create_gateway(payload: GatewayCreateRequest, session: AdminDep,
+async def create_gateway(payload: GatewayCreateRequest, session: CanWriteGateways,
                          container: ContainerDep) -> dict[str, str]:
     try:
         gateway_id = await container.commands.create_gateway(
@@ -514,7 +806,7 @@ async def create_gateway(payload: GatewayCreateRequest, session: AdminDep,
 
 
 @router.get("/gateways/{gateway_id}")
-async def get_gateway(gateway_id: str, session: SessionDep,
+async def get_gateway(gateway_id: str, session: CanReadGateways,
                       container: ContainerDep) -> dict[str, Any]:
     del session
     gateway = await container.read_models.get_gateway(gateway_id)
@@ -531,7 +823,7 @@ async def get_gateway(gateway_id: str, session: SessionDep,
 
 @router.patch("/gateways/{gateway_id}")
 async def update_gateway(gateway_id: str, payload: GatewayUpdateRequest,
-                         session: AdminDep, container: ContainerDep) -> dict[str, str]:
+                         session: CanWriteGateways, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.update_gateway(
             gateway_id,
@@ -547,7 +839,7 @@ async def update_gateway(gateway_id: str, payload: GatewayUpdateRequest,
 
 
 @router.delete("/gateways/{gateway_id}")
-async def delete_gateway(gateway_id: str, session: AdminDep,
+async def delete_gateway(gateway_id: str, session: CanWriteGateways,
                          container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.delete_gateway(gateway_id, actor=session.email)
@@ -559,7 +851,7 @@ async def delete_gateway(gateway_id: str, session: AdminDep,
 
 @router.put("/gateways/{gateway_id}/auth")
 async def configure_auth(gateway_id: str, payload: AuthConfigRequest,
-                         session: AdminDep, container: ContainerDep) -> dict[str, str]:
+                         session: CanWriteGateways, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.configure_auth(
             gateway_id,
@@ -580,7 +872,7 @@ async def configure_auth(gateway_id: str, payload: AuthConfigRequest,
 
 @router.put("/gateways/{gateway_id}/rate-limit")
 async def set_rate_limit(gateway_id: str, payload: RateLimitRequest,
-                         session: AdminDep, container: ContainerDep) -> dict[str, str]:
+                         session: CanWriteGateways, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.set_rate_limit(
             gateway_id,
@@ -593,7 +885,7 @@ async def set_rate_limit(gateway_id: str, payload: RateLimitRequest,
 
 
 @router.post("/gateways/{gateway_id}/disable")
-async def disable_gateway(gateway_id: str, session: AdminDep,
+async def disable_gateway(gateway_id: str, session: CanWriteGateways,
                           container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.disable_gateway(gateway_id, actor=session.email)
@@ -604,7 +896,7 @@ async def disable_gateway(gateway_id: str, session: AdminDep,
 
 
 @router.post("/gateways/{gateway_id}/enable")
-async def enable_gateway(gateway_id: str, session: AdminDep,
+async def enable_gateway(gateway_id: str, session: CanWriteGateways,
                          container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.enable_gateway(gateway_id, actor=session.email)
@@ -618,7 +910,7 @@ async def enable_gateway(gateway_id: str, session: AdminDep,
 
 
 @router.get("/gateways/{gateway_id}/principals")
-async def list_principals(gateway_id: str, session: SessionDep,
+async def list_principals(gateway_id: str, session: CanReadGateways,
                           container: ContainerDep) -> dict[str, Any]:
     del session
     return {"principals": await container.read_models.principals(gateway_id)}
@@ -626,7 +918,7 @@ async def list_principals(gateway_id: str, session: SessionDep,
 
 @router.post("/gateways/{gateway_id}/principals", status_code=201)
 async def allow_principal(gateway_id: str, payload: PrincipalRequest,
-                          session: AdminDep, container: ContainerDep) -> dict[str, str]:
+                          session: CanWriteGateways, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.allow_principal(
             gateway_id, subject=payload.subject, note=payload.note,
@@ -639,7 +931,7 @@ async def allow_principal(gateway_id: str, payload: PrincipalRequest,
 
 
 @router.delete("/gateways/{gateway_id}/principals/{subject}")
-async def revoke_principal(gateway_id: str, subject: str, session: AdminDep,
+async def revoke_principal(gateway_id: str, subject: str, session: CanWriteGateways,
                            container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.revoke_principal(
@@ -655,14 +947,14 @@ async def revoke_principal(gateway_id: str, subject: str, session: AdminDep,
 
 
 @router.get("/gateways/{gateway_id}/keys")
-async def list_keys(gateway_id: str, session: SessionDep,
+async def list_keys(gateway_id: str, session: CanReadKeys,
                     container: ContainerDep) -> dict[str, Any]:
     del session
     return {"keys": await container.read_models.api_keys(gateway_id)}
 
 
 @router.post("/gateways/{gateway_id}/keys", status_code=201)
-async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: AdminDep,
+async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: CanWriteKeys,
                     container: ContainerDep) -> dict[str, str]:
     try:
         plaintext, key_id = await container.commands.issue_api_key(
@@ -675,7 +967,7 @@ async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: AdminDep,
 
 
 @router.delete("/gateways/{gateway_id}/keys/{key_id}")
-async def revoke_key(gateway_id: str, key_id: str, session: AdminDep,
+async def revoke_key(gateway_id: str, key_id: str, session: CanWriteKeys,
                      container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.revoke_api_key(
@@ -693,14 +985,14 @@ async def revoke_key(gateway_id: str, key_id: str, session: AdminDep,
 
 
 @router.get("/stats")
-async def stats(session: SessionDep, container: ContainerDep,
+async def stats(session: CanReadTraffic, container: ContainerDep,
                 gateway_id: str | None = None, minutes: int = 60) -> TrafficStats:
     del session
     return await container.read_models.stats(gateway_id, max(1, min(minutes, 10080)))
 
 
 @router.get("/requests")
-async def requests(session: SessionDep, container: ContainerDep,
+async def requests(session: CanReadTraffic, container: ContainerDep,
                    gateway_id: str | None = None, limit: int = 100) -> dict[str, Any]:
     del session
     rows = await container.read_models.request_tail(
@@ -710,7 +1002,7 @@ async def requests(session: SessionDep, container: ContainerDep,
 
 
 @router.get("/events")
-async def events(session: SessionDep, container: ContainerDep,
+async def events(session: CanReadAudit, container: ContainerDep,
                  limit: int = 100) -> dict[str, Any]:
     """Raw event log — the audit trail, with secrets redacted."""
     del session
@@ -724,7 +1016,7 @@ async def events(session: SessionDep, container: ContainerDep,
 
 @router.post("/config/validate")
 async def validate_config(payload: ConfigFileRequest,
-                          session: SessionDep) -> dict[str, Any]:
+                          session: CanReadConfig) -> dict[str, Any]:
     del session
     text = payload.yaml or json.dumps(payload.document or {})
     try:
@@ -738,7 +1030,7 @@ async def validate_config(payload: ConfigFileRequest,
 
 
 @router.post("/config/apply")
-async def apply_config(payload: ConfigFileRequest, session: AdminDep,
+async def apply_config(payload: ConfigFileRequest, session: CanWriteConfig,
                        container: ContainerDep) -> dict[str, Any]:
     text = payload.yaml or json.dumps(payload.document or {})
     try:
@@ -753,7 +1045,7 @@ async def apply_config(payload: ConfigFileRequest, session: AdminDep,
 
 
 @router.get("/config/export")
-async def export_config(session: SessionDep,
+async def export_config(session: CanReadConfig,
                         container: ContainerDep) -> dict[str, Any]:
     """Render current state as YAML — round-trips through /config/apply.
 

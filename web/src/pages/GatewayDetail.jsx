@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import {
-  Badge, Card, Chart, Empty, Endpoint, Metric, Notice, outcomeKind, relative,
+  Badge, Card, Chart, Empty, Endpoint, Metric, Notice, can, outcomeKind, relative,
 } from "../ui.jsx";
 import { navigate } from "../App.jsx";
 
@@ -13,7 +13,10 @@ const OUTCOME_LABEL = {
 };
 
 export function GatewayDetail({ id, me }) {
-  const canEdit = me?.is_admin === true;
+  // Two separate permissions: managing a gateway is not the same as minting a
+  // credential for it, and the server checks them separately.
+  const canEdit = can(me, "gateways:write");
+  const canKeys = can(me, "keys:write");
   const [gateway, setGateway] = useState(null);
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null); // {kind, text, secret?}
@@ -184,7 +187,7 @@ export function GatewayDetail({ id, me }) {
 
         <Card
           title="API keys"
-          actions={canEdit && (
+          actions={canKeys && (
             <button
               className="sm"
               onClick={() => {
@@ -224,7 +227,7 @@ export function GatewayDetail({ id, me }) {
                       {key.subject}
                     </td>
                     <td className="hint">{relative(key.issued_at)}</td>
-                    {canEdit && (
+                    {canKeys && (
                       <td style={{ width: 1 }}>
                         <button
                           className="ghost sm danger"

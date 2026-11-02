@@ -35,7 +35,10 @@ export function Login({ onLogin }) {
     setError("");
     try {
       if (mode === "register") await api.register(email, password);
-      onLogin(await api.login(email, password));
+      await api.login(email, password);
+      // Read the identity back rather than trust the login response: roles and
+      // permissions are resolved server-side, and the panel must not guess them.
+      onLogin(await api.me());
     } catch (err) {
       setError(err.message);
     } finally {

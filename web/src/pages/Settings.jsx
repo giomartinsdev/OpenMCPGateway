@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Card, Notice, relative } from "../ui.jsx";
+import { Card, Notice } from "../ui.jsx";
 
 // Google sign-in for the panel itself. Separate from a gateway's own OAuth:
-// this one decides who may administer the installation, so it sits behind the
-// administrator check and its secret never comes back from the API.
+// this one decides who may sign in at all, so it sits behind `settings:write`
+// and its secret never comes back from the API.
 export function Settings() {
-  const [members, setMembers] = useState([]);
-  const [newMember, setNewMember] = useState({ email: "", password: "" });
-  const [memberBanner, setMemberBanner] = useState(null);
   const [form, setForm] = useState({
     google_client_id: "",
     google_client_secret: "",
@@ -36,24 +33,6 @@ export function Settings() {
   }, []);
 
   const set = (key) => (event) => setForm({ ...form, [key]: event.target.value });
-
-  const loadMembers = () =>
-    api.operators().then((data) => setMembers(data.operators), () => setMembers([]));
-
-  useEffect(() => { loadMembers(); }, []);
-
-  async function addMember(event) {
-    event.preventDefault();
-    setMemberBanner(null);
-    try {
-      await api.addOperator(newMember.email, newMember.password);
-      setNewMember({ email: "", password: "" });
-      setMemberBanner({ kind: "ok", text: "Member added. They sign in with that password." });
-      loadMembers();
-    } catch (err) {
-      setMemberBanner({ kind: "err", text: err.message });
-    }
-  }
 
   async function save(event) {
     event.preventDefault();
@@ -87,60 +66,11 @@ export function Settings() {
         <div>
           <h1>Settings</h1>
           <p className="hint">
-            Who may administer this installation. Separate from the OAuth that
-            fronts each MCP gateway.
+            How people sign in to this panel. Separate from the OAuth that fronts
+            each MCP gateway.
           </p>
         </div>
       </div>
-
-      <Card title="Who belongs to this tenant">
-        <Notice kind="err">{memberBanner?.kind === "err" ? memberBanner.text : ""}</Notice>
-        <Notice kind="ok">{memberBanner?.kind === "ok" ? memberBanner.text : ""}</Notice>
-        <table>
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Registered</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((member) => (
-              <tr key={member.operator_id}>
-                <td className="mono" style={{ fontSize: 12 }}>{member.email}</td>
-                <td>{member.role}</td>
-                <td className="hint">{relative(member.registered_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <form onSubmit={addMember} className="row" style={{ marginTop: 14 }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label>Email</label>
-            <input
-              type="email"
-              value={newMember.email}
-              onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
-              required
-            />
-          </div>
-          <div style={{ flex: 1, minWidth: 160 }}>
-            <label>Initial password</label>
-            <input
-              type="password"
-              minLength={12}
-              value={newMember.password}
-              onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
-              required
-            />
-          </div>
-          <button className="primary" style={{ alignSelf: "flex-end" }}>Add member</button>
-        </form>
-        <p className="hint" style={{ marginBottom: 0 }}>
-          Members share this tenant's gateways and traffic, read-only. Registration is
-          closed after the first account, so this is the only way in.
-        </p>
-      </Card>
 
       <Card title="Sign in with Google">
         <Notice kind="ok">

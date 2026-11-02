@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Badge, Card, Empty, Metric, Notice, relative } from "../ui.jsx";
+import { Badge, Card, Empty, Metric, Notice, can, relative } from "../ui.jsx";
 import { navigate } from "../App.jsx";
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
 
 export function Gateways({ me }) {
-  const canEdit = me?.is_admin === true;
+  const canEdit = can(me, "gateways:write");
   const [state, setState] = useState({ loading: true, gateways: [], stats: null });
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -75,7 +75,9 @@ export function Gateways({ me }) {
       {creating && (
         <CreateGateway
           onCancel={() => setCreating(false)}
-          onCreated={() => { setCreating(false); load(); }}
+          // Straight to the new gateway: its endpoint and key are the next
+          // thing anyone needs, and the list only repeats the name.
+          onCreated={(id) => { setCreating(false); navigate(`/gateways/${id}`); }}
         />
       )}
 

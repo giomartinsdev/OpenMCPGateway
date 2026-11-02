@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
+import { can } from "./ui.jsx";
 import { Login } from "./pages/Login.jsx";
 import { Gateways } from "./pages/Gateways.jsx";
 import { GatewayDetail } from "./pages/GatewayDetail.jsx";
@@ -7,6 +8,8 @@ import { Traffic } from "./pages/Traffic.jsx";
 import { ConfigPage } from "./pages/Config.jsx";
 import { Audit } from "./pages/Audit.jsx";
 import { Settings } from "./pages/Settings.jsx";
+import { Members } from "./pages/Members.jsx";
+import { Roles } from "./pages/Roles.jsx";
 
 // Hash routing: 15 lines instead of a router dependency, and it survives being
 // served from any reverse-proxy path without a rewrite rule for every route.
@@ -25,12 +28,17 @@ export function navigate(to) {
   window.location.hash = to;
 }
 
+// `read` is the permission that makes the entry useful: a page you cannot read
+// is a page that renders a 403, so it is not offered. The server decides on the
+// click regardless.
 const NAV = [
-  ["/", "Gateways"],
-  ["/traffic", "Traffic"],
-  ["/audit", "Audit log"],
-  ["/config", "Config as code"],
-  ["/settings", "Settings", true],
+  ["/", "Gateways", "gateways:read"],
+  ["/traffic", "Traffic", "traffic:read"],
+  ["/audit", "Audit log", "audit:read"],
+  ["/config", "Config as code", "config:read"],
+  ["/members", "Members", "members:read"],
+  ["/roles", "Roles", "roles:read"],
+  ["/settings", "Settings", "settings:read"],
 ];
 
 export function App() {
@@ -52,8 +60,9 @@ export function App() {
   else if (path === "/traffic") page = <Traffic />;
   else if (path === "/audit") page = <Audit />;
   else if (path === "/config") page = <ConfigPage me={me} />;
-  else if (path === "/settings" && me.is_admin) page = <Settings />;
-  else if (path === "/settings") page = <Gateways />;
+  else if (path === "/members") page = <Members me={me} />;
+  else if (path === "/roles") page = <Roles me={me} />;
+  else if (path === "/settings") page = <Settings />;
   else page = <Gateways me={me} />;
 
   return (
@@ -66,7 +75,7 @@ export function App() {
           </div>
         </div>
         <nav className="nav">
-          {NAV.filter(([, , adminOnly]) => !adminOnly || me.is_admin).map(([href, label]) => (
+          {NAV.filter(([, , permission]) => can(me, permission)).map(([href, label]) => (
             <a
               key={href}
               href={`#${href}`}
@@ -85,7 +94,7 @@ export function App() {
           <div className="who">
             {me.email}
             <div style={{ marginTop: 2 }}>
-              {me.role ?? (me.is_admin ? "admin" : "member")} · {me.tenant_id}
+              {(me.roles ?? []).join(", ") || "no role"} · {me.tenant_id}
             </div>
           </div>
           <button

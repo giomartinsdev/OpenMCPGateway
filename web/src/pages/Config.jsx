@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Card, Notice } from "../ui.jsx";
+import { Card, Notice, can } from "../ui.jsx";
 
 const SAMPLE = `gateways:
   - slug: rancher
@@ -19,7 +19,7 @@ prune: false
 `;
 
 export function ConfigPage({ me }) {
-  const canEdit = me?.is_admin === true;
+  const canEdit = can(me, "config:write");
   const [yaml, setYaml] = useState("");
   const [banner, setBanner] = useState(null);
   const [busy, setBusy] = useState(false);

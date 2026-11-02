@@ -160,6 +160,18 @@ label { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 
 .field { margin-bottom: 12px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+/* -- permission picker -------------------------------------------------- */
+
+.permissions { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px; margin-top: 4px; }
+.permission {
+  display: flex; align-items: center; gap: 8px; margin: 0; padding: 7px 9px;
+  background: var(--inset); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-size: 12.5px; cursor: pointer;
+}
+.permission:hover { border-color: var(--border-strong); }
+.permission input { width: auto; margin: 0; accent-color: var(--brand); }
+.permission .hint { margin-left: auto; }
+
 /* -- badges ------------------------------------------------------------ */
 
 .badge {

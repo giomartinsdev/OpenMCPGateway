@@ -1,6 +1,11 @@
 // Primitives only. No component library: the whole UI is tables, cards and
 // badges, and a dependency would cost more than these 80 lines.
 
+/** Whether the signed-in operator may do something. Server still decides. */
+export function can(me, permission) {
+  return me?.permissions?.includes(permission) === true;
+}
+
 export function Badge({ kind = "mute", children }) {
   return (
     <span className={`badge ${kind}`}>

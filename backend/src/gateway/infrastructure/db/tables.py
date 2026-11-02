@@ -77,6 +77,33 @@ operator_emails = Table(
     Column("aggregate_id", Text, nullable=False, unique=True),
 )
 
+rm_roles = Table(
+    "rm_roles",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("permissions", JSONB, nullable=False, default=list),
+    Column("deleted", Boolean, nullable=False, default=False, server_default=false()),
+    Column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    ),
+    Column(
+        "updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    ),
+)
+
+rm_operators = Table(
+    "rm_operators",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("email", Text, nullable=False, unique=True),
+    Column("role_ids", JSONB, nullable=False, default=list),
+    Column("is_admin", Boolean, nullable=False, default=False, server_default=false()),
+    Column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    ),
+)
+
 # --------------------------------------------------------------------------
 # Read models
 # --------------------------------------------------------------------------
@@ -183,7 +210,9 @@ __all__ = [
     "projection_checkpoints",
     "rm_api_keys",
     "rm_gateways",
+    "rm_operators",
     "rm_principals",
     "rm_request_stats",
     "rm_requests_tail",
+    "rm_roles",
 ]

@@ -37,10 +37,14 @@ from gateway.domain.events import (
     GatewayUpdated,
     IdentityProvider,
     OperatorRegistered,
+    OperatorRolesAssigned,
     PrincipalAllowed,
     PrincipalRevoked,
+    RoleDefined,
+    RoleDeleted,
     SignInConfigured,
 )
+from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE, normalise
 
 SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 
@@ -70,6 +74,7 @@ class Operator(_Aggregate):
     email: str = ""
     password_hash: str = ""
     is_admin: bool = False
+    role_ids: tuple[str, ...] = ()
     exists: bool = False
 
     @property
@@ -79,7 +84,20 @@ class Operator(_Aggregate):
 
     @property
     def role(self) -> str:
+        """The single role name, for the places that predate multiple roles."""
         return "admin" if self.is_admin else "member"
+
+    @property
+    def effective_roles(self) -> tuple[str, ...]:
+        """Roles after folding, with the legacy `is_admin` flag honoured.
+
+        A stream written before roles existed has only `is_admin`, and an event
+        is history: it is read, never rewritten. So the flag decides the role
+        when no roles were ever assigned.
+        """
+        if self.role_ids:
+            return self.role_ids
+        return (OWNER_ROLE,) if self.is_admin else DEFAULT_ROLE_IDS
 
     @classmethod
     def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> Operator:
@@ -89,11 +107,24 @@ class Operator(_Aggregate):
                 state.email = event.email
                 state.password_hash = event.password_hash
                 state.is_admin = event.is_admin
+                state.role_ids = tuple(event.role_ids)
                 state.exists = True
+            elif isinstance(event, OperatorRolesAssigned):
+                state.role_ids = tuple(event.role_ids)
         return state
 
+    def decide_assign_roles(self, role_ids: Sequence[str]) -> list[Event]:
+        if not self.exists:
+            raise DomainError("operator does not exist")
+        return [
+            OperatorRolesAssigned(
+                aggregate_id=self.id, role_ids=tuple(dict.fromkeys(role_ids))
+            )
+        ]
+
     def decide_register(
-        self, *, email: str, password_hash: str, is_admin: bool = False
+        self, *, email: str, password_hash: str, is_admin: bool = False,
+        role_ids: Sequence[str] = (),
     ) -> list[Event]:
         if self.exists:
             raise DomainError("operator already registered")
@@ -107,6 +138,7 @@ class Operator(_Aggregate):
                 email=email,
                 password_hash=password_hash,
                 is_admin=is_admin,
+                role_ids=tuple(dict.fromkeys(role_ids)),
             )
         ]
 
@@ -408,6 +440,55 @@ class Gateway(_Aggregate):
 
 
 # --------------------------------------------------------------------------
+# Role
+# --------------------------------------------------------------------------
+#
+# A role is an aggregate of its own so a permission never has to be rewritten:
+# editing a role appends, and every account holding it picks up the change on
+# the next request (the session carries role ids, not permissions).
+
+class Role(_Aggregate):
+    id: str = ""
+    name: str = ""
+    permissions: tuple[str, ...] = ()
+    deleted: bool = False
+    exists: bool = False
+
+    @classmethod
+    def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> Role:
+        state = cls(id=aggregate_id)
+        for event in events:
+            if isinstance(event, RoleDefined):
+                state.name = event.name
+                state.permissions = tuple(event.permissions)
+                state.deleted = False
+                state.exists = True
+            elif isinstance(event, RoleDeleted):
+                state.deleted = True
+        return state
+
+    def decide_define(self, *, name: str, permissions: Sequence[str]) -> list[Event]:
+        if self.deleted:
+            raise DomainError("role was deleted; define a new one under another name")
+        clean_name = name.strip()
+        if not clean_name:
+            raise DomainError("role name is required")
+        if len(clean_name) > 64:
+            raise DomainError("role name must be 64 characters or fewer")
+        return [
+            RoleDefined(
+                aggregate_id=self.id,
+                name=clean_name,
+                permissions=normalise(permissions),
+            )
+        ]
+
+    def decide_delete(self) -> list[Event]:
+        if not self.exists or self.deleted:
+            raise DomainError("role does not exist")
+        return [RoleDeleted(aggregate_id=self.id)]
+
+# --------------------------------------------------------------------------
 # Sign-in settings
 # --------------------------------------------------------------------------
 
@@ -497,5 +578,6 @@ __all__ = [
     "DomainError",
     "Gateway",
     "Operator",
+    "Role",
     "SignInSettings",
 ]

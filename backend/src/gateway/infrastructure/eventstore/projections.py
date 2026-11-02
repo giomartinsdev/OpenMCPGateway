@@ -33,15 +33,22 @@ from gateway.domain.events import (
     GatewayEnabled,
     GatewayRateLimitSet,
     GatewayUpdated,
+    OperatorRegistered,
+    OperatorRolesAssigned,
     PrincipalAllowed,
     PrincipalRevoked,
     RequestObserved,
+    RoleDefined,
+    RoleDeleted,
 )
+from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
 from gateway.domain.readmodels import (
     ApiKeyRow,
     GatewayRow,
+    OperatorRow,
     PrincipalRow,
     RequestRow,
+    RoleRow,
     SeriesPoint,
     TrafficStats,
 )
@@ -49,9 +56,11 @@ from gateway.infrastructure.db.database import Database
 from gateway.infrastructure.db.tables import (
     rm_api_keys,
     rm_gateways,
+    rm_operators,
     rm_principals,
     rm_request_stats,
     rm_requests_tail,
+    rm_roles,
 )
 
 Handler = Callable[[AsyncSession, Event], Awaitable[None]]
@@ -84,6 +93,10 @@ class ProjectionRunner:
             ApiKeyIssued.EVENT: _on_key_issued,
             ApiKeyRevoked.EVENT: _on_key_revoked,
             RequestObserved.EVENT: _on_request,
+            OperatorRegistered.EVENT: _on_operator_registered,
+            OperatorRolesAssigned.EVENT: _on_roles_assigned,
+            RoleDefined.EVENT: _on_role_defined,
+            RoleDeleted.EVENT: _on_role_deleted,
         }
 
     async def apply(self, global_seq: int, event: Event) -> None:
@@ -296,10 +309,70 @@ async def _on_request(session: AsyncSession, event: Event) -> None:
     )
 
 
+async def _on_operator_registered(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, OperatorRegistered)
+    statement = pg_insert(rm_operators).values(
+        id=event.aggregate_id,
+        email=event.email,
+        role_ids=list(event.role_ids),
+        is_admin=event.is_admin,
+        created_at=event.occurred_at,
+    )
+    await session.execute(
+        statement.on_conflict_do_update(
+            index_elements=[rm_operators.c.id],
+            set_={
+                "email": statement.excluded.email,
+                "role_ids": statement.excluded.role_ids,
+                "is_admin": statement.excluded.is_admin,
+            },
+        )
+    )
+
+
+async def _on_roles_assigned(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, OperatorRolesAssigned)
+    await session.execute(
+        update(rm_operators)
+        .where(rm_operators.c.id == event.aggregate_id)
+        .values(role_ids=list(event.role_ids))
+    )
+
+
+async def _on_role_defined(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, RoleDefined)
+    statement = pg_insert(rm_roles).values(
+        id=event.aggregate_id,
+        name=event.name,
+        permissions=list(event.permissions),
+        deleted=False,
+        created_at=event.occurred_at,
+        updated_at=event.occurred_at,
+    )
+    await session.execute(
+        statement.on_conflict_do_update(
+            index_elements=[rm_roles.c.id],
+            set_={
+                "name": statement.excluded.name,
+                "permissions": statement.excluded.permissions,
+                "deleted": False,
+                "updated_at": func.now(),
+            },
+        )
+    )
+
+
+async def _on_role_deleted(session: AsyncSession, event: Event) -> None:
+    await session.execute(
+        update(rm_roles)
+        .where(rm_roles.c.id == event.aggregate_id)
+        .values(deleted=True, updated_at=func.now())
+    )
+
+
 # --------------------------------------------------------------------------
 # Queries against read models
 # --------------------------------------------------------------------------
-
 
 class ReadModels:
     """The query side. Returns typed rows that serialize straight to JSON."""
@@ -411,6 +484,103 @@ class ReadModels:
                 )
             ).mappings()
             return [RequestRow.model_validate(dict(row)) for row in rows]
+
+    async def list_roles(self) -> list[RoleRow]:
+        """Custom roles, newest first. Built-ins are added by the API layer."""
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(rm_roles)
+                    .where(rm_roles.c.deleted.is_(False))
+                    .order_by(rm_roles.c.name)
+                )
+            ).mappings()
+            return [RoleRow.model_validate(dict(row)) for row in rows]
+
+    async def role_permissions(self) -> dict[str, tuple[str, ...]]:
+        """Role id -> permissions, for permission resolution. Deleted roles are
+        excluded, so deleting a role genuinely revokes it."""
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(rm_roles.c.id, rm_roles.c.permissions).where(
+                        rm_roles.c.deleted.is_(False)
+                    )
+                )
+            ).all()
+        return {role_id: tuple(perms or ()) for role_id, perms in rows}
+
+    async def role_holder_counts(self) -> dict[str, int]:
+        """Holders per role id, in one read. The panel lists every role at once."""
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(rm_operators.c.role_ids, rm_operators.c.is_admin)
+                )
+            ).all()
+        counts: dict[str, int] = {}
+        for role_ids, is_admin in rows:
+            effective = tuple(role_ids or ()) or (
+                (OWNER_ROLE,) if is_admin else DEFAULT_ROLE_IDS
+            )
+            for role_id in effective:
+                counts[role_id] = counts.get(role_id, 0) + 1
+        return counts
+
+    async def role_holder_count(self, role_id: str) -> int:
+        """How many live accounts hold this role. Blocks deleting a role in use."""
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(rm_operators.c.role_ids, rm_operators.c.is_admin)
+                )
+            ).all()
+        count = 0
+        for role_ids, is_admin in rows:
+            effective = tuple(role_ids or ()) or (
+                (OWNER_ROLE,) if is_admin else DEFAULT_ROLE_IDS
+            )
+            count += role_id in effective
+        return count
+
+    async def list_operators(self) -> list[OperatorRow]:
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        rm_operators.c.id,
+                        rm_operators.c.email,
+                        rm_operators.c.role_ids,
+                        rm_operators.c.is_admin,
+                        rm_operators.c.created_at,
+                    ).order_by(rm_operators.c.created_at)
+                )
+            ).mappings()
+            return [
+                OperatorRow(
+                    operator_id=row["id"],
+                    email=row["email"],
+                    is_admin=row["is_admin"],
+                    role_ids=tuple(row["role_ids"] or ())
+                    or ((OWNER_ROLE,) if row["is_admin"] else DEFAULT_ROLE_IDS),
+                    created_at=row["created_at"],
+                )
+                for row in rows
+            ]
+
+    async def operator_roles(self, operator_id: str) -> tuple[str, ...] | None:
+        async with self._db.session() as session:
+            row = (
+                await session.execute(
+                    select(rm_operators.c.role_ids, rm_operators.c.is_admin).where(
+                        rm_operators.c.id == operator_id
+                    )
+                )
+            ).first()
+        if row is None:
+            return None
+        role_ids, is_admin = row
+        return tuple(role_ids or ()) or ((OWNER_ROLE,) if is_admin else DEFAULT_ROLE_IDS)
 
     async def stats(
         self, gateway_id: str | None = None, minutes: int = 60

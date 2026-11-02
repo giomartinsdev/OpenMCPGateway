@@ -25,8 +25,11 @@ from gateway.domain.events.write import (
     GatewayUpdated,
     OperatorLoggedIn,
     OperatorRegistered,
+    OperatorRolesAssigned,
     PrincipalAllowed,
     PrincipalRevoked,
+    RoleDefined,
+    RoleDeleted,
     SignInConfigured,
 )
 
@@ -52,8 +55,11 @@ __all__ = [
     "IdentityProvider",
     "OperatorLoggedIn",
     "OperatorRegistered",
+    "OperatorRolesAssigned",
     "PrincipalAllowed",
     "PrincipalRevoked",
     "RequestObserved",
+    "RoleDefined",
+    "RoleDeleted",
     "SignInConfigured",
 ]

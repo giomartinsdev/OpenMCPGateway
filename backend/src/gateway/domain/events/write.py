@@ -34,7 +34,30 @@ class OperatorRegistered(Event):
 
     email: str
     password_hash: str
+    # Kept because streams written before roles existed carry only this, and an
+    # event is history: it is read, never rewritten. `role_ids` wins when set.
     is_admin: bool = False
+    role_ids: tuple[str, ...] = ()
+
+
+class OperatorRolesAssigned(Event):
+    """Replace an account's roles. The whole set, not a delta: a delta cannot
+    express "revoke everything", which is the case that has to work."""
+
+    EVENT = "operator.roles_assigned"
+
+    role_ids: tuple[str, ...] = ()
+
+
+class RoleDefined(Event):
+    EVENT = "role.defined"
+
+    name: str
+    permissions: tuple[str, ...] = ()
+
+
+class RoleDeleted(Event):
+    EVENT = "role.deleted"
 
 
 class OperatorLoggedIn(Event):
@@ -176,7 +199,10 @@ class SignInConfigured(Event):
 
 WRITE_EVENTS: tuple[type[Event], ...] = (
     OperatorRegistered,
+    OperatorRolesAssigned,
     OperatorLoggedIn,
+    RoleDefined,
+    RoleDeleted,
     GatewayCreated,
     GatewayUpdated,
     GatewayAuthConfigured,
@@ -206,7 +232,10 @@ __all__ = [
     "GatewayUpdated",
     "OperatorLoggedIn",
     "OperatorRegistered",
+    "OperatorRolesAssigned",
     "PrincipalAllowed",
     "PrincipalRevoked",
+    "RoleDefined",
+    "RoleDeleted",
     "SignInConfigured",
 ]
