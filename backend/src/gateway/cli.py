@@ -107,14 +107,9 @@ def cmd_export(args: argparse.Namespace) -> int:
     async def run() -> int:
         container = await _container(settings)
         try:
-            from gateway.interface.api import _gateway_yaml
+            from gateway.configexport import render_document
 
-            lines: list[str] = []
-            for gateway in await container.read_models.list_gateways(args.tenant):
-                principals = await container.read_models.principals(gateway["id"])
-                keys = await container.read_models.api_keys(gateway["id"])
-                lines.append(_gateway_yaml(gateway, principals, keys))
-            print("gateways:\n" + "\n".join(lines) if lines else "gateways: []")
+            print(await render_document(container.read_models, args.tenant))
             return 0
         finally:
             await container.close()

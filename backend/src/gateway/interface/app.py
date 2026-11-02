@@ -11,12 +11,13 @@ Everything else is the FastAPI admin app and the built SPA.
 """
 
 import contextlib
+import importlib.metadata
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
@@ -24,7 +25,9 @@ from starlette.types import Receive, Scope, Send
 
 from gateway.application.container import Container
 from gateway.config import Settings
+from gateway.interface import errors
 from gateway.interface.api import router as api_router
+from gateway.interface.middleware import log_requests
 from gateway.log import log
 
 # default: backend/src/gateway/interface/app.py → repo root, where `web/dist` is
@@ -36,6 +39,14 @@ SPA_FALLBACK = {
     "message": "Frontend not built. Run `npm --prefix web ci && npm --prefix web run build`, "
                "or use `npm --prefix web run dev` and set OMG_CORS_ORIGINS.",
 }
+
+
+def _version() -> str:
+    """Whatever was installed. The panel footer and `/api/docs` read it."""
+    try:
+        return importlib.metadata.version("openmcp-gateway")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0"
 
 
 def create_admin_app(settings: Settings) -> FastAPI:
@@ -52,7 +63,7 @@ def create_admin_app(settings: Settings) -> FastAPI:
 
     app = FastAPI(
         title="OpenMCPGateway",
-        version="0.3.0",
+        version=_version(),
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         lifespan=lifespan,
@@ -70,41 +81,7 @@ def create_admin_app(settings: Settings) -> FastAPI:
             allow_headers=["*"],
         )
 
-    @app.middleware("http")
-    async def log_admin_request(request: Request, call_next: Any) -> Any:
-        """One line per admin/API request, with its status and duration.
-
-        Gateway traffic is logged by the proxy guard instead — it knows the
-        subject and outcome, which this layer does not.
-        """
-        import time
-
-        # Health probes and static files would otherwise be most of the log
-        # volume and none of the signal.
-        skip = request.url.path == "/healthz" or request.url.path.startswith("/assets/")
-        if skip:
-            return await call_next(request)
-
-        started = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception as exc:
-            log.error(
-                "http.unhandled",
-                path=request.url.path,
-                method=request.method,
-                error=repr(exc),
-                duration_ms=int((time.perf_counter() - started) * 1000),
-            )
-            raise
-        log.info(
-            "http.request",
-            path=request.url.path,
-            method=request.method,
-            status=response.status_code,
-            duration_ms=int((time.perf_counter() - started) * 1000),
-        )
-        return response
+    app.middleware("http")(log_requests)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, Any]:
@@ -123,6 +100,7 @@ def create_admin_app(settings: Settings) -> FastAPI:
             "pending": pending,
         }
 
+    errors.install(app)
     app.include_router(api_router)
 
     if WEB_DIST.is_dir():

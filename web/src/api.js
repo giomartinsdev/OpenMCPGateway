@@ -62,6 +62,8 @@ export const api = {
 
   gateways: () => call("GET", "/gateways"),
   gateway: (id) => call("GET", `/gateways/${id}`),
+  // Server-generated: the OAuth steps name endpoints the proxy serves.
+  connectGuide: (id) => call("GET", `/gateways/${id}/connect`),
   createGateway: (payload) => call("POST", "/gateways", payload),
   updateGateway: (id, payload) => call("PATCH", `/gateways/${id}`, payload),
   deleteGateway: (id) => call("DELETE", `/gateways/${id}`),

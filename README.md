@@ -209,6 +209,14 @@ With `auth: api_key`, add `"headers": {"Authorization": "Bearer omg_..."}`.
 With `auth: oauth`, add nothing: the client reads the 401 challenge, finds the
 metadata at the well-known URL, registers itself, and opens a browser.
 
+Each gateway's page in the panel carries a **Test this gateway** card with the
+exact requests for its auth mode, as `curl` or Python. A public gateway is one
+request; an API-key gateway adds the bearer header; an OAuth gateway shows the
+whole chain — the 401 that starts it, discovery, client registration, the
+authorize URL, the code-for-token exchange, and finally the authenticated call.
+The text is generated server-side (`GET /api/gateways/{id}/connect`) because the
+OAuth steps name endpoints the proxy itself serves.
+
 ## What it enforces
 
 | Layer | Behaviour |
@@ -221,7 +229,7 @@ metadata at the well-known URL, registers itself, and opens a browser.
 
 Rate limiting is in-process: with N replicas the effective limit is N×. Fine for a
 single-replica deployment, which is the current design; Redis would remove the
-caveat. See `ponytail:` comments in `backend/src/gateway/proxy/runtime.py`.
+caveat. See `ponytail:` comments in `backend/src/gateway/proxy/rate_limit.py`.
 
 ## Configuration as code
 
@@ -243,17 +251,25 @@ database without a cache-coherence story.
 ```
 backend/src/gateway/
   domain/
-    events/base.py    event envelope (Pydantic), shared enums
-    events/write.py   events that change an aggregate
-    events/read.py    events that only feed read models (traffic)
-    model.py          aggregates and invariants — the only place rules live
+    events/           event envelope (Pydantic), shared enums
+    model/            aggregates, one module per stream — the only place rules live
+    permissions.py    the closed permission catalog and built-in roles
     readmodels.py     the query side's rows
-  application/        command handler, container wiring
+  application/
+    commands.py       the command handler
+    principal.py      `Caller` — who a use case acts for
+    services/         use cases: gateways, members, roles, sign-in, tenants,
+                      traffic, config export, connection snippets
   infrastructure/
     db/               SQLAlchemy metadata, engine, session factory
-    eventstore/       event log adapter and projections
-  proxy/              FastMCP proxy per gateway, guard middleware, rate limiter
-  interface/          admin REST API, session cookies, ASGI dispatcher
+    eventstore/       event log adapter; projections split into
+                      handlers / runner / read models
+    google_oidc.py    outbound Google OIDC client
+  proxy/              FastMCP proxy per gateway: router, guard middleware,
+                      identity, rate limiter, provider factory
+  interface/          HTTP only: routers per concern, dependencies, schemas,
+                      error handlers, middleware, ASGI dispatcher
+  configexport.py     current state rendered back to YAML
   log.py              JSON logging for Loki/Grafana
 web/                  React admin UI (Kong-style dark theme)
 ```
