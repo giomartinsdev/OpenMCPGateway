@@ -6,6 +6,7 @@ import { GatewayDetail } from "./pages/GatewayDetail.jsx";
 import { Traffic } from "./pages/Traffic.jsx";
 import { ConfigPage } from "./pages/Config.jsx";
 import { Audit } from "./pages/Audit.jsx";
+import { Settings } from "./pages/Settings.jsx";
 
 // Hash routing: 15 lines instead of a router dependency, and it survives being
 // served from any reverse-proxy path without a rewrite rule for every route.
@@ -29,6 +30,7 @@ const NAV = [
   ["/traffic", "Traffic"],
   ["/audit", "Audit log"],
   ["/config", "Config as code"],
+  ["/settings", "Settings"],
 ];
 
 export function App() {
@@ -50,6 +52,7 @@ export function App() {
   else if (path === "/traffic") page = <Traffic />;
   else if (path === "/audit") page = <Audit />;
   else if (path === "/config") page = <ConfigPage />;
+  else if (path === "/settings") page = <Settings />;
   else page = <Gateways />;
 
   return (

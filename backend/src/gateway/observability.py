@@ -2,41 +2,49 @@
 
 The proxy must not block on bookkeeping, and a stats write failure must never
 fail a user's MCP call. Both concerns are handled here: `record` enqueues and
-returns, a background task drains the queue, and full/closed queues drop
-observations rather than propagating errors upward.
+returns, a background task drains the queue, and a full queue drops observations
+rather than propagating errors upward.
 """
-
-from __future__ import annotations
 
 import asyncio
 import contextlib
-from dataclasses import dataclass
 
+from pydantic import BaseModel, ConfigDict
+
+from gateway.application.ports import EventStore
 from gateway.domain.events import RequestObserved
-from gateway.infrastructure.eventstore.postgres import PostgresEventStore
 from gateway.infrastructure.eventstore.projections import ProjectionRunner
+from gateway.log import log
 
 
-@dataclass(slots=True)
-class _Observation:
+class Observation(BaseModel):
+    """One call as the proxy saw it. Immutable: it describes the past."""
+
+    model_config = ConfigDict(frozen=True)
+
     gateway_id: str
     subject: str
     outcome: str
     status: int
     duration_ms: int
-    ip: str | None
-    tool: str | None
-    method: str
+    ip: str | None = None
+    tool: str | None = None
+    method: str = "POST"
 
 
 class RequestRecorder:
     """Bounded queue + writer task for `request.observed` events."""
 
-    def __init__(self, store: PostgresEventStore, projections: ProjectionRunner,
-                 *, max_queue: int = 10_000) -> None:
+    def __init__(
+        self,
+        store: EventStore,
+        projections: ProjectionRunner,
+        *,
+        max_queue: int = 10_000,
+    ) -> None:
         self._store = store
         self._projections = projections
-        self._queue: asyncio.Queue[_Observation] = asyncio.Queue(maxsize=max_queue)
+        self._queue: asyncio.Queue[Observation] = asyncio.Queue(maxsize=max_queue)
         self._task: asyncio.Task[None] | None = None
         self._dropped = 0
 
@@ -51,24 +59,18 @@ class RequestRecorder:
             await self._task
         self._task = None
 
-    async def record(self, *, gateway_id: str, subject: str, outcome: str,
-                     status: int, duration_ms: int, ip: str | None,
-                     tool: str | None, method: str) -> None:
-        observation = _Observation(
-            gateway_id=gateway_id,
-            subject=subject,
-            outcome=outcome,
-            status=status,
-            duration_ms=duration_ms,
-            ip=ip,
-            tool=tool,
-            method=method,
-        )
+    async def record(self, **fields: object) -> None:
+        observation = Observation(**fields)  # type: ignore[arg-type]
         try:
             self._queue.put_nowait(observation)
         except asyncio.QueueFull:
             # Shedding observations beats queueing unbounded or blocking a call.
             self._dropped += 1
+            log.warning(
+                "traffic.observation_dropped",
+                gateway_id=observation.gateway_id,
+                dropped_total=self._dropped,
+            )
 
     @property
     def dropped(self) -> int:
@@ -79,27 +81,28 @@ class RequestRecorder:
             observation = await self._queue.get()
             try:
                 await self._write(observation)
-            except Exception:  # noqa: BLE001 - bookkeeping must not kill the loop
+            except Exception as exc:
                 self._dropped += 1
+                # The caller already got its response; losing a statistic is the
+                # correct outcome, and saying so is the only way to see it.
+                log.error(
+                    "traffic.write_failed",
+                    gateway_id=observation.gateway_id,
+                    error=str(exc),
+                    dropped_total=self._dropped,
+                )
             finally:
                 self._queue.task_done()
 
-    async def _write(self, observation: _Observation) -> None:
+    async def _write(self, observation: Observation) -> None:
         # Observations are their own tiny aggregate: they need no version check
         # and must never contend with gateway streams.
         event = RequestObserved(
             aggregate_id=f"traffic_{observation.gateway_id}",
-            gateway_id=observation.gateway_id,
-            subject=observation.subject,
-            outcome=observation.outcome,
-            status=observation.status,
-            duration_ms=observation.duration_ms,
-            ip=observation.ip,
-            tool=observation.tool,
-            method=observation.method,
+            **observation.model_dump(),
         )
         await self._store.append_unversioned([event], actor="proxy")
         await self._projections.apply(0, event)
 
 
-__all__ = ["RequestRecorder"]
+__all__ = ["Observation", "RequestRecorder"]

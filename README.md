@@ -48,6 +48,46 @@ npm --prefix web install && npm --prefix web run build   # or: npm --prefix web 
 .venv/bin/omg serve
 ```
 
+### Sign in with Google
+
+There are **two** OAuth setups in this project, and they are unrelated:
+
+| what | who logs in | where the client lives |
+|---|---|---|
+| **Admin UI** | you, the operator | `OMG_GOOGLE_CLIENT_ID` / `OMG_GOOGLE_CLIENT_SECRET` |
+| **A gateway** | callers of one proxied MCP server | per-gateway, in the UI or a YAML file |
+
+**You set this in the panel, not in the deployment.** Sign in as an administrator,
+open **Settings**, and fill in:
+
+| field | what to put |
+|---|---|
+| Authorised redirect URI | `https://<your-host>/api/auth/google/callback` |
+| Client ID | `…apps.googleusercontent.com` |
+| Client secret | write-only; it never comes back out of the API |
+| Who may sign in | comma-separated addresses |
+
+Create the OAuth client (type *Web application*) in Google Cloud and register that
+same redirect URI there — it must match byte for byte, or the exchange fails at
+Google with no mention of the panel.
+
+The environment variables `OMG_GOOGLE_CLIENT_ID`, `OMG_GOOGLE_CLIENT_SECRET` and
+`OMG_OPERATOR_ALLOWLIST` exist only to seed a deployment that has to come up with
+sign-in already working. Once anything is saved in the panel, the panel wins: the
+client id belongs to whoever runs the installation, and making them redeploy to
+change it would be absurd.
+
+The password form keeps working, so a misconfigured IdP never locks you out. If no
+client is configured the Google button is not rendered. Signing in creates the
+operator on first success — which is why the allowlist gates it. Only an
+administrator can change these settings, and registration is closed after the first
+account; otherwise anyone who found the URL could become an operator.
+
+The flow is verified against a real OIDC provider in the tests
+(`tests/steps/fake_google.py`), including the failures that matter: a callback with
+a state this browser never received, an `id_token` minted for a different client, an
+unverified address, and an email outside the allowlist.
+
 ### Kubernetes
 
 ```bash
@@ -111,13 +151,46 @@ database without a cache-coherence story.
 
 ```
 backend/src/gateway/
-  domain/           aggregates and invariants — the only place rules live
-  application/      command handler, container wiring
-  infrastructure/    event store, projections, password hashing
-  proxy/            FastMCP proxy per gateway, guard middleware, rate limiter
-  interface/        admin REST API, session cookies, ASGI dispatcher
-web/                React admin UI (Kong-style dark theme)
+  domain/
+    events/base.py    event envelope (Pydantic), shared enums
+    events/write.py   events that change an aggregate
+    events/read.py    events that only feed read models (traffic)
+    model.py          aggregates and invariants — the only place rules live
+    readmodels.py     the query side's rows
+  application/        command handler, container wiring
+  infrastructure/
+    db/               SQLAlchemy metadata, engine, session factory
+    eventstore/       event log adapter and projections
+  proxy/              FastMCP proxy per gateway, guard middleware, rate limiter
+  interface/          admin REST API, session cookies, ASGI dispatcher
+  log.py              JSON logging for Loki/Grafana
+web/                  React admin UI (Kong-style dark theme)
 ```
+
+Persistence is SQLAlchemy (async, `asyncpg` driver) against Postgres. There is no
+string SQL in the application: tables are declared once in
+`infrastructure/db/tables.py` and both the event store and the projections query
+through the expression language.
+
+The command handler depends on an `EventStore` protocol, not on the Postgres
+adapter, so the write path can be tested without a database and a different log is
+a wiring change.
+
+### Logs
+
+Every line is one JSON object on stdout, intended for Loki → Grafana:
+
+```json
+{"ts":"2026-11-02T11:04:14.538Z","level":"info","logger":"gateway","msg":"proxy.request","event":"proxy.request","gateway":"rancher","subject":"api-key:key_ab12","outcome":"allowed","status":200,"duration_ms":18,"ip":"203.0.113.7"}
+```
+
+Useful fields to build dashboards on: `event` (`proxy.request`, `gateway.installed`,
+`command.committed`, `http.request`, `traffic.write_failed`), `gateway`, `subject`,
+`outcome`, `status`, `duration_ms`. Context bound with `log.context(...)` follows
+every line logged inside that block.
+
+Set the level with `OMG_LOG_LEVEL` (`info` by default). uvicorn's own loggers are
+routed through the same JSON handler, so there is exactly one format.
 
 ```
 cd backend && .venv/bin/python -m pytest tests/

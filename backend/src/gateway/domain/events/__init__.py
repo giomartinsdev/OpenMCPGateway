@@ -1,0 +1,57 @@
+"""Events, split by who consumes them.
+
+* `base` — the envelope and the shared enums
+* `write` — events that change an aggregate
+* `read` — events that only feed read models
+
+`gateway.domain.events` re-exports everything so call sites do not care which
+module a class lives in; the split is about dependency direction, not imports.
+"""
+
+from gateway.domain.events.base import AuthMode, Event, IdentityProvider
+from gateway.domain.events.read import READ_EVENTS, RequestObserved
+from gateway.domain.events.write import (
+    SIGN_IN_AGGREGATE,
+    WRITE_EVENTS,
+    ApiKeyIssued,
+    ApiKeyRevoked,
+    GatewayAuthConfigured,
+    GatewayCreated,
+    GatewayDeleted,
+    GatewayDisabled,
+    GatewayEnabled,
+    GatewayRateLimitSet,
+    GatewayUpdated,
+    OperatorLoggedIn,
+    OperatorRegistered,
+    PrincipalAllowed,
+    PrincipalRevoked,
+    SignInConfigured,
+)
+
+ALL_EVENTS: tuple[type[Event], ...] = (*WRITE_EVENTS, *READ_EVENTS)
+
+__all__ = [
+    "ALL_EVENTS",
+    "READ_EVENTS",
+    "SIGN_IN_AGGREGATE",
+    "WRITE_EVENTS",
+    "ApiKeyIssued",
+    "ApiKeyRevoked",
+    "AuthMode",
+    "Event",
+    "GatewayAuthConfigured",
+    "GatewayCreated",
+    "GatewayDeleted",
+    "GatewayDisabled",
+    "GatewayEnabled",
+    "GatewayRateLimitSet",
+    "GatewayUpdated",
+    "IdentityProvider",
+    "OperatorLoggedIn",
+    "OperatorRegistered",
+    "PrincipalAllowed",
+    "PrincipalRevoked",
+    "RequestObserved",
+    "SignInConfigured",
+]

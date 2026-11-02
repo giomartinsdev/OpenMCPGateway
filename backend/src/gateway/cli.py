@@ -6,16 +6,14 @@
     omg operator add someone@x.dev  # create an operator (prompts for password)
 """
 
-from __future__ import annotations
-
 import argparse
 import asyncio
 import getpass
-import os
 import sys
 from pathlib import Path
 
 from gateway.config import ConfigError, Settings
+from gateway.log import configure
 
 
 def _settings() -> Settings:
@@ -45,13 +43,18 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from gateway.asgi import build_asgi
 
     settings = _settings()
+    configure(settings.log_level)
     host = args.host or settings.host
     port = args.port or settings.port
     uvicorn.run(
         build_asgi(settings),
         host=host,
         port=port,
-        log_level=os.environ.get("OMG_LOG_LEVEL", "info"),
+        # No uvicorn log config: it installs plain-text handlers that would
+        # break the one-JSON-line-per-record contract. The root handler from
+        # `gateway.log.configure` covers uvicorn's loggers too.
+        log_config=None,
+        log_level=settings.log_level,
         proxy_headers=True,
         forwarded_allow_ips="*",
     )

@@ -33,6 +33,12 @@ services:
       # Optional: GitHub OAuth App for gateways configured with `idp: github`
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      # Optional: Google sign-in for the *admin UI*. Register the callback
+      # `${OMG_BASE_URL}/api/auth/google/callback` in the Google Cloud project.
+      OMG_GOOGLE_CLIENT_ID: ${OMG_GOOGLE_CLIENT_ID:-}
+      OMG_GOOGLE_CLIENT_SECRET: ${OMG_GOOGLE_CLIENT_SECRET:-}
+      # Who may sign in and become an operator. Empty means nobody new.
+      OMG_OPERATOR_ALLOWLIST: ${OMG_OPERATOR_ALLOWLIST:-}
     ports:
       - "${OMG_PORT:-8000}:8000"
 

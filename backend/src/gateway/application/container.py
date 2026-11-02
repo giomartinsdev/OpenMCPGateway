@@ -3,44 +3,50 @@
 The admin API and the proxy runtime must share one `RateLimiter`, one recorder
 and one `ReadModels` — otherwise a config change made in the UI would not be
 visible to traffic. This module is the single place that wiring lives.
+
+Collaborators take a `Database`, not a pool: nothing outside this module knows
+how the app reaches Postgres.
 """
 
-from __future__ import annotations
-
 import contextlib
-from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from gateway.application.commands import CommandHandler
+from gateway.application.ports import EventStore
 from gateway.config import Settings
-from gateway.infrastructure.eventstore.postgres import (
-    PostgresEventStore,
-    register_all_events,
-)
+from gateway.infrastructure.db.database import Database
+from gateway.infrastructure.eventstore.postgres import PostgresEventStore
 from gateway.infrastructure.eventstore.projections import ProjectionRunner, ReadModels
 from gateway.observability import RequestRecorder
-from gateway.proxy.runtime import RateLimiter
 from gateway.proxy.router import GatewayRouter
+from gateway.proxy.runtime import RateLimiter
 
 
-@dataclass(slots=True)
-class Container:
+class Container(BaseModel):
+    """Every collaborator, built once. Wiring changes happen here and nowhere else."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     settings: Settings
-    store: PostgresEventStore
+    database: Database
+    store: EventStore
     projections: ProjectionRunner
     read_models: ReadModels
     commands: CommandHandler
     recorder: RequestRecorder
     limiter: RateLimiter
-    router: GatewayRouter = field(default=None)  # type: ignore[assignment]
+    router: GatewayRouter = Field(default=None)  # type: ignore[assignment]
 
     @classmethod
-    async def create(cls, settings: Settings) -> "Container":
-        register_all_events()
-        store = await PostgresEventStore.connect(settings.database_url)
-        projections = ProjectionRunner(store._pool)  # noqa: SLF001 - same layer
-        await projections.migrate()
-        read_models = ReadModels(store._pool)  # noqa: SLF001
+    async def create(cls, settings: Settings) -> Container:
+        database = Database(settings.database_url)
+        await database.migrate()
+
+        store = PostgresEventStore(database)
+        projections = ProjectionRunner(database)
+        read_models = ReadModels(database)
         await replay_projections(store, projections, read_models)
 
         recorder = RequestRecorder(store, projections)
@@ -48,6 +54,7 @@ class Container:
 
         container = cls(
             settings=settings,
+            database=database,
             store=store,
             projections=projections,
             read_models=read_models,
@@ -72,12 +79,14 @@ class Container:
     async def close(self) -> None:
         await self.recorder.stop()
         await self.router.shutdown()
-        await self.store.close()
+        await self.database.close()
 
 
-async def replay_projections(store: PostgresEventStore,
-                             projections: ProjectionRunner,
-                             read_models: ReadModels) -> None:
+async def replay_projections(
+    store: EventStore,
+    projections: ProjectionRunner,
+    read_models: ReadModels,
+) -> None:
     """Catch read models up with the log on boot.
 
     Projections are applied synchronously on write, so this normally does
@@ -109,7 +118,7 @@ async def bootstrap_admin(container: Container) -> None:
         return
     await container.commands.register_operator(
         email=settings.admin_email,
-        password=settings.admin_password,
+        password=settings.admin_password.get_secret_value(),
         is_admin=True,
     )
 

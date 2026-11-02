@@ -6,8 +6,6 @@ preimage space makes rainbow tables irrelevant, and a fast hash keeps the proxy
 hot path cheap. Do not reuse this reasoning for user-chosen passwords.
 """
 
-from __future__ import annotations
-
 import hashlib
 import hmac
 import secrets

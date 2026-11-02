@@ -10,23 +10,22 @@ Two things are dynamic at runtime and both live here:
 Everything else is the FastAPI admin app and the built SPA.
 """
 
-from __future__ import annotations
-
 import contextlib
 import os
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
 from gateway.application.container import Container
 from gateway.config import Settings
 from gateway.interface.api import router as api_router
+from gateway.log import log
 
 # default: backend/src/gateway/interface/app.py → repo root, where `web/dist` is
 # built. OMG_WEB_DIST overrides it for an image layout that differs.
@@ -42,16 +41,18 @@ SPA_FALLBACK = {
 def create_admin_app(settings: Settings) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        log.info("app.starting", base_url=settings.base_url)
         app.state.container = await Container.create(settings)
         try:
             yield
         finally:
             await app.state.container.close()
             app.state.container = None
+            log.info("app.stopped")
 
     app = FastAPI(
         title="OpenMCPGateway",
-        version="0.1.0",
+        version="0.3.0",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         lifespan=lifespan,
@@ -69,6 +70,42 @@ def create_admin_app(settings: Settings) -> FastAPI:
             allow_headers=["*"],
         )
 
+    @app.middleware("http")
+    async def log_admin_request(request: Request, call_next: Any) -> Any:
+        """One line per admin/API request, with its status and duration.
+
+        Gateway traffic is logged by the proxy guard instead — it knows the
+        subject and outcome, which this layer does not.
+        """
+        import time
+
+        # Health probes and static files would otherwise be most of the log
+        # volume and none of the signal.
+        skip = request.url.path == "/healthz" or request.url.path.startswith("/assets/")
+        if skip:
+            return await call_next(request)
+
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            log.error(
+                "http.unhandled",
+                path=request.url.path,
+                method=request.method,
+                error=repr(exc),
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+            raise
+        log.info(
+            "http.request",
+            path=request.url.path,
+            method=request.method,
+            status=response.status_code,
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+        return response
+
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, Any]:
         container: Container | None = app.state.container
@@ -77,7 +114,10 @@ def create_admin_app(settings: Settings) -> FastAPI:
         pending = container.router.pending
         return {
             "status": "ok",
-            "gateways": len(container.router.entries),
+            # Serving gateways, not routes: one OAuth gateway owns several
+            # routes (metadata, login endpoints, /mcp), so counting routes made
+            # this number disagree with the gateway list for no reason.
+            "gateways": len(container.router.live),
             # Empty in the normal case; a name here means "enabled but not
             # serving", which is the state that used to look like a typo'd URL.
             "pending": pending,

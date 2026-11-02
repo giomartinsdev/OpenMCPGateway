@@ -5,8 +5,6 @@ tests is that the gateway speaks MCP end-to-end, so a stub HTTP endpoint would
 prove nothing about the proxy.
 """
 
-from __future__ import annotations
-
 import asyncio
 import socket
 from dataclasses import dataclass, field

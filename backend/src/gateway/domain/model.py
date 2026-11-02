@@ -10,15 +10,19 @@ Invariants deliberately enforced here rather than in the API layer:
   * a gateway with OAuth auth must name an IdP and its client credentials
   * an API-key gateway must have at least one live key
   * rate limits are positive
+
+The aggregates are Pydantic models so the same vocabulary is used on both sides
+of the process boundary: an invalid slug is rejected by the same machinery that
+would reject it in a request body.
 """
 
-from __future__ import annotations
-
 import re
-from dataclasses import dataclass, field
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from gateway.domain.events import (
+    SIGN_IN_AGGREGATE,
     ApiKeyIssued,
     ApiKeyRevoked,
     AuthMode,
@@ -34,6 +38,7 @@ from gateway.domain.events import (
     OperatorRegistered,
     PrincipalAllowed,
     PrincipalRevoked,
+    SignInConfigured,
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
@@ -43,13 +48,23 @@ class DomainError(ValueError):
     """A command violated an invariant. Surfaced to the caller as HTTP 422."""
 
 
+class _Aggregate(BaseModel):
+    """Mutable state folded from events. Not frozen, not validated on assign.
+
+    Validation happens when an event is constructed, so the state cannot become
+    invalid without a bug in a reducer — hence no per-assignment validation,
+    which would make folding a stream an order of magnitude slower for nothing.
+    """
+
+    model_config = ConfigDict(validate_assignment=False)
+
+
 # --------------------------------------------------------------------------
 # Operator
 # --------------------------------------------------------------------------
 
 
-@dataclass(slots=True)
-class Operator:
+class Operator(_Aggregate):
     id: str = ""
     email: str = ""
     password_hash: str = ""
@@ -57,7 +72,7 @@ class Operator:
     exists: bool = False
 
     @classmethod
-    def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> "Operator":
+    def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> Operator:
         state = cls(id=aggregate_id)
         for event in events:
             if isinstance(event, OperatorRegistered):
@@ -91,8 +106,7 @@ class Operator:
 # --------------------------------------------------------------------------
 
 
-@dataclass(slots=True)
-class Gateway:
+class Gateway(_Aggregate):
     id: str = ""
     slug: str = ""
     name: str = ""
@@ -107,16 +121,17 @@ class Gateway:
     upstream_token: str | None = None
     requests_per_minute: int = 0  # 0 = unlimited
     enabled: bool = True
-    allowed_subjects: set[str] = field(default_factory=set)
-    api_key_ids: dict[str, str] = field(default_factory=dict)  # key_id -> key_hash
+    allowed_subjects: set[str] = Field(default_factory=set)
+    api_key_ids: dict[str, str] = Field(default_factory=dict)  # key_id -> key_hash
     deleted: bool = False
     version: int = 0
 
     @classmethod
-    def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> "Gateway":
+    def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> Gateway:
         state = cls(id=aggregate_id)
         for event in events:
             state._apply(event)
+            state.version = event.sequence
         return state
 
     def _apply(self, event: Event) -> None:
@@ -169,9 +184,14 @@ class Gateway:
         if not self.slug:
             raise DomainError("gateway does not exist")
 
-    def _validate_auth(self, mode: AuthMode, idp: IdentityProvider | None,
-                       client_id: str | None, client_secret: str | None,
-                       config_url: str | None) -> None:
+    def _validate_auth(
+        self,
+        mode: AuthMode,
+        idp: IdentityProvider | None,
+        client_id: str | None,
+        client_secret: str | None,
+        config_url: str | None,
+    ) -> None:
         if mode is AuthMode.OAUTH:
             if idp is None:
                 raise DomainError("oauth auth requires an identity provider")
@@ -184,9 +204,16 @@ class Gateway:
 
     # -- commands ---------------------------------------------------------
 
-    def decide_create(self, *, slug: str, name: str, target_url: str,
-                      description: str = "", auth_mode: AuthMode = AuthMode.NONE,
-                      idp: IdentityProvider | None = None) -> list[Event]:
+    def decide_create(
+        self,
+        *,
+        slug: str,
+        name: str,
+        target_url: str,
+        description: str = "",
+        auth_mode: AuthMode = AuthMode.NONE,
+        idp: IdentityProvider | None = None,
+    ) -> list[Event]:
         if self.slug:
             raise DomainError("gateway already exists")
         if not SLUG_RE.match(slug):
@@ -197,7 +224,7 @@ class Gateway:
             raise DomainError("name is required")
         if not target_url.startswith(("http://", "https://")):
             raise DomainError("target_url must be an http(s) URL")
-        if auth_mode is not AuthMode.NONE and idp is None and auth_mode is AuthMode.OAUTH:
+        if auth_mode is AuthMode.OAUTH and idp is None:
             raise DomainError("oauth auth requires an identity provider")
         return [
             GatewayCreated(
@@ -211,9 +238,13 @@ class Gateway:
             )
         ]
 
-    def decide_update(self, *, name: str | None = None,
-                      target_url: str | None = None,
-                      description: str | None = None) -> list[Event]:
+    def decide_update(
+        self,
+        *,
+        name: str | None = None,
+        target_url: str | None = None,
+        description: str | None = None,
+    ) -> list[Event]:
         self._ensure_live()
         if target_url is not None and not target_url.startswith(
             ("http://", "https://")
@@ -232,13 +263,17 @@ class Gateway:
             )
         ]
 
-    def decide_configure_auth(self, *, auth_mode: AuthMode,
-                              idp: IdentityProvider | None = None,
-                              client_id: str | None = None,
-                              client_secret: str | None = None,
-                              config_url: str | None = None,
-                              required_scopes: Sequence[str] = (),
-                              upstream_token: str | None = None) -> list[Event]:
+    def decide_configure_auth(
+        self,
+        *,
+        auth_mode: AuthMode,
+        idp: IdentityProvider | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        config_url: str | None = None,
+        required_scopes: Sequence[str] = (),
+        upstream_token: str | None = None,
+    ) -> list[Event]:
         self._ensure_live()
         # Keep previously stored secret when the caller only rotates the mode.
         if auth_mode is AuthMode.OAUTH and client_secret is None and self.client_secret:
@@ -313,8 +348,9 @@ class Gateway:
         self._ensure_live()
         return [GatewayDeleted(aggregate_id=self.id)]
 
-    def decide_issue_key(self, *, key_id: str, label: str, key_hash: str,
-                         subject: str = "api-key") -> list[Event]:
+    def decide_issue_key(
+        self, *, key_id: str, label: str, key_hash: str, subject: str = "api-key"
+    ) -> list[Event]:
         self._ensure_live()
         if not label.strip():
             raise DomainError("label is required")
@@ -347,8 +383,11 @@ class Gateway:
         if not subject:
             return False
         # No allowlist configured means "any authenticated principal".
-        return not self.allowed_subjects or subject in self.allowed_subjects or \
-            "*" in self.allowed_subjects
+        return (
+            not self.allowed_subjects
+            or subject in self.allowed_subjects
+            or "*" in self.allowed_subjects
+        )
 
     def matches_key_hash(self, key_hash: str) -> str | None:
         """Return the subject for a matching key hash, if any."""
@@ -356,3 +395,97 @@ class Gateway:
             if stored == key_hash:
                 return f"api-key:{key_id}"
         return None
+
+
+# --------------------------------------------------------------------------
+# Sign-in settings
+# --------------------------------------------------------------------------
+
+
+class SignInSettings(_Aggregate):
+    """How an operator logs in to the panel — one per deployment."""
+
+    id: str = SIGN_IN_AGGREGATE
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    redirect_uri: str = ""
+    operator_allowlist: tuple[str, ...] = ()
+    version: int = 0
+
+    @classmethod
+    def from_events(cls, events: Iterable[Event]) -> SignInSettings:
+        settings = cls()
+        for event in events:
+            settings._apply(event)
+            settings.version = event.sequence
+        return settings
+
+    def _apply(self, event: Event) -> None:
+        match event:
+            case SignInConfigured():
+                self.google_client_id = event.google_client_id
+                self.google_client_secret = event.google_client_secret
+                self.redirect_uri = event.redirect_uri
+                self.operator_allowlist = tuple(event.operator_allowlist)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    def decide_configure(
+        self,
+        *,
+        google_client_id: str,
+        google_client_secret: str,
+        redirect_uri: str,
+        operator_allowlist: Sequence[str] = (),
+    ) -> list[Event]:
+        """Validate, keeping the stored secret when the caller omits it.
+
+        The panel never receives the secret back, so it cannot send it again. An
+        empty secret therefore means "unchanged", not "clear it" — otherwise every
+        edit that touches anything else silently breaks sign-in.
+        """
+        client_id = google_client_id.strip()
+        redirect = redirect_uri.strip()
+        secret = google_client_secret or self.google_client_secret
+
+        if not client_id:
+            raise DomainError("google_client_id is required")
+        if not secret:
+            raise DomainError("google_client_secret is required")
+        if not redirect:
+            # Naming the field beats "invalid configuration": the failure this
+            # prevents shows up at the provider, not here.
+            raise DomainError(
+                "redirect_uri is required — it must match the authorised redirect "
+                "URI registered at the provider exactly"
+            )
+        if not redirect.startswith(("http://", "https://")):
+            raise DomainError("redirect_uri must be an absolute http(s) URL")
+
+        allowlist = tuple(
+            email.strip().lower() for email in operator_allowlist if email.strip()
+        )
+        for email in allowlist:
+            if "@" not in email:
+                raise DomainError(f"'{email}' is not an email address")
+
+        return [
+            SignInConfigured(
+                aggregate_id=self.id,
+                google_client_id=client_id,
+                google_client_secret=secret,
+                redirect_uri=redirect,
+                operator_allowlist=allowlist,
+            )
+        ]
+
+
+__all__ = [
+    "SLUG_RE",
+    "DomainError",
+    "Gateway",
+    "Operator",
+    "SignInSettings",
+]

@@ -10,16 +10,14 @@ allowlist decision is what these scenarios are about, and it is the part that ca
 silently break.
 """
 
-from __future__ import annotations
-
 import asyncio
 
 import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from gateway.domain.events import AuthMode, IdentityProvider
 from gateway.application.container import Container
+from gateway.domain.events import AuthMode, IdentityProvider
 from tests.steps.support import BackendServer, Context
 
 scenarios("../features/proxy_authorisation.feature")
@@ -260,9 +258,9 @@ def resolve_identity(container, runner, gateway: dict, subject: str) -> dict:
     """
 
     async def check() -> dict:
-        from gateway.proxy.runtime import GatewayAuth, Identity
+        from gateway.proxy.runtime import Identity
 
-        live = container.router._live[gateway["slug"]]  # noqa: SLF001
+        live = container.router.live_gateways[gateway["slug"]]
         # Walk the published routes to find the guard holding this gateway's auth.
         auth = _find_auth(live)
         assert auth is not None, "guard auth not found"
@@ -478,7 +476,7 @@ def _guard_authorized(live, subject: str) -> bool:
     for route in live.routes:
         endpoint = getattr(route, "endpoint", None)
         if hasattr(endpoint, "_authorized"):
-            return bool(endpoint._authorized(subject))  # noqa: SLF001
+            return bool(endpoint._authorized(subject))
     raise AssertionError("guard not found")
 
 
@@ -578,6 +576,6 @@ def second_container(runner, settings) -> Container:
 
 @then(parsers.parse('the "{slug}" gateway is advertised as live'))
 def gateway_advertised_live(restarted, slug: str) -> None:
-    live = list(restarted.router._live)  # noqa: SLF001
+    live = list(restarted.router.live_gateways)
     assert slug in live, f"live={live} pending={restarted.router.pending}"
     assert not restarted.router.pending, restarted.router.pending

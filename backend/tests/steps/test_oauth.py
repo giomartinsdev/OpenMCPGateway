@@ -11,8 +11,6 @@ A fake `client_id`/`client_secret` is enough: discovery is generated locally and
 GitHub's endpoints are hardcoded in the provider, so no network call is made.
 """
 
-from __future__ import annotations
-
 from urllib.parse import urlparse
 
 import httpx
@@ -293,3 +291,116 @@ def oauth_gateway_with_scope(container, runner, operator: str, scope: str) -> di
 def resource_advertises_scope(discovery: dict, scope: str) -> None:
     assert discovery["resource_status"] == 200, discovery.get("resource_path")
     assert discovery["resource"]["scopes_supported"] == [scope], discovery["resource"]
+
+
+@when("a client registers itself and starts the authorisation flow",
+      target_fixture="flow")
+def start_authorisation(live_server: str, gateway: dict) -> dict:
+    """Walk the two endpoints the metadata advertises as if a real MCP client.
+
+    Registration then `/authorize`. Both must answer; a 404 here means the
+    metadata is advertising routes the router never installed.
+    """
+    base = f"{live_server}/g/{gateway['slug']}"
+    client = httpx.Client()
+    registered = client.post(
+        f"{base}/register",
+        json={
+            "client_name": "probe",
+            "redirect_uris": ["http://127.0.0.1:9999/callback"],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+        },
+    )
+    assert registered.status_code in (200, 201), registered.text[:300]
+    client_id = registered.json()["client_id"]
+
+    # PKCE, as every MCP client uses.
+    import hashlib
+    from base64 import urlsafe_b64encode
+    verifier = "v" * 64
+    challenge = urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).decode().rstrip("=")
+
+    started = client.get(
+        f"{base}/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": "http://127.0.0.1:9999/callback",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "xyz",
+        },
+        follow_redirects=False,
+    )
+    return {
+        "registered": registered, "started": started,
+        "client_id": client_id, "origin": live_server, "client": client,
+    }
+
+
+@then("the authorisation endpoint answers 302")
+def authorise_redirects(flow: dict) -> None:
+    assert flow["started"].status_code == 302, (
+        f"{flow['started'].status_code}: {flow['started'].text[:300]}"
+    )
+
+
+@then("the redirect goes to the identity provider")
+def redirect_to_idp(flow: dict) -> None:
+    """Follow the login the way a browser would, ending at the provider.
+
+    The advertised URLs carry the public HTTPS base (as they must, or clients
+    would be sent to a host that does not exist); the test server lives
+    elsewhere, so keep the path and swap the origin. A cookie jar is required:
+    the consent step refuses a submission that did not start the same session.
+    """
+    import re
+
+    client = flow["client"]
+    location = flow["started"].headers.get("location", "")
+    assert location, flow["started"].headers
+    path = "/" + location.split("/", 3)[3] if "://" in location else location
+
+    consent = client.get(flow["origin"] + path, follow_redirects=False)
+    assert consent.status_code == 200, f"{path} -> {consent.status_code}"
+
+    # FastMCP asks for consent before handing off; approving is the step a user
+    # does in a browser, so the test does it too.
+    fields = dict(re.findall(r'name="(\w+)" value="([^"]*)"', consent.text))
+    assert fields, "consent page has no form fields: " + consent.text[-400:]
+    # The consent cookie is `Secure`, so an http test client drops it from the
+    # jar. Forward it by hand: the server compares values, not transport.
+    cookies = {}
+    for header in consent.headers.get_list("set-cookie"):
+        name, _, rest = header.partition("=")
+        cookies[name.strip()] = rest.split(";", 1)[0]
+    approved = client.post(
+        flow["origin"] + path,
+        data={**fields, "action": "approve"},
+        cookies=cookies,
+        follow_redirects=False,
+    )
+    target = approved.headers.get("location", "")
+    assert approved.status_code == 302, f"{approved.status_code}: {approved.text[:300]}"
+    assert "github.com/login/oauth/authorize" in target, target
+
+
+@then("the registration endpoint answered with a client id")
+def registration_returned_client(flow: dict) -> None:
+    assert flow["client_id"], flow["registered"].text[:200]
+
+
+@then(parsers.parse("health reports {count:d} gateways"))
+def health_reports_gateways(count: int, container, runner) -> None:
+    async def check() -> None:
+        # Refresh first: the read model changed after the gateways were created.
+        await container.refresh_router()
+        assert len(container.router.live) == count, (
+            f"live={container.router.live} pending={container.router.pending}"
+        )
+
+    runner.run(check())

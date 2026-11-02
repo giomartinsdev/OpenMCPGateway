@@ -5,8 +5,6 @@ a step used by two feature files must be imported by both test modules. Defining
 it twice would be a duplicate-step error, hence this single home.
 """
 
-from __future__ import annotations
-
 import pytest
 from pytest_bdd import given, parsers
 

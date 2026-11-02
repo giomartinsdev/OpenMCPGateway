@@ -19,47 +19,42 @@ replicas mean N x the configured limit. Upgrade path: move `RateLimiter` state
 to Redis behind the same two methods — see `ponytail:` note below.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
-import contextlib
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
-from fastmcp import FastMCP
-from fastmcp.server import create_proxy
 from fastmcp.server.auth import AuthProvider
-from starlette.applications import Starlette
+from pydantic import BaseModel, ConfigDict
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
-from starlette.routing import Mount
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from gateway.domain.events import AuthMode, IdentityProvider
 from gateway.infrastructure.eventstore.projections import ReadModels
+from gateway.log import log
 from gateway.observability import RequestRecorder
-
 
 # --------------------------------------------------------------------------
 # Rate limiting
 # --------------------------------------------------------------------------
 
 
-@dataclass(slots=True)
 class RateLimiter:
     """Sliding-window counter per (gateway, subject).
+
+    A service, not a data model: it owns a lock and mutable buckets, so a
+    Pydantic wrapper would add validation to a hot path that has nothing to
+    validate. `hits` and `lock` are private by convention, not by machinery.
 
     ponytail: in-process only — correct for one replica, `N x limit` at N.
     Swap the two methods for a Redis INCR/EXPIRE pair when you scale out.
     """
 
-    _hits: dict[tuple[str, str], deque[float]] = field(
-        default_factory=lambda: defaultdict(deque)
-    )
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    def __init__(self) -> None:
+        self._hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+        self._lock = asyncio.Lock()
 
     async def allow(self, gateway_id: str, subject: str, limit: int) -> bool:
         if limit <= 0:
@@ -86,8 +81,11 @@ class RateLimiter:
 # --------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class Identity:
+class Identity(BaseModel):
+    """Who is calling. Immutable: it is the result of a check, not state."""
+
+    model_config = ConfigDict(frozen=True)
+
     subject: str
     display: str = ""
     method: str = "anonymous"
@@ -232,6 +230,16 @@ class GuardMiddleware:
             status = 502
             raise
         finally:
+            log.info(
+                "proxy.request",
+                gateway=self.config["slug"],
+                subject=identity.subject if identity else "anonymous",
+                outcome=outcome,
+                status=status,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                ip=_client_ip(scope, headers),
+                method=scope.get("method", "POST"),
+            )
             await self.recorder.record(
                 gateway_id=self.config["id"],
                 subject=identity.subject if identity else "anonymous",
@@ -449,94 +457,12 @@ def build_auth_provider(
             )
     raise ValueError(f"unsupported identity provider {idp}")
 
-
-# --------------------------------------------------------------------------
-# Gateway app assembly
-# --------------------------------------------------------------------------
-
-
-@dataclass(slots=True)
-class MountedGateway:
-    slug: str
-    signature: str
-    app: Starlette
-    lifespan: Any
-    gateway_id: str
-
-
-def signature_of(config: dict[str, Any], credentials: dict[str, str]) -> str:
-    """Cheap change detector — rebuild only when something that matters moved."""
-    parts = [
-        config["id"],
-        config.get("target_url") or "",
-        config.get("auth_mode") or "",
-        config.get("idp") or "",
-        config.get("client_id") or "",
-        config.get("config_url") or "",
-        ",".join(config.get("required_scopes") or []),
-        credentials.get("client_secret") or "",
-        credentials.get("tenant_id") or "",
-        ",".join(sorted(config.get("allowed_subjects") or [])),
-    ]
-    import hashlib
-
-    return hashlib.sha256("\x00".join(parts).encode()).hexdigest()[:16]
-
-
-def build_gateway_app(
-    *,
-    config: dict[str, Any],
-    credentials: dict[str, str],
-    read_models: ReadModels,
-    limiter: RateLimiter,
-    recorder: RequestRecorder,
-    base_url: str,
-) -> tuple[Starlette, Any]:
-    """Build one gateway's app plus the lifespan that must run while it serves.
-
-    The app answers two path shapes, which is why it is not mounted with a
-    prefix:
-
-      * ``/mcp``                    after the router strips ``/g/<slug>``
-      * ``/.well-known/...``        at the root, where RFC 8414/9728 require it
-
-    The OAuth metadata advertises root-relative URLs, so serving discovery under
-    the mount would send clients to a 404.
-    """
-    provider = build_auth_provider(config, base_url=base_url, credentials=credentials)
-    auth = GatewayAuth(config, read_models, provider)
-
-    proxy: FastMCP = create_proxy(
-        config["target_url"],
-        name=f"gateway:{config['slug']}",
-        auth=provider,
-        provider_error_strategy="raise",
-    )
-    mcp_app = proxy.http_app(path="/mcp")
-
-    guarded = GuardMiddleware(
-        mcp_app, config=config, auth=auth, limiter=limiter,
-        recorder=recorder, base_url=base_url,
-    )
-
-    routes: list[Any] = []
-    if provider is not None:
-        # `mcp_path` is the internal path; the mount prefix lives in `base_url`.
-        routes.extend(provider.get_well_known_routes(mcp_path="/mcp"))
-    routes.append(Route("/mcp", endpoint=guarded,
-                        methods=["GET", "POST", "DELETE"]))
-
-    app = Starlette(routes=routes)
-    return app, mcp_app.lifespan
-
-
 __all__ = [
     "GatewayAuth",
+    "GatewayNotReady",
     "GuardMiddleware",
     "Identity",
-    "MountedGateway",
+    "IdentityDenied",
     "RateLimiter",
-    "build_gateway_app",
     "build_auth_provider",
-    "signature_of",
 ]

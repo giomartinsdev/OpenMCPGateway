@@ -6,17 +6,16 @@ Two deliberate choices:
   permissive — transactions, unique constraints, JSONB round-trips. Every
   scenario runs against a real `postgres:17` container.
 * **A single background event loop.** pytest-bdd steps are synchronous, but
-  asyncpg pools and ASGI apps are bound to the loop they were created on.
+  SQLAlchemy engines and ASGI apps are bound to the loop they were created on.
   `asyncio.run` per step would create a new loop each time and break the pool,
   so all async work is submitted to one thread-owned loop via `run()`.
 """
 
-from __future__ import annotations
-
 import asyncio
-import concurrent.futures
+import contextlib
 import threading
-from typing import Any, Coroutine, TypeVar
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 import pytest
 from testcontainers.community.postgres import PostgresContainer
@@ -64,10 +63,7 @@ def postgres():
     container = PostgresContainer("postgres:17-alpine")
     container.start()
     try:
-        # testcontainers returns a SQLAlchemy-style URL; asyncpg wants plain.
-        yield container.get_connection_url().replace(
-            "postgresql+psycopg2", "postgresql"
-        )
+        yield container.get_connection_url()
     finally:
         container.stop()
 
@@ -109,22 +105,30 @@ def clean_database(runner, postgres):
 
 
 async def _truncate(dsn: str) -> None:
-    import asyncpg
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
 
-    conn = await asyncpg.connect(dsn)
+    from gateway.infrastructure.db.database import as_async_dsn
+
+    engine = create_async_engine(as_async_dsn(dsn))
     try:
-        # Before the first Container.create the schema does not exist yet; that
-        # is a clean database, not an error.
-        exists = await conn.fetchval("SELECT to_regclass('public.events')")
-        if exists is None:
-            return
-        await conn.execute(
-            "TRUNCATE events, projection_checkpoints, gateway_slugs, operator_emails, "
-            "rm_gateways, rm_principals, rm_api_keys, rm_request_stats, rm_requests_tail "
-            "RESTART IDENTITY CASCADE"
-        )
+        async with engine.begin() as connection:
+            # Before the first Container.create the schema does not exist yet;
+            # that is a clean database, not an error.
+            exists = await connection.scalar(
+                text("SELECT to_regclass('public.events')")
+            )
+            if exists is None:
+                return
+            await connection.execute(
+                text(
+                    "TRUNCATE events, projection_checkpoints, gateway_slugs, "
+                    "operator_emails, rm_gateways, rm_principals, rm_api_keys, "
+                    "rm_request_stats, rm_requests_tail RESTART IDENTITY CASCADE"
+                )
+            )
     finally:
-        await conn.close()
+        await engine.dispose()
 
 
 @pytest.fixture()
@@ -183,7 +187,5 @@ async def _stop_servers() -> None:
     while _SERVERS:
         server, task = _SERVERS.pop()
         server.should_exit = True
-        try:
+        with contextlib.suppress(Exception):
             await task
-        except Exception:  # noqa: BLE001 - teardown must not mask failures
-            pass

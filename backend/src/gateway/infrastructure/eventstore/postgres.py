@@ -11,136 +11,70 @@ Design notes that matter for correctness:
   across aggregates — that is what makes read models (projections) replayable
   from a checkpoint and what the stats queries rely on.
 * **No secrets in the read side.** Payloads contain password/key hashes and
-  upstream OAuth secrets; only `_load_stream` (write model) reads them.
+  upstream OAuth secrets; only `load_stream` (write model) reads them.
+
+This is the adapter for the `gateway.application.ports.EventStore` port. Commands
+depend on the protocol, so a different log (in-memory for a domain test, another
+database) is a wiring change rather than an import rewrite.
 """
 
-from __future__ import annotations
-
-import json
-from collections.abc import AsyncIterator, Iterable, Sequence
-from dataclasses import replace
-from datetime import datetime
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
-import asyncpg
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 
-from gateway.domain.events import Event
+from gateway.domain.events import ALL_EVENTS, Event
+from gateway.infrastructure.db.database import Database
+from gateway.infrastructure.db.tables import (
+    events,
+    gateway_slugs,
+    operator_emails,
+    projection_checkpoints,
+)
 
-# Registry: event_type -> class. Populated by `register_events` so the store can
-# rebuild concrete event objects from rows without importing every module.
-_REGISTRY: dict[str, type[Event]] = {}
-
-
-def register_events(*classes: type[Event]) -> None:
-    for cls in classes:
-        _REGISTRY[cls.EVENT] = cls
+# Registry: event_type -> class. Built from the domain modules so a new event
+# cannot be appended without also being readable back.
+_REGISTRY: dict[str, type[Event]] = {cls.EVENT: cls for cls in ALL_EVENTS}
 
 
 class ConcurrencyError(RuntimeError):
     """Another writer appended to this stream since we folded it."""
 
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS events (
-    global_seq   BIGSERIAL   PRIMARY KEY,
-    event_id     TEXT        NOT NULL UNIQUE,
-    aggregate_id TEXT        NOT NULL,
-    sequence     INTEGER     NOT NULL,
-    event_type   TEXT        NOT NULL,
-    occurred_at  TIMESTAMPTZ NOT NULL,
-    actor        TEXT        NOT NULL,
-    payload      JSONB       NOT NULL,
-    UNIQUE (aggregate_id, sequence)
-);
-
-CREATE INDEX IF NOT EXISTS events_aggregate_idx ON events (aggregate_id, sequence);
-CREATE INDEX IF NOT EXISTS events_type_idx ON events (event_type, global_seq);
-CREATE INDEX IF NOT EXISTS events_occurred_idx ON events (occurred_at DESC);
-
--- Projection checkpoints: one row per read model, so a rebuild resumes where it
--- stopped instead of replaying the whole log.
-CREATE TABLE IF NOT EXISTS projection_checkpoints (
-    name        TEXT    PRIMARY KEY,
-    global_seq  BIGINT  NOT NULL,
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Lookup index for slugs. Slugs are unique across gateways, and this is the hot
--- path for every proxied request, so it is a real table rather than a scan.
-CREATE TABLE IF NOT EXISTS gateway_slugs (
-    slug        TEXT PRIMARY KEY,
-    aggregate_id TEXT NOT NULL UNIQUE
-);
-
--- Login is a hot path and email lives inside an event payload, so keep an
--- explicit unique index instead of scanning every operator stream.
-CREATE TABLE IF NOT EXISTS operator_emails (
-    email        TEXT PRIMARY KEY,
-    aggregate_id TEXT NOT NULL UNIQUE
-);
-"""
-
-
 class PostgresEventStore:
     """Append-only event log on Postgres, shared by all app instances."""
 
-    def __init__(self, pool: asyncpg.Pool) -> None:
-        self._pool = pool
-
-    @classmethod
-    async def connect(cls, dsn: str, *, min_size: int = 2,
-                      max_size: int = 10) -> "PostgresEventStore":
-        pool = await asyncpg.create_pool(dsn, min_size=min_size, max_size=max_size)
-        store = cls(pool)
-        await store.migrate()
-        return store
-
-    async def migrate(self) -> None:
-        async with self._pool.acquire() as conn:
-            await conn.execute(SCHEMA)
-
-    async def close(self) -> None:
-        # `terminate()` rather than `close()`: close() waits for every connection
-        # to be released, and on shutdown a connection can be parked mid-statement
-        # by a cancelled request — the wait never ends and the pod is SIGKILLed,
-        # losing the graceful path entirely. Nothing here needs a clean session
-        # teardown; the events are already committed.
-        # terminate() is synchronous by design (nothing is gracefully released).
-        self._pool.terminate()
+    def __init__(self, database: Database) -> None:
+        self._db = database
 
     # -- write side -------------------------------------------------------
 
     async def load_stream(
         self, aggregate_id: str, up_to: int | None = None
     ) -> list[Event]:
-        rows = await self._pool.fetch(
-            """
-            SELECT event_id, aggregate_id, sequence, event_type, occurred_at,
-                   actor, payload
-              FROM events
-             WHERE aggregate_id = $1
-               AND ($2::int IS NULL OR sequence <= $2)
-             ORDER BY sequence
-            """,
-            aggregate_id,
-            up_to,
-        )
-        return [self._to_event(row) for row in rows]
+        query = select(events).where(events.c.aggregate_id == aggregate_id)
+        if up_to is not None:
+            query = query.where(events.c.sequence <= up_to)
+        async with self._db.session() as session:
+            rows = (await session.execute(query.order_by(events.c.sequence))).mappings()
+        return [_to_event(row) for row in rows]
 
     async def append(
         self,
-        events: Sequence[Event],
+        events_: Sequence[Event],
         *,
         expected_version: int,
         actor: str = "system",
     ) -> list[Event]:
         """Append events, enforcing that the stream is still at `expected_version`."""
         return await self._append(
-            events, expected_version=expected_version, actor=actor, versioned=True
+            events_, expected_version=expected_version, actor=actor, versioned=True
         )
 
     async def append_unversioned(
-        self, events: Sequence[Event], *, actor: str = "system"
+        self, events_: Sequence[Event], *, actor: str = "system"
     ) -> list[Event]:
         """Append to a stream nobody reads back (traffic observations).
 
@@ -149,80 +83,71 @@ class PostgresEventStore:
         never folded into a write model.
         """
         return await self._append(
-            events, expected_version=None, actor=actor, versioned=False
+            events_, expected_version=None, actor=actor, versioned=False
         )
 
     async def _append(
         self,
-        events: Sequence[Event],
+        batch: Sequence[Event],
         *,
         expected_version: int | None,
         actor: str,
         versioned: bool,
     ) -> list[Event]:
-        if not events:
+        if not batch:
             return []
 
-        aggregate_id = events[0].aggregate_id
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                if versioned:
-                    current = await conn.fetchval(
-                        "SELECT COALESCE(MAX(sequence), 0) FROM events "
-                        "WHERE aggregate_id = $1",
-                        aggregate_id,
+        aggregate_id = batch[0].aggregate_id
+        async with self._db.session() as session, session.begin():
+            if versioned:
+                current = await session.scalar(
+                    select(func.coalesce(func.max(events.c.sequence), 0)).where(
+                        events.c.aggregate_id == aggregate_id
                     )
-                    if current != expected_version:
-                        raise ConcurrencyError(
-                            f"stream {aggregate_id} at {current}, "
-                            f"expected {expected_version}"
-                        )
-                    base = expected_version
-                else:
-                    # A row lock cannot be taken on an aggregate (Postgres
-                    # forbids FOR UPDATE with MAX), so serialize this stream with
-                    # a transaction-scoped advisory lock instead.
-                    await conn.execute(
-                        "SELECT pg_advisory_xact_lock(hashtext($1))", aggregate_id
+                )
+                if current != expected_version:
+                    raise ConcurrencyError(
+                        f"stream {aggregate_id} at {current}, "
+                        f"expected {expected_version}"
                     )
-                    base = await conn.fetchval(
-                        "SELECT COALESCE(MAX(sequence), 0) FROM events "
-                        "WHERE aggregate_id = $1",
-                        aggregate_id,
+                base = expected_version
+            else:
+                # A row lock cannot be taken on an aggregate (Postgres forbids
+                # FOR UPDATE with MAX), so serialize this stream with a
+                # transaction-scoped advisory lock instead.
+                await session.execute(
+                    select(func.pg_advisory_xact_lock(func.hashtext(aggregate_id)))
+                )
+                base = await session.scalar(
+                    select(func.coalesce(func.max(events.c.sequence), 0)).where(
+                        events.c.aggregate_id == aggregate_id
                     )
+                )
 
-                prepared = [
-                    replace(
-                        event,
-                        sequence=base + offset,
-                        actor=actor,
-                    )
-                    for offset, event in enumerate(events, start=1)
-                ]
-                try:
-                    await conn.executemany(
-                        """
-                        INSERT INTO events (event_id, aggregate_id, sequence,
-                                            event_type, occurred_at, actor, payload)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-                        """,
-                        [
-                            (
-                                e.event_id,
-                                e.aggregate_id,
-                                e.sequence,
-                                e.EVENT,
-                                e.occurred_at,
-                                e.actor,
-                                json.dumps(e.payload()),
-                            )
-                            for e in prepared
-                        ],
-                    )
-                except asyncpg.UniqueViolationError as exc:
-                    raise ConcurrencyError(str(exc)) from exc
-        return prepared
-
+            prepared = [
+                event.model_copy(
+                    update={"sequence": base + offset, "actor": actor}
+                )
+                for offset, event in enumerate(batch, start=1)
+            ]
+            try:
+                await session.execute(
+                    pg_insert(events),
+                    [
+                        {
+                            "event_id": event.event_id,
+                            "aggregate_id": event.aggregate_id,
+                            "sequence": event.sequence,
+                            "event_type": event.EVENT,
+                            "occurred_at": event.occurred_at,
+                            "actor": event.actor,
+                            "payload": event.payload(),
+                        }
+                        for event in prepared
+                    ],
+                )
+            except IntegrityError as exc:
+                raise ConcurrencyError(str(exc.orig)) from exc
         return prepared
 
     # -- read side --------------------------------------------------------
@@ -233,172 +158,178 @@ class PostgresEventStore:
         """Yield (global_seq, event) in global order — used by projections."""
         cursor = since
         while True:
-            rows = await self._pool.fetch(
-                """
-                SELECT global_seq, event_id, aggregate_id, sequence, event_type,
-                       occurred_at, actor, payload
-                  FROM events
-                 WHERE global_seq > $1
-                   AND ($2::bigint IS NULL OR global_seq <= $2)
-                 ORDER BY global_seq
-                 LIMIT $3
-                """,
-                cursor,
-                until,
-                batch_size,
-            )
-            if not rows:
+            query = select(events).where(events.c.global_seq > cursor)
+            if until is not None:
+                query = query.where(events.c.global_seq <= until)
+            async with self._db.session() as session:
+                rows = (
+                    await session.execute(
+                        query.order_by(events.c.global_seq).limit(batch_size)
+                    )
+                ).mappings()
+                batch = list(rows)
+            if not batch:
                 return
-            for row in rows:
+            for row in batch:
                 cursor = row["global_seq"]
-                yield cursor, self._to_event(row)
+                yield cursor, _to_event(row)
 
     async def events_for(
         self, aggregate_id: str, *, limit: int = 50
     ) -> list[tuple[int, Event]]:
-        rows = await self._pool.fetch(
-            """
-            SELECT global_seq, event_id, aggregate_id, sequence, event_type,
-                   occurred_at, actor, payload
-              FROM events
-             WHERE aggregate_id = $1
-             ORDER BY sequence DESC
-             LIMIT $2
-            """,
-            aggregate_id,
-            limit,
+        query = (
+            select(events)
+            .where(events.c.aggregate_id == aggregate_id)
+            .order_by(events.c.sequence.desc())
+            .limit(limit)
         )
-        return [(row["global_seq"], self._to_event(row)) for row in rows]
+        async with self._db.session() as session:
+            rows = (await session.execute(query)).mappings()
+            return [(row["global_seq"], _to_event(row)) for row in rows]
 
     async def recent_events(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        rows = await self._pool.fetch(
-            """
-            SELECT global_seq, event_id, aggregate_id, sequence, event_type,
-                   occurred_at, actor, payload
-              FROM events
-             ORDER BY global_seq DESC
-             LIMIT $1
-            """,
-            limit,
-        )
-        return [
-            {
-                "global_seq": row["global_seq"],
-                "event_id": row["event_id"],
-                "aggregate_id": row["aggregate_id"],
-                "sequence": row["sequence"],
-                "event_type": row["event_type"],
-                "occurred_at": row["occurred_at"].isoformat(),
-                "actor": row["actor"],
-                # Payloads can hold hashes/secrets — redact before serving.
-                "payload": _redact(row["payload"]),
-            }
-            for row in rows
-        ]
+        query = select(events).order_by(events.c.global_seq.desc()).limit(limit)
+        async with self._db.session() as session:
+            rows = (await session.execute(query)).mappings()
+            return [
+                {
+                    "global_seq": row["global_seq"],
+                    "event_id": row["event_id"],
+                    "aggregate_id": row["aggregate_id"],
+                    "sequence": row["sequence"],
+                    "event_type": row["event_type"],
+                    "occurred_at": row["occurred_at"].isoformat(),
+                    "actor": row["actor"],
+                    # Payloads can hold hashes/secrets — redact before serving.
+                    "payload": _redact(row["payload"]),
+                }
+                for row in rows
+            ]
 
     # -- projection bookkeeping -------------------------------------------
 
     async def checkpoint(self, name: str) -> int:
-        value = await self._pool.fetchval(
-            "SELECT global_seq FROM projection_checkpoints WHERE name = $1", name
-        )
+        async with self._db.session() as session:
+            value = await session.scalar(
+                select(projection_checkpoints.c.global_seq).where(
+                    projection_checkpoints.c.name == name
+                )
+            )
         return int(value or 0)
 
     async def save_checkpoint(self, name: str, global_seq: int) -> None:
-        await self._pool.execute(
-            """
-            INSERT INTO projection_checkpoints (name, global_seq, updated_at)
-            VALUES ($1, $2, now())
-            ON CONFLICT (name) DO UPDATE
-               SET global_seq = EXCLUDED.global_seq, updated_at = now()
-            """,
-            name,
-            global_seq,
+        statement = pg_insert(projection_checkpoints).values(
+            name=name, global_seq=global_seq, updated_at=func.now()
         )
+        statement = statement.on_conflict_do_update(
+            index_elements=[projection_checkpoints.c.name],
+            set_={
+                "global_seq": statement.excluded.global_seq,
+                "updated_at": func.now(),
+            },
+        )
+        async with self._db.session() as session, session.begin():
+            await session.execute(statement)
 
     async def reset_projections(self) -> None:
-        await self._pool.execute("DELETE FROM projection_checkpoints")
+        async with self._db.session() as session, session.begin():
+            await session.execute(delete(projection_checkpoints))
 
     # -- slug index -------------------------------------------------------
 
     async def claim_slug(self, slug: str, aggregate_id: str) -> None:
         try:
-            await self._pool.execute(
-                "INSERT INTO gateway_slugs (slug, aggregate_id) VALUES ($1, $2)",
-                slug,
-                aggregate_id,
-            )
-        except asyncpg.UniqueViolationError as exc:
+            async with self._db.session() as session, session.begin():
+                await session.execute(
+                    pg_insert(gateway_slugs).values(
+                        slug=slug, aggregate_id=aggregate_id
+                    )
+                )
+        except IntegrityError as exc:
             raise ConcurrencyError(f"slug '{slug}' already taken") from exc
 
     async def release_slug(self, slug: str) -> None:
-        await self._pool.execute(
-            "DELETE FROM gateway_slugs WHERE slug = $1", slug
-        )
+        async with self._db.session() as session, session.begin():
+            await session.execute(
+                delete(gateway_slugs).where(gateway_slugs.c.slug == slug)
+            )
 
     async def resolve_slug(self, slug: str) -> str | None:
-        return await self._pool.fetchval(
-            "SELECT aggregate_id FROM gateway_slugs WHERE slug = $1", slug
-        )
+        async with self._db.session() as session:
+            return await session.scalar(
+                select(gateway_slugs.c.aggregate_id).where(
+                    gateway_slugs.c.slug == slug
+                )
+            )
 
     async def index_operator_email(self, email: str, aggregate_id: str) -> None:
-        await self._pool.execute(
-            "INSERT INTO operator_emails (email, aggregate_id) VALUES ($1, $2) "
-            "ON CONFLICT (email) DO NOTHING",
-            email.lower(),
-            aggregate_id,
+        statement = pg_insert(operator_emails).values(
+            email=email.lower(), aggregate_id=aggregate_id
         )
+        statement = statement.on_conflict_do_nothing(
+            index_elements=[operator_emails.c.email]
+        )
+        async with self._db.session() as session, session.begin():
+            await session.execute(statement)
 
     async def fetch_operator_by_email(self, email: str) -> str | None:
-        return await self._pool.fetchval(
-            "SELECT aggregate_id FROM operator_emails WHERE email = $1",
-            email.lower(),
-        )
+        async with self._db.session() as session:
+            return await session.scalar(
+                select(operator_emails.c.aggregate_id).where(
+                    operator_emails.c.email == email.lower()
+                )
+            )
+
+    async def count_operators(self) -> int:
+        async with self._db.session() as session:
+            return int(
+                await session.scalar(select(func.count()).select_from(operator_emails))
+                or 0
+            )
 
     async def all_slugs(self) -> dict[str, str]:
-        rows = await self._pool.fetch("SELECT slug, aggregate_id FROM gateway_slugs")
-        return {row["slug"]: row["aggregate_id"] for row in rows}
-
-    # -- helpers ----------------------------------------------------------
-
-    def _to_event(self, row: asyncpg.Record) -> Event:
-        cls = _REGISTRY.get(row["event_type"])
-        if cls is None:
-            raise KeyError(f"unknown event type '{row['event_type']}' — register it")
-        payload = row["payload"]
-        if isinstance(payload, str):
-            payload = json.loads(payload)
-        return cls(
-            aggregate_id=row["aggregate_id"],
-            sequence=row["sequence"],
-            event_id=row["event_id"],
-            occurred_at=row["occurred_at"],
-            actor=row["actor"],
-            **_coerce_enums(payload),
-        )
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(gateway_slugs.c.slug, gateway_slugs.c.aggregate_id)
+                )
+            ).all()
+        return {slug: aggregate_id for slug, aggregate_id in rows}
 
 
-_SECRET_KEYS = {"password_hash", "key_hash", "client_secret", "upstream_token"}
+# -- rehydration ----------------------------------------------------------
 
 
-def _coerce_enums(payload: dict[str, Any]) -> dict[str, Any]:
-    """Turn stored strings back into enum members.
+def _to_event(row: Any) -> Event:
+    """Row -> concrete event. Pydantic restores enums, tuples and datetimes.
 
-    JSON has no enum type, so `auth_mode`/`idp` come back as plain strings. The
-    domain compares them with `is`, which silently misbehaves on equal-but-
-    distinct strings — so rehydration must restore real members.
+    JSON has no enum type, so `auth_mode` comes back as a string. The domain
+    compares enum members with `is`, which silently misbehaves on equal-but-
+    distinct strings — this is the single place that has to be right.
     """
-    from gateway.domain.events import AuthMode, IdentityProvider
+    event_type = row["event_type"]
+    cls = _REGISTRY.get(event_type)
+    if cls is None:
+        raise KeyError(f"unknown event type '{event_type}' — register it")
+    return cls.model_validate(
+        {
+            "aggregate_id": row["aggregate_id"],
+            "sequence": row["sequence"],
+            "event_id": row["event_id"],
+            "occurred_at": row["occurred_at"],
+            "actor": row["actor"],
+            **(row["payload"] or {}),
+        }
+    )
 
-    coerced = dict(payload)
-    if isinstance(coerced.get("auth_mode"), str):
-        coerced["auth_mode"] = AuthMode(coerced["auth_mode"])
-    if isinstance(coerced.get("idp"), str):
-        coerced["idp"] = IdentityProvider(coerced["idp"])
-    if isinstance(coerced.get("required_scopes"), list):
-        coerced["required_scopes"] = tuple(coerced["required_scopes"])
-    return coerced
 
+_SECRET_KEYS = {
+    "password_hash",
+    "key_hash",
+    "client_secret",
+    "upstream_token",
+    "google_client_secret",
+}
 
 
 def _redact(payload: Any) -> Any:
@@ -413,23 +344,4 @@ def _redact(payload: Any) -> Any:
     return payload
 
 
-def register_all_events() -> None:
-    """Register every event class. Called once at startup."""
-    from gateway.domain import events as e
-
-    register_events(
-        e.OperatorRegistered,
-        e.OperatorLoggedIn,
-        e.GatewayCreated,
-        e.GatewayUpdated,
-        e.GatewayAuthConfigured,
-        e.GatewayRateLimitSet,
-        e.GatewayDisabled,
-        e.GatewayEnabled,
-        e.GatewayDeleted,
-        e.PrincipalAllowed,
-        e.PrincipalRevoked,
-        e.ApiKeyIssued,
-        e.ApiKeyRevoked,
-        e.RequestObserved,
-    )
+__all__ = ["ConcurrencyError", "PostgresEventStore"]

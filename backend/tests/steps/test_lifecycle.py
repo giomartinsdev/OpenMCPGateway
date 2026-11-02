@@ -7,8 +7,6 @@ work is submitted to the shared test loop through `runner`.
 Background step would otherwise leave later scenarios without the value.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import pytest
@@ -349,7 +347,7 @@ def gateway_has_upstream_token(container, runner, slug: str) -> None:
         gateway = await container.read_models.get_by_slug(slug)
         assert gateway is not None, f"gateway '{slug}' was not created"
         # Presence only: the value lives in the write model, never the read model.
-        credentials = await container.router._credentials(gateway["id"])  # noqa: SLF001
+        credentials = await container.router._credentials(gateway["id"])
         assert credentials.get("upstream_token") == "up-secret", credentials
 
     runner.run(check())

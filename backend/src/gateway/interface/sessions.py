@@ -9,14 +9,13 @@ signed with `OMG_SESSION_SECRET`, so no server-side session table is needed.
 comes from another origin and Strict would drop the cookie on return.
 """
 
-from __future__ import annotations
-
 import base64
 import hashlib
 import hmac
 import json
 import time
-from dataclasses import dataclass
+
+from pydantic import BaseModel, ConfigDict
 
 SESSION_COOKIE = "omg_session"
 SESSION_TTL_SECONDS = 60 * 60 * 12
@@ -26,8 +25,11 @@ class SessionError(RuntimeError):
     """Cookie is absent, forged, or expired."""
 
 
-@dataclass(frozen=True, slots=True)
-class Session:
+class Session(BaseModel):
+    """Who is signed in. Frozen: a session is a claim about the past."""
+
+    model_config = ConfigDict(frozen=True)
+
     operator_id: str
     email: str
     is_admin: bool
@@ -73,5 +75,10 @@ def read_session(token: str, *, secret: str) -> Session:
     )
 
 
-__all__ = ["Session", "SessionError", "SESSION_COOKIE", "issue_session",
-           "read_session"]
+__all__ = [
+    "SESSION_COOKIE",
+    "Session",
+    "SessionError",
+    "issue_session",
+    "read_session",
+]

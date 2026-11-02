@@ -25,14 +25,12 @@ from the file is left alone (a typo in the file must not delete production); set
           - label: ci
 """
 
-from __future__ import annotations
-
 import os
 import re
-from dataclasses import dataclass, field
 from typing import Any
 
 import yaml
+from pydantic import BaseModel, ConfigDict
 
 from gateway.domain.events import AuthMode, IdentityProvider
 from gateway.domain.model import DomainError
@@ -64,8 +62,13 @@ def _expand(value: Any) -> Any:
     return value
 
 
-@dataclass(frozen=True, slots=True)
-class GatewaySpec:
+class GatewaySpec(BaseModel):
+    """One gateway as declared in the file. Validated on construction."""
+
+    # Declared specs cross a process boundary (YAML in, events out); validating
+    # them here means a typo'd mode fails at parse time with the entry named.
+    model_config = ConfigDict(frozen=True)
+
     slug: str
     name: str
     target_url: str
@@ -84,11 +87,14 @@ class GatewaySpec:
     enabled: bool = True
 
 
-@dataclass(frozen=True, slots=True)
-class ConfigDocument:
+class ConfigDocument(BaseModel):
+    """A parsed file. `raw` is kept for echoing back what was read."""
+
+    model_config = ConfigDict(frozen=True)
+
     gateways: tuple[GatewaySpec, ...] = ()
     prune: bool = False
-    raw: dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = {}
 
 
 def parse_document(text: str) -> ConfigDocument:
@@ -128,9 +134,8 @@ def parse_document(text: str) -> ConfigDocument:
 def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
     slug = str(entry["slug"]).strip()
     auth = entry.get("auth") or {}
-    if auth:
-        if not isinstance(auth, dict):
-            raise ValueError("'auth' must be a mapping")
+    if auth and not isinstance(auth, dict):
+        raise ValueError("'auth' must be a mapping")
     mode = AuthMode(str(auth.get("mode", "none")))
     idp_value = auth.get("idp")
     idp = IdentityProvider(str(idp_value)) if idp_value else None
@@ -198,7 +203,7 @@ async def apply_document(document: ConfigDocument, commands: Any,
                         actor=actor,
                     )
                 for label in spec.api_keys:
-                    plaintext, key_id = await commands.issue_api_key(
+                    plaintext, _key_id = await commands.issue_api_key(
                         gateway_id, label=label, actor=actor
                     )
                     issued_keys.append(
