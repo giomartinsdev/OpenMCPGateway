@@ -122,6 +122,11 @@ def configure(level: str | None = None, *, stream: Any = None) -> None:
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.propagate = True
+    # The HTTP clients log one line per upstream call at INFO. That duplicates
+    # `proxy.request` with less context, and one MCP call is several round
+    # trips — the volume would drown the signal.
+    for name in ("httpx", "httpx2", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 log = JsonLogger("gateway")
