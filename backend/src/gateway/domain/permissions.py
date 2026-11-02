@@ -7,8 +7,13 @@ that was offered. Validating here turns that into a 422 naming the field.
 Two roles are built in because every installation needs them and neither is a
 policy decision: `owner` administers everything, `viewer` reads the gateways,
 their keys, traffic and the audit log — the shape a member had before roles
-existed, and nothing wider. Member lists, roles and sign-in settings stay a
-privilege an administrator grants explicitly.
+existed, and nothing wider. Member lists and roles stay a privilege an
+administrator grants explicitly.
+
+There is deliberately no permission for the panel's own sign-in configuration:
+it is deployment configuration, read from the environment at boot, not something
+a tenant owns. A tenant-scoped permission over it would mean any tenant's owner
+could reconfigure every tenant's login.
 """
 
 READ_ONLY: tuple[str, ...] = (
@@ -19,12 +24,11 @@ READ_ONLY: tuple[str, ...] = (
     "config:read",
 )
 
-#: Reads an administrator needs and a viewer does not: the address book, the
-#: role table, and the sign-in settings (which name an identity provider).
+#: Reads an administrator needs and a viewer does not: the address book and the
+#: role table.
 ADMIN_READS: tuple[str, ...] = (
     "members:read",
     "roles:read",
-    "settings:read",
 )
 
 PERMISSIONS: tuple[str, ...] = (
@@ -35,7 +39,6 @@ PERMISSIONS: tuple[str, ...] = (
     "config:write",
     "members:write",
     "roles:write",
-    "settings:write",
 )
 
 OWNER_ROLE = "role_owner"

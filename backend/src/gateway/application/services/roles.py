@@ -113,8 +113,8 @@ class RoleCatalog:
                          default: Iterable[str] = ()) -> None:
         """Refuse to hand out a permission the caller does not hold itself.
 
-        Without this, `members:write` is a path to `settings:write`: add an
-        account, log in as it, done. Delegation may only narrow — an
+        Without this, `members:write` is a path to `role_owner`: add an account
+        holding the owner role, sign in as it, done. Delegation may only narrow — an
         administrator who can do everything can grant anything, and everyone else
         grants a subset of their own.
 

@@ -37,7 +37,7 @@ test("the account that creates a tenant owns it and sees every screen", async ({
   await registerOwner(page);
 
   const nav = page.getByRole("navigation");
-  for (const label of ["Gateways", "Traffic", "Audit log", "Config as code", "Members", "Roles", "Settings"]) {
+  for (const label of ["Gateways", "Traffic", "Audit log", "Config as code", "Members", "Roles"]) {
     await expect(nav.getByRole("link", { name: label })).toBeVisible();
   }
   await expect(page.locator(".who")).toContainText("owner");
@@ -102,7 +102,7 @@ test.describe("a member", () => {
     // Reads all arrive; the entries that would render a 403 do not.
     const nav = page.getByRole("navigation");
     await expect(nav.getByRole("link", { name: "Traffic" })).toBeVisible();
-    for (const hidden of ["Members", "Roles", "Settings"]) {
+    for (const hidden of ["Members", "Roles"]) {
       await expect(nav.getByRole("link", { name: hidden })).toHaveCount(0);
     }
     await expect(page.getByRole("button", { name: "New gateway" })).toHaveCount(0);

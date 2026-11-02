@@ -13,7 +13,6 @@ from collections.abc import Sequence
 
 from gateway.application.ports import EventStore
 from gateway.domain.events import (
-    SIGN_IN_AGGREGATE,
     AuthMode,
     Event,
     IdentityProvider,
@@ -25,7 +24,6 @@ from gateway.domain.model import (
     Gateway,
     Operator,
     Role,
-    SignInSettings,
     Tenant,
 )
 from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
@@ -271,32 +269,6 @@ class CommandHandler:
         events = role.decide_delete()
         return await self._commit(
             role_id, events, stream[-1].sequence if stream else 0, actor=actor
-        )
-
-    # -- sign-in settings -------------------------------------------------
-
-    async def read_sign_in_settings(self) -> SignInSettings:
-        events = await self._store.load_stream(SIGN_IN_AGGREGATE)
-        return SignInSettings.from_events(events)
-
-    async def configure_sign_in(
-        self,
-        *,
-        google_client_id: str,
-        google_client_secret: str,
-        redirect_uri: str,
-        operator_allowlist: Sequence[str] = (),
-        actor: str = "system",
-    ) -> list[Event]:
-        settings = await self.read_sign_in_settings()
-        events = settings.decide_configure(
-            google_client_id=google_client_id,
-            google_client_secret=google_client_secret,
-            redirect_uri=redirect_uri,
-            operator_allowlist=operator_allowlist,
-        )
-        return await self._commit(
-            SIGN_IN_AGGREGATE, events, settings.version, actor=actor
         )
 
     # -- gateways ---------------------------------------------------------

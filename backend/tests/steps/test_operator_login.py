@@ -268,23 +268,3 @@ def no_tenant(completed: list[httpx.Response], container: Container,
     assert runner.run(
         container.read_models.operator_tenant(session.operator_id)
     ) is None
-
-
-@when("an administrator saves the panel client for the fake provider")
-def save_panel_client(container: Container, runner, google: FakeGoogle) -> None:
-    async def save() -> None:
-        await container.commands.configure_sign_in(
-            google_client_id=f"{CLIENT_ID}-from-panel",
-            google_client_secret=CLIENT_SECRET,
-            redirect_uri="https://gateway.test/api/auth/google/callback",
-            operator_allowlist=ALLOWED,
-            actor="ops@example.dev",
-        )
-
-    runner.run(save())
-
-
-@then("the redirect carries the panel's client id")
-def redirect_carries_panel_client(login_start: httpx.Response) -> None:
-    location = login_start.headers.get("location", "")
-    assert f"client_id={CLIENT_ID}-from-panel" in location, location

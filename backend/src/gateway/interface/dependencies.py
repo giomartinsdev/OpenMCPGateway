@@ -165,8 +165,6 @@ CanReadConfig = _can("config:read")
 CanWriteConfig = _can("config:write")
 CanReadMembers = _can("members:read")
 CanReadRoles = _can("roles:read")
-CanReadSettings = _can("settings:read")
-CanWriteSettings = _can("settings:write")
 
 
 __all__ = [
@@ -176,12 +174,10 @@ __all__ = [
     "CanReadKeys",
     "CanReadMembers",
     "CanReadRoles",
-    "CanReadSettings",
     "CanReadTraffic",
     "CanWriteConfig",
     "CanWriteGateways",
     "CanWriteKeys",
-    "CanWriteSettings",
     "ContainerDep",
     "Principal",
     "PrincipalDep",

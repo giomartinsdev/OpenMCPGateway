@@ -65,9 +65,3 @@ Feature: Operator login with Google
     Then the operator has a session
     And "ops@example.dev" was created by the allowlist
 
-  Scenario: Sign-in uses the client saved in the panel, not the environment
-    # The panel is the source of truth after boot. If the environment kept
-    # winning, setting it in the UI would appear to work and change nothing.
-    When an administrator saves the panel client for the fake provider
-    And an operator starts a Google login
-    Then the redirect carries the panel's client id

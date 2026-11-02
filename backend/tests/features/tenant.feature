@@ -29,7 +29,6 @@ Feature: Tenants and their members
     Given the administrator created a gateway "demo"
     When the administrator adds the member "member@example.dev"
     Then the member cannot create a gateway
-    And the member cannot read the tenant's sign-in settings
     And the member cannot configure a gateway
 
   Scenario: An administrator sees who belongs to the tenant

@@ -86,7 +86,7 @@ async def register(payload: RegisterRequest, response: Response,
 
 @router.get("/auth/methods")
 async def auth_methods(container: ContainerDep) -> dict[str, Any]:
-    return await signin.methods(container)
+    return signin.methods(container)
 
 
 @router.get("/auth/google/start")

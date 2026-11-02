@@ -21,13 +21,12 @@ from gateway.interface.routers import (
     members,
     observability,
     roles,
-    settings,
     tenants,
 )
 
 router = APIRouter(prefix="/api")
 for module in (
-    auth, tenants, members, roles, gateways, observability, settings, config
+    auth, tenants, members, roles, gateways, observability, config
 ):
     router.include_router(module.router)
 

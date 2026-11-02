@@ -1,18 +1,19 @@
-"""Sign-in settings, and the Google flow as a use case.
+"""The Google flow as a use case.
 
-Two things here that are not HTTP: the panel's settings win once anybody saves
-them, otherwise the environment seeds a fresh deployment; and a verified provider
-identity becomes an account, or reuses the one that already exists. The route
-only sets a cookie and redirects.
+Configuration is the deployment's, not a tenant's: the client id and the
+allowlist come from the environment, so no account in the panel can change who
+may sign in. What is left here is the flow itself — a verified provider identity
+becomes an account, or reuses the one that already exists. The route only sets a
+cookie and redirects.
 """
 
 import hmac
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 from gateway.application.container import Container
 from gateway.domain.events import TENANT_OF_DEPLOYMENT
-from gateway.domain.model import DomainError, Operator, SignInSettings
+from gateway.domain.model import DomainError, Operator
 from gateway.domain.permissions import DEFAULT_ROLE_IDS
 from gateway.infrastructure.google_oidc import (
     STATE_TTL_SECONDS,
@@ -25,6 +26,19 @@ from gateway.infrastructure.google_oidc import (
 
 class SignInRefused(Exception):
     """Sign-in is off, or the callback did not verify. Shown on the login page."""
+
+
+class SignInSettings(NamedTuple):
+    """The deployment's sign-in configuration, as the environment declared it."""
+
+    google_client_id: str
+    google_client_secret: str
+    redirect_uri: str
+    operator_allowlist: tuple[str, ...]
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
 
 @dataclass(frozen=True)
@@ -45,18 +59,13 @@ class SignedIn:
     is_admin: bool
 
 
-async def settings(container: Container) -> SignInSettings:
-    """Panel settings, seeded from the environment on first boot.
+def settings(container: Container) -> SignInSettings:
+    """What the deployment was configured with at boot.
 
-    The environment is how a fresh deployment gets in; after that the panel owns
-    the configuration, because the client id belongs to whoever runs it.
+    Presence only for the secret: it never needs to reach a browser, and a value
+    that round-trips ends up in a screenshot, a HAR file and an issue report.
     """
-    stored = await container.commands.read_sign_in_settings()
-    if stored.version > 0:
-        return stored
     env = container.settings
-    if not env.google_login_enabled:
-        return stored
     return SignInSettings(
         google_client_id=env.google_client_id or "",
         google_client_secret=(
@@ -65,25 +74,13 @@ async def settings(container: Container) -> SignInSettings:
             else ""
         ),
         redirect_uri=f"{env.base_url.rstrip('/')}/api/auth/google/callback",
-        operator_allowlist=env.operator_allowlist,
+        operator_allowlist=tuple(env.operator_allowlist),
     )
 
 
-def public(current: SignInSettings) -> dict[str, Any]:
-    return {
-        "google_client_id": current.google_client_id,
-        "redirect_uri": current.redirect_uri,
-        "operator_allowlist": list(current.operator_allowlist),
-        "enabled": current.enabled,
-        # Presence only. A secret that round-trips to the browser ends up in a
-        # screenshot, a HAR file and an issue report.
-        "has_google_client_secret": bool(current.google_client_secret),
-    }
-
-
-async def methods(container: Container) -> dict[str, Any]:
-    """What the login page may offer. A password form always exists."""
-    current = await settings(container)
+def methods(container: Container) -> dict[str, Any]:
+    """What the login page may offer. The password form always exists."""
+    current = settings(container)
     return {
         "password": True,
         "google": current.enabled,
@@ -93,24 +90,12 @@ async def methods(container: Container) -> dict[str, Any]:
     }
 
 
-async def save(container: Container, *, google_client_id: str,
-               google_client_secret: str, redirect_uri: str,
-               operator_allowlist: list[str], actor: str) -> SignInSettings:
-    await container.commands.configure_sign_in(
-        google_client_id=google_client_id,
-        google_client_secret=google_client_secret,
-        redirect_uri=redirect_uri,
-        operator_allowlist=tuple(operator_allowlist),
-        actor=actor,
-    )
-    return await settings(container)
-
-
 async def provider(container: Container) -> GoogleOIDC:
-    current = await settings(container)
+    current = settings(container)
     if not current.enabled:
         raise SignInRefused(
-            "Google sign-in is not configured — set it under Settings in the panel"
+            "Google sign-in is not configured — set OMG_GOOGLE_CLIENT_ID and "
+            "OMG_GOOGLE_CLIENT_SECRET"
         )
     return GoogleOIDC(
         client_id=current.google_client_id,
@@ -120,14 +105,14 @@ async def provider(container: Container) -> GoogleOIDC:
     )
 
 
-async def is_known_address(container: Container, email: str) -> bool:
+def is_known_address(container: Container, email: str) -> bool:
     """True when this address was listed as already belonging to the deployment.
 
     The allowlist is an address book, not a gate: a listed address skips the
     tenant choice and lands in the installation's own tenant. Everyone else gets
     an account and no tenant.
     """
-    current = await settings(container)
+    current = settings(container)
     wanted = email.strip().lower()
     return wanted in {entry.lower() for entry in current.operator_allowlist}
 
@@ -179,7 +164,7 @@ async def _create(container: Container, identity: Any) -> str:
     read nothing until it creates one or joins with a code, which is what makes
     an open sign-up safe.
     """
-    known = await is_known_address(container, identity.email)
+    known = is_known_address(container, identity.email)
     if known:
         await container.commands.ensure_tenant(
             tenant_id=TENANT_OF_DEPLOYMENT, name="Default"
@@ -209,14 +194,13 @@ async def _signed_in(container: Container, operator_id: str) -> SignedIn:
 
 __all__ = [
     "SignInRefused",
+    "SignInSettings",
     "SignedIn",
     "Started",
     "complete",
     "is_known_address",
     "methods",
     "provider",
-    "public",
-    "save",
     "settings",
     "start",
 ]

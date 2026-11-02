@@ -52,14 +52,6 @@ export const api = {
   logout: () => call("POST", "/auth/logout"),
   authMethods: () => call("GET", "/auth/methods"),
 
-  signInSettings: () => call("GET", "/settings/sign-in"),
-  // `google_client_secret: null` means "keep the stored one".
-  saveSignInSettings: (payload) => {
-    const body = { ...payload };
-    if (body.google_client_secret == null) delete body.google_client_secret;
-    return call("PUT", "/settings/sign-in", body);
-  },
-
   gateways: () => call("GET", "/gateways"),
   gateway: (id) => call("GET", `/gateways/${id}`),
   // Server-generated: the OAuth steps name endpoints the proxy serves.

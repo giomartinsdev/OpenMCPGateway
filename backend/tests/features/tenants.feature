@@ -87,3 +87,15 @@ Feature: Creating or joining a tenant
     And Bob created the tenant "Bob Co"
     When Bob reads Alice's gateway by id
     Then the gateway is not found
+
+  Scenario: Traffic and the audit log are per tenant
+    # Two tenants share one deployment and one event log. A dashboard that reads
+    # both is not a cosmetic bug: it names another customer's upstream traffic.
+    Given someone registered as "alice@example.dev"
+    And Alice created the tenant "Alice Co" with the gateway "alice-mcp"
+    And someone registered as "bob@example.dev"
+    And Bob created the tenant "Bob Co" with the gateway "bob-mcp"
+    When a call to "alice-mcp" is recorded
+    Then Alice's stats count it
+    And Bob's stats do not
+    And Bob's audit log does not mention "alice-mcp"

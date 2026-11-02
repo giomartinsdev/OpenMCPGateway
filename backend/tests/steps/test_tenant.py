@@ -122,10 +122,6 @@ def member_cannot_create(member_created: dict) -> None:
     )
     assert response.status_code == 403, response.text
 
-@then("the member cannot read the tenant's sign-in settings")
-def member_cannot_read_settings(member_created: dict) -> None:
-    assert member_created["browser"].get("/api/settings/sign-in").status_code == 403
-
 @then("the tenant lists both accounts, with their roles")
 def lists_members(owner_created: dict) -> None:
     response = owner_created["browser"].get("/api/operators")

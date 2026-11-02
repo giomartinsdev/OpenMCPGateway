@@ -57,30 +57,28 @@ There are **two** OAuth setups in this project, and they are unrelated:
 | **Admin UI** | you, the operator | `OMG_GOOGLE_CLIENT_ID` / `OMG_GOOGLE_CLIENT_SECRET` |
 | **A gateway** | callers of one proxied MCP server | per-gateway, in the UI or a YAML file |
 
-**You set this in the panel, not in the deployment.** Sign in as an administrator,
-open **Settings**, and fill in:
+**You configure this in the deployment, not in the panel.** Google sign-in is a
+property of the installation, not of a tenant: an owner of one tenant must never be
+able to change how everybody signs in. So it comes from the environment, and there
+is no screen for it.
 
-| field | what to put |
+Create the OAuth client (type *Web application*) in Google Cloud and register this
+redirect URI there — it must match byte for byte, or the exchange fails at Google
+with no mention of the gateway:
+
+| variable | what to put |
 |---|---|
-| Authorised redirect URI | `https://<your-host>/api/auth/google/callback` |
-| Client ID | `…apps.googleusercontent.com` |
-| Client secret | write-only; it never comes back out of the API |
-| Who may sign in | comma-separated addresses |
+| `OMG_GOOGLE_CLIENT_ID` | `…apps.googleusercontent.com` |
+| `OMG_GOOGLE_CLIENT_SECRET` | the client secret |
+| `OMG_OPERATOR_ALLOWLIST` | comma-separated addresses |
 
-Create the OAuth client (type *Web application*) in Google Cloud and register that
-same redirect URI there — it must match byte for byte, or the exchange fails at
-Google with no mention of the panel.
-
-The environment variables `OMG_GOOGLE_CLIENT_ID`, `OMG_GOOGLE_CLIENT_SECRET` and
-`OMG_OPERATOR_ALLOWLIST` exist only to seed a deployment that has to come up with
-sign-in already working. Once anything is saved in the panel, the panel wins: the
-client id belongs to whoever runs the installation, and making them redeploy to
-change it would be absurd.
+The redirect URI is derived from `OMG_BASE_URL` as
+`https://<your-host>/api/auth/google/callback`.
 
 The password form keeps working, so a misconfigured IdP never locks you out. If no
 client is configured the Google button is not rendered. Signing in creates the
 account on first success; what it can see depends on the tenant it then creates or
-joins. Only an administrator can change these settings.
+joins. Changing sign-in configuration means changing the deployment.
 
 `OMG_OPERATOR_ALLOWLIST` is an address book, not a gate: those addresses skip the
 tenant choice and land in the installation's own tenant (`TENANT_OF_DEPLOYMENT`)
@@ -122,7 +120,7 @@ Roles are per tenant.
 Permissions are a **closed catalog** (`backend/src/gateway/domain/permissions.py`),
 not free-form strings: `gateways:read`, `gateways:write`, `keys:read`, `keys:write`,
 `traffic:read`, `audit:read`, `config:read`, `config:write`, `members:read`,
-`members:write`, `roles:read`, `roles:write`, `settings:read`, `settings:write`.
+`members:write`, `roles:read`, `roles:write`.
 A typo is refused with a 422 naming the field, because the alternative is a role
 that grants nothing and says nothing — discovered days later as a 403 on a button
 the panel offered.
@@ -136,18 +134,19 @@ decision and every installation needs them:
 | `viewer` | `role_viewer` | the read permissions above (`gateways`, `keys`, `traffic`, `audit`, `config`) |
 
 Everything else is defined by the tenant under **Roles**: name plus a set of
-permissions. `members:read/write`, `roles:read/write` and `settings:read/write` are
-deliberately not in `viewer` — a member list is an address book and sign-in settings
-name an identity provider. Sign-in settings are deployment-wide; roles are not.
+permissions. `members:read/write` and `roles:read/write` are deliberately not in
+`viewer` — a member list is an address book, and roles decide what everyone else may
+do. Sign-in configuration has no permission at all, because it is not a tenant's to
+change.
 
 A new member added without an explicit role lands on **`viewer`**: an omission must
 narrow access, never widen it. An administrator adds people under **Members**, and
 can change their roles at any time.
 
 Delegation may only narrow: nobody can grant a permission they do not hold
-themselves (`_grantable` in `interface/api.py`), otherwise `members:write` would be
-a path to `settings:write` — add an account holding the owner role, sign in as it,
-done. The default role is exempt, so a recruiter who may add people but not read
+themselves (`RoleCatalog.ensure_grantable` in
+`application/services/roles.py`), otherwise `members:write` would be a path to
+`role_owner` — add an account holding the owner role, sign in as it, done. The default role is exempt, so a recruiter who may add people but not read
 gateways can still create a viewer account.
 
 Permissions are resolved **per request** from the read models, not carried in the

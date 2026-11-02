@@ -9,7 +9,7 @@ Feature: Roles and permissions
   Scenario: The owner starts with the owner role
     When the owner reads who it is
     Then the owner has the "role_owner" role
-    And the owner may write settings
+    And the owner may write roles
 
   Scenario: An administrator defines a role with a subset of permissions
     When the administrator defines the role "Auditor" with "traffic:read, audit:read"
@@ -48,7 +48,7 @@ Feature: Roles and permissions
     Given the administrator added the member "member@example.dev"
     When the administrator gives that member the role "role_owner"
     And that member reads who it is
-    Then the member may write settings
+    Then the member may write roles
 
   Scenario: A built-in role cannot be deleted
     When the administrator deletes the role "role_owner"
@@ -61,7 +61,7 @@ Feature: Roles and permissions
     Then the deletion fails with a reason
 
   Scenario: A member cannot grant more than it holds
-    # Otherwise `members:write` is a path to `settings:write`: add an account
+    # Otherwise `members:write` is a path to `role_owner`: add an account
     # holding the owner role, sign in as it, done.
     Given the administrator defined the role "Recruiter" with "members:read, members:write"
     When the administrator adds the member "hr@example.dev" with the role "Recruiter"

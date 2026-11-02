@@ -187,13 +187,14 @@ def administrator_deletes(owner_created: dict, role: str) -> httpx.Response:
 def owner_has_role(identity: dict, role_id: str) -> None:
     assert identity["role_ids"] == [role_id], identity
 
-@then("the owner may write settings")
-def owner_writes_settings(identity: dict) -> None:
-    assert "settings:write" in identity["permissions"], identity
+@then("the owner may write roles")
+def owner_writes_roles(identity: dict) -> None:
+    assert "roles:write" in identity["permissions"], identity
 
-@then("the member may write settings")
-def member_writes_settings(identity: dict) -> None:
-    assert "settings:write" in identity["permissions"], identity
+
+@then("the member may write roles")
+def member_writes_roles(identity: dict) -> None:
+    assert "roles:write" in identity["permissions"], identity
 
 @then(parsers.parse('the role "{name}" grants exactly "{permissions}"'))
 def role_grants(owner_created: dict, name: str, permissions: str) -> None:
@@ -216,7 +217,7 @@ def member_has_role(member: dict, owner_created: dict, role_id: str) -> None:
 
 @then("that member cannot define a role")
 def member_cannot_define(member: dict) -> None:
-    response = _define(member["browser"], "Sneaky", "settings:write")
+    response = _define(member["browser"], "Sneaky", "roles:write")
     assert response.status_code == 403, response.text
 
 @then("the attempt is forbidden")

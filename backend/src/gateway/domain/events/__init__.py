@@ -11,7 +11,6 @@ module a class lives in; the split is about dependency direction, not imports.
 from gateway.domain.events.base import AuthMode, Event, IdentityProvider
 from gateway.domain.events.read import READ_EVENTS, RequestObserved
 from gateway.domain.events.write import (
-    SIGN_IN_AGGREGATE,
     TENANT_OF_DEPLOYMENT,
     WRITE_EVENTS,
     ApiKeyIssued,
@@ -31,7 +30,6 @@ from gateway.domain.events.write import (
     PrincipalRevoked,
     RoleDefined,
     RoleDeleted,
-    SignInConfigured,
     TenantCreated,
 )
 
@@ -40,7 +38,6 @@ ALL_EVENTS: tuple[type[Event], ...] = (*WRITE_EVENTS, *READ_EVENTS)
 __all__ = [
     "ALL_EVENTS",
     "READ_EVENTS",
-    "SIGN_IN_AGGREGATE",
     "TENANT_OF_DEPLOYMENT",
     "WRITE_EVENTS",
     "ApiKeyIssued",
@@ -64,6 +61,5 @@ __all__ = [
     "RequestObserved",
     "RoleDefined",
     "RoleDeleted",
-    "SignInConfigured",
     "TenantCreated",
 ]

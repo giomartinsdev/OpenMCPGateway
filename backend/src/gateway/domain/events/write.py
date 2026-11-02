@@ -5,6 +5,7 @@ These are the events the command handler appends. Read models consume them too
 so renaming one is a domain change, not a reporting change.
 """
 
+
 from pydantic import Field
 
 from gateway.domain.events.base import AuthMode, Event, IdentityProvider
@@ -195,28 +196,18 @@ class ApiKeyRevoked(Event):
     key_id: str
 
 
-# --------------------------------------------------------------------------
-# Sign-in settings — how an operator logs in to the panel itself
-# --------------------------------------------------------------------------
-#
-# A single-instance aggregate (`SIGN_IN_AGGREGATE`), because a deployment has one
-# admin panel. Configuring it here rather than through environment variables is
-# what lets an administrator turn Google sign-in on without a redeploy — the
-# deployment has no idea what client id the customer will use.
-
-SIGN_IN_AGGREGATE = "signin"
-
-
 class SignInConfigured(Event):
+    """Retired: sign-in is deployment configuration now.
+
+    Kept in the registry because the log is append-only and a replay has to be
+    able to read rows it can never write. Nothing folds this any more; removing
+    the class would turn an old installation's history into a `KeyError` at boot.
+    """
+
     EVENT = "signin.configured"
 
-    # Empty strings mean "not configured" rather than absent, so a later event can
-    # clear a field without a second event type.
     google_client_id: str = ""
-    # Write-only, like every other secret in this log.
     google_client_secret: str = ""
-    # Must be exactly what was registered at the provider, or the exchange fails
-    # with an error the user sees in a browser and the operator sees nowhere.
     redirect_uri: str = ""
     operator_allowlist: tuple[str, ...] = Field(default_factory=tuple)
 
@@ -244,7 +235,6 @@ WRITE_EVENTS: tuple[type[Event], ...] = (
 )
 
 __all__ = [
-    "SIGN_IN_AGGREGATE",
     "TENANT_OF_DEPLOYMENT",
     "WRITE_EVENTS",
     "ApiKeyIssued",
@@ -264,6 +254,5 @@ __all__ = [
     "PrincipalRevoked",
     "RoleDefined",
     "RoleDeleted",
-    "SignInConfigured",
     "TenantCreated",
 ]

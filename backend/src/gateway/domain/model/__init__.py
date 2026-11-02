@@ -13,7 +13,6 @@ from gateway.domain.model.base import SLUG_RE, DomainError
 from gateway.domain.model.gateway import Gateway
 from gateway.domain.model.operator import Operator
 from gateway.domain.model.role import Role
-from gateway.domain.model.settings import SignInSettings
 from gateway.domain.model.tenant import JOIN_CODE_ALPHABET, Tenant
 
 __all__ = [
@@ -23,6 +22,5 @@ __all__ = [
     "Gateway",
     "Operator",
     "Role",
-    "SignInSettings",
     "Tenant",
 ]

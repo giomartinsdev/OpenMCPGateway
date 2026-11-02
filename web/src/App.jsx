@@ -7,7 +7,6 @@ import { GatewayDetail } from "./pages/GatewayDetail.jsx";
 import { Traffic } from "./pages/Traffic.jsx";
 import { ConfigPage } from "./pages/Config.jsx";
 import { Audit } from "./pages/Audit.jsx";
-import { Settings } from "./pages/Settings.jsx";
 import { Members } from "./pages/Members.jsx";
 import { Roles } from "./pages/Roles.jsx";
 import { Onboarding } from "./pages/Onboarding.jsx";
@@ -39,7 +38,6 @@ const NAV = [
   ["/config", "Config as code", "config:read"],
   ["/members", "Members", "members:read"],
   ["/roles", "Roles", "roles:read"],
-  ["/settings", "Settings", "settings:read"],
 ];
 
 export function App() {
@@ -66,7 +64,6 @@ export function App() {
   else if (path === "/config") page = <ConfigPage me={me} />;
   else if (path === "/members") page = <Members me={me} />;
   else if (path === "/roles") page = <Roles me={me} />;
-  else if (path === "/settings") page = <Settings />;
   else page = <Gateways me={me} />;
 
   return (

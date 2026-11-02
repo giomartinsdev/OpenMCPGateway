@@ -5,6 +5,8 @@ is what a *different* account sees — and most of these scenarios are about
 isolation, which a shared jar would fake.
 """
 
+import asyncio
+
 import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
@@ -316,3 +318,53 @@ def bob_has_no_role(bob: dict, name: str) -> None:
 @then("the gateway is not found")
 def gateway_not_found(attempt: httpx.Response) -> None:
     assert attempt.status_code == 404, attempt.text
+
+
+# -- traffic isolation -----------------------------------------------------
+
+
+@when(parsers.parse('a call to "{slug}" is recorded'), target_fixture="recorded")
+def call_recorded(container, runner, alice: dict, slug: str) -> dict:
+    """Record one observation for Alice's gateway, through the real recorder.
+
+    Written directly rather than proxied: the scenario is about the *read*
+    side's scope, and driving a whole MCP call would test the proxy again.
+    """
+    async def record() -> None:
+        await container.recorder.record(
+            gateway_id=alice["gateway_id"],
+            subject="anonymous",
+            outcome="allowed",
+            status=200,
+            duration_ms=5,
+        )
+        # The recorder drains on its own task; wait for the projection to catch up.
+        for _ in range(100):
+            if await container.read_models.request_tail(alice["gateway_id"], 5):
+                return
+            await asyncio.sleep(0.05)
+
+    runner.run(record())
+    return {"alice": alice, "slug": slug}
+
+
+@then("Alice's stats count it")
+def alice_stats(recorded: dict) -> None:
+    response = recorded["alice"]["browser"].get("/api/stats?minutes=60")
+    assert response.status_code == 200, response.text
+    assert response.json()["requests"] >= 1, response.text
+
+
+@then("Bob's stats do not")
+def bob_stats_empty(bob: dict) -> None:
+    response = bob["browser"].get("/api/stats?minutes=60")
+    assert response.status_code == 200, response.text
+    assert response.json()["requests"] == 0, response.text
+
+
+@then(parsers.parse("Bob's audit log does not mention \"{slug}\""))
+def bob_audit_clean(bob: dict, alice: dict, slug: str) -> None:
+    response = bob["browser"].get("/api/events?limit=200")
+    assert response.status_code == 200, response.text
+    aggregates = {event["aggregate_id"] for event in response.json()["events"]}
+    assert alice["gateway_id"] not in aggregates, aggregates
