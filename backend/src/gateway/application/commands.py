@@ -13,6 +13,7 @@ from collections.abc import Sequence
 
 from gateway.application.ports import EventStore
 from gateway.domain.events import (
+    ApiKeyIssued,
     AuthMode,
     Event,
     IdentityProvider,
@@ -411,6 +412,31 @@ class CommandHandler:
         await self._commit(gateway_id, events, gateway.version, actor=actor)
         return plaintext, key_id
 
+    async def rotate_api_key(
+        self, gateway_id: str, *, key_id: str, actor: str = "system"
+    ) -> tuple[str, str]:
+        """Replace a key in one append: the new one exists before the old one dies.
+
+        Two appends would leave a window where neither key works (and, if the
+        second failed, a working key nobody holds). Rotation is a single event
+        batch, so a caller that swaps its config sees no gap.
+        """
+        gateway = await self._load_gateway(gateway_id)
+        label = _key_label(await self._store.load_stream(gateway_id), key_id)
+        plaintext, key_hash = generate_api_key()
+        new_id = f"key_{secrets.token_hex(6)}"
+        events = [
+            *gateway.decide_issue_key(
+                key_id=new_id,
+                label=label,
+                key_hash=key_hash,
+                subject=f"api-key:{new_id}",
+            ),
+            *gateway.decide_revoke_key(key_id=key_id),
+        ]
+        await self._commit(gateway_id, events, gateway.version, actor=actor)
+        return plaintext, new_id
+
     async def revoke_api_key(
         self, gateway_id: str, *, key_id: str, actor: str = "system"
     ) -> list[Event]:
@@ -420,3 +446,16 @@ class CommandHandler:
 
 
 __all__ = ["CommandHandler"]
+
+
+def _key_label(events: Sequence[Event], key_id: str) -> str:
+    """The label the key was issued with, so a rotation keeps its name.
+
+    Read from the stream rather than the read model: the write side already has
+    the events, and a rotated key that silently lost its label is a key nobody
+    can identify in the list.
+    """
+    for event in reversed(events):
+        if isinstance(event, ApiKeyIssued) and event.key_id == key_id:
+            return event.label
+    raise DomainError("key not found")

@@ -83,3 +83,13 @@ Feature: Proxy authorisation
     And an API key was issued for the gateway
     When a second container starts against the same database
     Then the "restarted" gateway is advertised as live
+
+  Scenario: Rotating a key returns the new one and kills the old one
+    # Rotation exists because the plaintext is unrecoverable: a key that leaked,
+    # or one whose owner forgot it, has to be replaced without a window where
+    # both work or neither does.
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the operator rotates that key
+    Then the rotation returns a new key and the old one is refused with 401
+    And a caller with the rotated key lists the tools

@@ -582,3 +582,44 @@ def gateway_advertised_live(restarted, slug: str) -> None:
     live = list(restarted.router.live_gateways)
     assert slug in live, f"live={live} pending={restarted.router.pending}"
     assert not restarted.router.pending, restarted.router.pending
+
+
+@when("the operator rotates that key", target_fixture="rotated_key")
+def rotate_key(container, runner, operator: str, gateway: dict,
+               issued_key: dict) -> dict:
+    async def rotate() -> dict:
+        return await container.commands.rotate_api_key(
+            gateway["id"], key_id=issued_key["key_id"], actor=operator
+        )
+
+    plaintext, new_id = runner.run(rotate())
+    rotated = {"plaintext": plaintext, "key_id": new_id}
+    runner.run(container.refresh_router())
+    return {"old": issued_key, "new": rotated}
+
+
+@then("the rotation returns a new key and the old one is refused with 401")
+def rotated_old_refused(live_server: str, gateway: dict,
+                        rotated_key: dict) -> None:
+    old, new = rotated_key["old"], rotated_key["new"]
+    assert new["plaintext"] != old["plaintext"], "rotation reused the secret"
+    assert new["key_id"] != old["key_id"], new
+
+    response = httpx.post(
+        f"{live_server}/g/{gateway['slug']}/mcp",
+        json=_initialize_payload(),
+        headers={
+            "Accept": "application/json, text/event-stream",
+            "Authorization": f"Bearer {old['plaintext']}",
+        },
+        timeout=10,
+    )
+    assert response.status_code == 401, f"{response.status_code}: {response.text[:200]}"
+
+
+@then("a caller with the rotated key lists the tools")
+def rotated_works(live_server: str, gateway: dict, rotated_key: dict) -> None:
+    result = _call_tools_list(
+        live_server, gateway["slug"], rotated_key["new"]["plaintext"]
+    )
+    assert result["status"] == 200, result

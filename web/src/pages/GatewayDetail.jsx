@@ -14,7 +14,9 @@ export function GatewayDetail({ id, me }) {
   const canKeys = can(me, "keys:write");
   const [gateway, setGateway] = useState(null);
   const [error, setError] = useState("");
-  const [banner, setBanner] = useState(null); // {kind, text, secret?}
+  const [banner, setBanner] = useState(null); // {kind, text}
+  // Holds a plaintext only between the response and the operator's clipboard.
+  const [newKey, setNewKey] = useState("");
 
   async function load() {
     try {
@@ -61,7 +63,6 @@ export function GatewayDetail({ id, me }) {
       {banner && (
         <Notice kind={banner.kind}>
           {banner.text}
-          {banner.secret && <div className="secret">{banner.secret}</div>}
         </Notice>
       )}
 
@@ -190,11 +191,7 @@ export function GatewayDetail({ id, me }) {
               onClick={() => {
                 api.issueKey(id, "default")
                   .then((issued) => {
-                    setBanner({
-                      kind: "ok",
-                      text: "Copy this key now — it is not stored and cannot be shown again.",
-                      secret: issued.api_key,
-                    });
+                    setNewKey(issued.api_key);
                     load();
                   })
                   .catch((e) => setError(e.message));
@@ -204,6 +201,26 @@ export function GatewayDetail({ id, me }) {
             </button>
           )}
         >
+          {/* The plaintext exists once, in the response that minted it. It is
+              shown here — next to the button that produced it — because a banner
+              at the top of a long page is a secret people scroll past. */}
+          {newKey && (
+            <div className="secret" style={{ marginBottom: 12 }}>
+              <div className="spread" style={{ marginBottom: 6 }}>
+                <strong>Copy this key now — it is not stored and cannot be shown again.</strong>
+                <button className="ghost sm" onClick={() => setNewKey(null)}>dismiss</button>
+              </div>
+              <div className="row">
+                <span className="mono" style={{ wordBreak: "break-all" }}>{newKey}</span>
+                <button
+                  className="ghost copy"
+                  onClick={() => navigator.clipboard?.writeText(newKey)}
+                >
+                  copy
+                </button>
+              </div>
+            </div>
+          )}
           {gateway.api_keys.length === 0 ? (
             <Empty>No keys. Issue one to authenticate with a bearer token.</Empty>
           ) : (
@@ -211,7 +228,7 @@ export function GatewayDetail({ id, me }) {
               <thead>
                 <tr>
                   <th>Label</th>
-                  <th>Subject</th>
+                  <th>Key id</th>
                   <th>Issued</th>
                   <th />
                 </tr>
@@ -220,21 +237,42 @@ export function GatewayDetail({ id, me }) {
                 {gateway.api_keys.map((key) => (
                   <tr key={key.key_id}>
                     <td>{key.label}</td>
+                    {/* The id, not the subject: the subject is `api-key:<id>`
+                        and pasting that as a bearer is the mistake this column
+                        used to invite. */}
                     <td className="mono" style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-                      {key.subject}
+                      {key.key_id}
                     </td>
                     <td className="hint">{relative(key.issued_at)}</td>
                     {canKeys && (
                       <td style={{ width: 1 }}>
-                        <button
-                          className="ghost sm danger"
-                          onClick={() => {
-                            if (!window.confirm(`Revoke ${key.label}? Callers using it get 401 at once.`)) return;
-                            api.revokeKey(id, key.key_id).then(load);
-                          }}
-                        >
-                          revoke
-                        </button>
+                        <div className="row">
+                          <button
+                            className="ghost sm"
+                            onClick={() => {
+                              if (!window.confirm(
+                                `Rotate ${key.label}? The current key stops working immediately.`
+                              )) return;
+                              api.rotateKey(id, key.key_id)
+                                .then((rotated) => {
+                                  setNewKey(rotated.api_key);
+                                  load();
+                                })
+                                .catch((e) => setError(e.message));
+                            }}
+                          >
+                            rotate
+                          </button>
+                          <button
+                            className="ghost sm danger"
+                            onClick={() => {
+                              if (!window.confirm(`Revoke ${key.label}? Callers using it get 401 at once.`)) return;
+                              api.revokeKey(id, key.key_id).then(load);
+                            }}
+                          >
+                            revoke
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>

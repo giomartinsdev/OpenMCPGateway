@@ -212,6 +212,23 @@ async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: CanWriteKe
     return {"key_id": key_id, "api_key": plaintext}
 
 
+@router.post("/gateways/{gateway_id}/keys/{key_id}/rotate")
+async def rotate_key(gateway_id: str, key_id: str, session: CanWriteKeys,
+                     principal: PrincipalDep,
+                     container: ContainerDep) -> dict[str, str]:
+    """Issue a replacement and revoke this one in the same append.
+
+    Returns the new plaintext — the only moment it exists outside the caller's
+    clipboard.
+    """
+    await gateways.owned(container, principal.caller, gateway_id)
+    plaintext, new_id = await container.commands.rotate_api_key(
+        gateway_id, key_id=key_id, actor=session.email
+    )
+    await container.refresh_router()
+    return {"key_id": new_id, "api_key": plaintext}
+
+
 @router.delete("/gateways/{gateway_id}/keys/{key_id}")
 async def revoke_key(gateway_id: str, key_id: str,
                      session: CanWriteKeys, principal: PrincipalDep,

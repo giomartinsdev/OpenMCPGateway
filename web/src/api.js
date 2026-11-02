@@ -71,6 +71,10 @@ export const api = {
     call("DELETE", `/gateways/${id}/principals/${encodeURIComponent(subject)}`),
 
   issueKey: (id, label) => call("POST", `/gateways/${id}/keys`, { label }),
+  // Rotation returns the new plaintext once; the old key stops working in the
+  // same append, so there is no window where neither one authenticates.
+  rotateKey: (id, keyId) =>
+    call("POST", `/gateways/${id}/keys/${keyId}/rotate`),
   revokeKey: (id, keyId) => call("DELETE", `/gateways/${id}/keys/${keyId}`),
 
   stats: (gatewayId, minutes = 60) =>
