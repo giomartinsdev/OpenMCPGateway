@@ -127,6 +127,12 @@ def configure(level: str | None = None, *, stream: Any = None) -> None:
     # trips — the volume would drown the signal.
     for name in ("httpx", "httpx2", "httpcore"):
         logging.getLogger(name).setLevel(logging.WARNING)
+    # FastMCP's transport logs one INFO line per session on both ends. Useful
+    # when debugging a handshake, useless as steady-state volume.
+    for name in ("mcp", "mcp.server", "mcp.client"):
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.WARNING)
+        logger.propagate = True
 
 
 log = JsonLogger("gateway")
