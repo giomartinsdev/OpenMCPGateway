@@ -39,6 +39,8 @@ services:
       OMG_GOOGLE_CLIENT_SECRET: ${OMG_GOOGLE_CLIENT_SECRET:-}
       # Who may sign in and become an operator. Empty means nobody new.
       OMG_OPERATOR_ALLOWLIST: ${OMG_OPERATOR_ALLOWLIST:-}
+      # One JSON object per line; ship stdout to Loki. `info` in production.
+      OMG_LOG_LEVEL: ${OMG_LOG_LEVEL:-info}
     ports:
       - "${OMG_PORT:-8000}:8000"
 

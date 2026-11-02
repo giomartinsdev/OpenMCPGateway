@@ -54,6 +54,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
         # break the one-JSON-line-per-record contract. The root handler from
         # `gateway.log.configure` covers uvicorn's loggers too.
         log_config=None,
+        # Both surfaces already emit a structured line per request
+        # (`http.request` for the admin app, `proxy.request` for gateways). The
+        # access log would add a third, unstructured duplicate — and health
+        # probes would be most of it.
+        access_log=False,
         log_level=settings.log_level,
         proxy_headers=True,
         forwarded_allow_ips="*",
