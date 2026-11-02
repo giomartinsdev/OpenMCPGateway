@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from gateway.domain.events import (
     SIGN_IN_AGGREGATE,
+    TENANT_OF_DEPLOYMENT,
     ApiKeyIssued,
     ApiKeyRevoked,
     AuthMode,
@@ -70,6 +71,15 @@ class Operator(_Aggregate):
     password_hash: str = ""
     is_admin: bool = False
     exists: bool = False
+
+    @property
+    def tenant_id(self) -> str:
+        """The tenant this account belongs to. Derived, see `TENANT_OF_DEPLOYMENT`."""
+        return TENANT_OF_DEPLOYMENT
+
+    @property
+    def role(self) -> str:
+        return "admin" if self.is_admin else "member"
 
     @classmethod
     def from_events(cls, aggregate_id: str, events: Iterable[Event]) -> Operator:

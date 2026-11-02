@@ -5,7 +5,8 @@ import { navigate } from "../App.jsx";
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
 
-export function Gateways() {
+export function Gateways({ me }) {
+  const canEdit = me?.is_admin === true;
   const [state, setState] = useState({ loading: true, gateways: [], stats: null });
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -36,9 +37,11 @@ export function Gateways() {
             Every MCP server you front, with its own auth, limits and traffic.
           </div>
         </div>
-        <button className="primary" onClick={() => setCreating(true)}>
-          New gateway
-        </button>
+        {canEdit && (
+          <button className="primary" onClick={() => setCreating(true)}>
+            New gateway
+          </button>
+        )}
       </div>
 
       <Notice kind="err">{error}</Notice>

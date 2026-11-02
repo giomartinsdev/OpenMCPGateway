@@ -19,8 +19,9 @@ from pydantic import BaseModel, Field
 
 from gateway.application.container import Container
 from gateway.configfile import ConfigFileError, apply_document, parse_document
-from gateway.domain.events import AuthMode, IdentityProvider
+from gateway.domain.events import TENANT_OF_DEPLOYMENT, AuthMode, IdentityProvider
 from gateway.domain.model import DomainError, SignInSettings
+from gateway.domain.readmodels import TrafficStats
 from gateway.infrastructure.eventstore.postgres import ConcurrencyError
 from gateway.interface.google_login import (
     STATE_COOKIE,
@@ -174,6 +175,7 @@ async def login(payload: LoginRequest, response: Response,
         operator_id=operator.id,
         email=operator.email,
         is_admin=operator.is_admin,
+        tenant_id=operator.tenant_id,
     )
     response.set_cookie(
         SESSION_COOKIE,
@@ -198,6 +200,8 @@ async def me(session: SessionDep) -> dict[str, Any]:
     return {
         "email": session.email,
         "operator_id": session.operator_id,
+        "tenant_id": session.tenant_id,
+        "role": session.role,
         "is_admin": session.is_admin,
     }
 
@@ -287,6 +291,7 @@ async def google_callback(request: Request, container: ContainerDep,
         operator_id=operator_id,
         email=operator.email,
         is_admin=operator.is_admin,
+        tenant_id=operator.tenant_id,
     )
     response = RedirectResponse("/#/gateways", status_code=303)
     response.set_cookie(
@@ -438,12 +443,48 @@ async def register(payload: RegisterRequest, request: Request,
         raise
     except Exception as exc:
         raise _translate(exc) from exc
-    return {"operator_id": operator_id, "is_admin": is_first}
+    return {
+        "operator_id": operator_id,
+        "tenant_id": TENANT_OF_DEPLOYMENT,
+        "is_admin": is_first,
+    }
+
+
+@router.post("/operators", status_code=201)
+async def add_operator(payload: RegisterRequest, session: AdminDep,
+                       container: ContainerDep) -> dict[str, Any]:
+    """An administrator adds a member to their tenant.
+
+    The alternative — leaving registration open — means anyone who finds the URL
+    joins the tenant that administers every gateway. A member is read-only: the
+    panel hides what they cannot do, and every mutating route checks the role
+    again, because a hidden button is not an authorisation rule.
+    """
+    try:
+        operator_id = await container.commands.register_operator(
+            email=payload.email,
+            password=payload.password,
+            is_admin=False,
+        )
+    except Exception as exc:
+        raise _translate(exc) from exc
+    return {
+        "operator_id": operator_id,
+        "tenant_id": session.tenant_id,
+        "is_admin": False,
+    }
 
 
 # --------------------------------------------------------------------------
 # Gateways
 # --------------------------------------------------------------------------
+
+@router.get("/operators")
+async def list_operators(session: AdminDep,
+                         container: ContainerDep) -> dict[str, Any]:
+    """Who belongs to the tenant. Administrator-only: it is an address book."""
+    del session
+    return {"operators": await container.store.list_operators()}
 
 
 @router.get("/gateways")
@@ -454,7 +495,7 @@ async def list_gateways(session: SessionDep, container: ContainerDep) -> dict[st
 
 
 @router.post("/gateways", status_code=201)
-async def create_gateway(payload: GatewayCreateRequest, session: SessionDep,
+async def create_gateway(payload: GatewayCreateRequest, session: AdminDep,
                          container: ContainerDep) -> dict[str, str]:
     try:
         gateway_id = await container.commands.create_gateway(
@@ -490,7 +531,7 @@ async def get_gateway(gateway_id: str, session: SessionDep,
 
 @router.patch("/gateways/{gateway_id}")
 async def update_gateway(gateway_id: str, payload: GatewayUpdateRequest,
-                         session: SessionDep, container: ContainerDep) -> dict[str, str]:
+                         session: AdminDep, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.update_gateway(
             gateway_id,
@@ -506,7 +547,7 @@ async def update_gateway(gateway_id: str, payload: GatewayUpdateRequest,
 
 
 @router.delete("/gateways/{gateway_id}")
-async def delete_gateway(gateway_id: str, session: SessionDep,
+async def delete_gateway(gateway_id: str, session: AdminDep,
                          container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.delete_gateway(gateway_id, actor=session.email)
@@ -518,7 +559,7 @@ async def delete_gateway(gateway_id: str, session: SessionDep,
 
 @router.put("/gateways/{gateway_id}/auth")
 async def configure_auth(gateway_id: str, payload: AuthConfigRequest,
-                         session: SessionDep, container: ContainerDep) -> dict[str, str]:
+                         session: AdminDep, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.configure_auth(
             gateway_id,
@@ -539,7 +580,7 @@ async def configure_auth(gateway_id: str, payload: AuthConfigRequest,
 
 @router.put("/gateways/{gateway_id}/rate-limit")
 async def set_rate_limit(gateway_id: str, payload: RateLimitRequest,
-                         session: SessionDep, container: ContainerDep) -> dict[str, str]:
+                         session: AdminDep, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.set_rate_limit(
             gateway_id,
@@ -552,7 +593,7 @@ async def set_rate_limit(gateway_id: str, payload: RateLimitRequest,
 
 
 @router.post("/gateways/{gateway_id}/disable")
-async def disable_gateway(gateway_id: str, session: SessionDep,
+async def disable_gateway(gateway_id: str, session: AdminDep,
                           container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.disable_gateway(gateway_id, actor=session.email)
@@ -563,7 +604,7 @@ async def disable_gateway(gateway_id: str, session: SessionDep,
 
 
 @router.post("/gateways/{gateway_id}/enable")
-async def enable_gateway(gateway_id: str, session: SessionDep,
+async def enable_gateway(gateway_id: str, session: AdminDep,
                          container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.enable_gateway(gateway_id, actor=session.email)
@@ -585,7 +626,7 @@ async def list_principals(gateway_id: str, session: SessionDep,
 
 @router.post("/gateways/{gateway_id}/principals", status_code=201)
 async def allow_principal(gateway_id: str, payload: PrincipalRequest,
-                          session: SessionDep, container: ContainerDep) -> dict[str, str]:
+                          session: AdminDep, container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.allow_principal(
             gateway_id, subject=payload.subject, note=payload.note,
@@ -598,7 +639,7 @@ async def allow_principal(gateway_id: str, payload: PrincipalRequest,
 
 
 @router.delete("/gateways/{gateway_id}/principals/{subject}")
-async def revoke_principal(gateway_id: str, subject: str, session: SessionDep,
+async def revoke_principal(gateway_id: str, subject: str, session: AdminDep,
                            container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.revoke_principal(
@@ -621,7 +662,7 @@ async def list_keys(gateway_id: str, session: SessionDep,
 
 
 @router.post("/gateways/{gateway_id}/keys", status_code=201)
-async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: SessionDep,
+async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: AdminDep,
                     container: ContainerDep) -> dict[str, str]:
     try:
         plaintext, key_id = await container.commands.issue_api_key(
@@ -634,7 +675,7 @@ async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: SessionDep
 
 
 @router.delete("/gateways/{gateway_id}/keys/{key_id}")
-async def revoke_key(gateway_id: str, key_id: str, session: SessionDep,
+async def revoke_key(gateway_id: str, key_id: str, session: AdminDep,
                      container: ContainerDep) -> dict[str, str]:
     try:
         await container.commands.revoke_api_key(
@@ -653,7 +694,7 @@ async def revoke_key(gateway_id: str, key_id: str, session: SessionDep,
 
 @router.get("/stats")
 async def stats(session: SessionDep, container: ContainerDep,
-                gateway_id: str | None = None, minutes: int = 60) -> dict[str, Any]:
+                gateway_id: str | None = None, minutes: int = 60) -> TrafficStats:
     del session
     return await container.read_models.stats(gateway_id, max(1, min(minutes, 10080)))
 
@@ -697,7 +738,7 @@ async def validate_config(payload: ConfigFileRequest,
 
 
 @router.post("/config/apply")
-async def apply_config(payload: ConfigFileRequest, session: SessionDep,
+async def apply_config(payload: ConfigFileRequest, session: AdminDep,
                        container: ContainerDep) -> dict[str, Any]:
     text = payload.yaml or json.dumps(payload.document or {})
     try:

@@ -4,6 +4,8 @@ import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from tests.steps.support import SecureCookieClient
+
 scenarios("../features/admin_signin_settings.feature")
 
 GOOD_CLIENT = "omg-client.apps.googleusercontent.com"
@@ -12,37 +14,9 @@ GOOD_CALLBACK = "https://gateway.test/api/auth/google/callback"
 PASSWORD = "correct-horse-battery"
 
 
-class _SecureCookieClient(httpx.Client):
-    """A client that keeps `Secure` cookies over plain http.
-
-    The app sets `Secure` because it publishes an https base URL, which is
-    correct in production and unusable in a test. httpx is right to drop such a
-    cookie; the test needs the session, so it carries it by hand.
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.jar: dict[str, str] = {}
-
-    def build_request(self, method, url, **kwargs):
-        request = super().build_request(method, url, **kwargs)
-        if self.jar:
-            request.headers["cookie"] = "; ".join(
-                f"{name}={value}" for name, value in self.jar.items()
-            )
-        return request
-
-    def send(self, request, **kwargs):
-        response = super().send(request, **kwargs)
-        for header in response.headers.get_list("set-cookie"):
-            name, _, rest = header.partition("=")
-            self.jar[name.strip()] = rest.split(";", 1)[0].strip('"')
-        return response
-
-
 @pytest.fixture()
 def browser(live_server: str) -> httpx.Client:
-    client = _SecureCookieClient(base_url=live_server, follow_redirects=False)
+    client = SecureCookieClient(base_url=live_server, follow_redirects=False)
     try:
         yield client
     finally:

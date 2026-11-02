@@ -9,10 +9,25 @@ from pydantic import Field
 
 from gateway.domain.events.base import AuthMode, Event, IdentityProvider
 
+TENANT_OF_DEPLOYMENT = "tn_local"
+"""The installation's tenant id.
+
+Derived, not stored: one deployment is one tenant, and every operator and
+gateway in the log belongs to it. Storing it would mean a migration for the
+accounts that predate tenants, and a second id that can disagree with this one.
+A future multi-tenant install replaces this with the session's tenant, which is
+why the field is carried in the session now even though it is constant.
+"""
+
 # --------------------------------------------------------------------------
 # Operator accounts (who configures the gateway)
 # --------------------------------------------------------------------------
-
+#
+# `is_admin` is the tenant role: the first account administers the installation,
+# every account added after it is a member. The tenant id itself is derived
+# (`TENANT_OF_DEPLOYMENT`), not stored, so accounts written before tenants
+# existed belong to it without a migration and there is no second id to
+# disagree with it.
 
 class OperatorRegistered(Event):
     EVENT = "operator.registered"
@@ -178,6 +193,7 @@ WRITE_EVENTS: tuple[type[Event], ...] = (
 
 __all__ = [
     "SIGN_IN_AGGREGATE",
+    "TENANT_OF_DEPLOYMENT",
     "WRITE_EVENTS",
     "ApiKeyIssued",
     "ApiKeyRevoked",

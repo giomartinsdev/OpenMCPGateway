@@ -83,6 +83,24 @@ operator on first success — which is why the allowlist gates it. Only an
 administrator can change these settings, and registration is closed after the first
 account; otherwise anyone who found the URL could become an operator.
 
+### Tenants and roles
+
+One deployment is one tenant (`TENANT_OF_DEPLOYMENT`). The first account creates
+it and is its administrator; everyone added after that is a **member**: they see
+the same gateways, traffic and audit log, and cannot change any of it. Every
+mutating route checks the role on the server, because a hidden button is not an
+authorisation rule.
+
+Members get in two ways: an administrator adds them under **Settings → Who
+belongs to this tenant**, or an allowlisted address signs in with Google and joins
+as a member. The second path does not create administrators, so the tenant never
+ends up with two owners.
+
+The tenant id is derived, not stored: one deployment is one tenant, so an extra
+column would be a constant with a migration attached. It is carried in the session
+nonetheless (`/api/auth/me` returns `tenant_id` and `role`), which is what makes
+a real multi-tenant install a change to the session rather than to every endpoint.
+
 The flow is verified against a real OIDC provider in the tests
 (`tests/steps/fake_google.py`), including the failures that matter: a callback with
 a state this browser never received, an `id_token` minted for a different client, an

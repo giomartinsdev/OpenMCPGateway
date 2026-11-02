@@ -12,7 +12,8 @@ const OUTCOME_LABEL = {
   rate_limited: "429 rate limited",
 };
 
-export function GatewayDetail({ id }) {
+export function GatewayDetail({ id, me }) {
+  const canEdit = me?.is_admin === true;
   const [gateway, setGateway] = useState(null);
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null); // {kind, text, secret?}
@@ -46,14 +47,16 @@ export function GatewayDetail({ id }) {
           <Badge kind={gateway.enabled ? "ok" : "mute"}>
             {gateway.enabled ? "enabled" : "disabled"}
           </Badge>
-          <button
-            onClick={async () => {
-              await (gateway.enabled ? api.disable(id) : api.enable(id));
-              load();
-            }}
-          >
-            {gateway.enabled ? "Disable" : "Enable"}
-          </button>
+          {canEdit && (
+            <button
+              onClick={async () => {
+                await (gateway.enabled ? api.disable(id) : api.enable(id));
+                load();
+              }}
+            >
+              {gateway.enabled ? "Disable" : "Enable"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -115,18 +118,32 @@ export function GatewayDetail({ id }) {
               listed subject. Empty means "anyone who authenticates".
             </p>
           </div>
-          <AuthForm gateway={gateway} onSaved={(msg) => { setBanner(msg); load(); }} />
+          {canEdit ? (
+            <AuthForm gateway={gateway} onSaved={(msg) => { setBanner(msg); load(); }} />
+          ) : (
+            <Notice kind="info">
+              Read-only: an administrator of this tenant changes the auth.
+            </Notice>
+          )}
         </div>
       </Card>
 
       <Card title="Rate limit">
-        <RateLimitForm gateway={gateway} onSaved={load} />
+        {canEdit ? (
+          <RateLimitForm gateway={gateway} onSaved={load} />
+        ) : (
+          <Notice kind="info">
+            {gateway.requests_per_minute
+              ? `${gateway.requests_per_minute} requests per minute per caller.`
+              : "No limit. Each caller gets its own budget."}
+          </Notice>
+        )}
       </Card>
 
       <div className="grid-2">
         <Card
           title="Allowed subjects"
-          actions={
+          actions={canEdit && (
             <button
               className="sm"
               onClick={() => {
@@ -137,7 +154,7 @@ export function GatewayDetail({ id }) {
             >
               Add
             </button>
-          }
+          )}
         >
           {gateway.principals.length === 0 ? (
             <Empty>No allowlist — every authenticated caller is accepted.</Empty>
@@ -148,14 +165,16 @@ export function GatewayDetail({ id }) {
                   <tr key={principal.subject}>
                     <td className="mono">{principal.subject}</td>
                     <td className="hint">{relative(principal.added_at)}</td>
-                    <td style={{ width: 1 }}>
-                      <button
-                        className="ghost sm"
-                        onClick={() => api.removePrincipal(id, principal.subject).then(load)}
-                      >
-                        remove
-                      </button>
-                    </td>
+                    {canEdit && (
+                      <td style={{ width: 1 }}>
+                        <button
+                          className="ghost sm"
+                          onClick={() => api.removePrincipal(id, principal.subject).then(load)}
+                        >
+                          remove
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -165,7 +184,7 @@ export function GatewayDetail({ id }) {
 
         <Card
           title="API keys"
-          actions={
+          actions={canEdit && (
             <button
               className="sm"
               onClick={() => {
@@ -183,7 +202,7 @@ export function GatewayDetail({ id }) {
             >
               Issue key
             </button>
-          }
+          )}
         >
           {gateway.api_keys.length === 0 ? (
             <Empty>No keys. Issue one to authenticate with a bearer token.</Empty>
@@ -205,17 +224,19 @@ export function GatewayDetail({ id }) {
                       {key.subject}
                     </td>
                     <td className="hint">{relative(key.issued_at)}</td>
-                    <td style={{ width: 1 }}>
-                      <button
-                        className="ghost sm danger"
-                        onClick={() => {
-                          if (!window.confirm(`Revoke ${key.label}? Callers using it get 401 at once.`)) return;
-                          api.revokeKey(id, key.key_id).then(load);
-                        }}
-                      >
-                        revoke
-                      </button>
-                    </td>
+                    {canEdit && (
+                      <td style={{ width: 1 }}>
+                        <button
+                          className="ghost sm danger"
+                          onClick={() => {
+                            if (!window.confirm(`Revoke ${key.label}? Callers using it get 401 at once.`)) return;
+                            api.revokeKey(id, key.key_id).then(load);
+                          }}
+                        >
+                          revoke
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -260,6 +281,7 @@ export function GatewayDetail({ id }) {
         <RecentRequests requests={gateway.requests} />
       </Card>
 
+      {canEdit && (
       <Card title="Danger zone">
         <div className="spread">
           <div>
@@ -280,6 +302,7 @@ export function GatewayDetail({ id }) {
           </button>
         </div>
       </Card>
+      )}
     </>
   );
 }

@@ -9,7 +9,17 @@ async function call(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  // Not every failure arrives as JSON: a 500 from the ASGI stack is the plain
+  // string "Internal Server Error". Parsing that throws a syntax error, which
+  // surfaces as "Unexpected token 'I'" and hides the actual status.
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { detail: text.slice(0, 300) };
+    }
+  }
   if (!response.ok) {
     const error = new Error(data.detail || response.statusText);
     error.status = response.status;
@@ -22,6 +32,10 @@ export const api = {
   me: () => call("GET", "/auth/me"),
   login: (email, password) => call("POST", "/auth/login", { email, password }),
   register: (email, password) => call("POST", "/auth/register", { email, password }),
+  // An administrator adding a member to the tenant. Registration above is only
+  // open for the very first account.
+  operators: () => call("GET", "/operators"),
+  addOperator: (email, password) => call("POST", "/operators", { email, password }),
   logout: () => call("POST", "/auth/logout"),
   authMethods: () => call("GET", "/auth/methods"),
 

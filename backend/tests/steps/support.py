@@ -10,6 +10,8 @@ import socket
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
+
 
 @dataclass
 class Context:
@@ -83,6 +85,34 @@ class BackendServer:
         if self.task is not None:
             await self.task
             self.task = None
+
+
+class SecureCookieClient(httpx.Client):
+    """An httpx client that keeps `Secure` cookies over plain http.
+
+    The app sets `Secure` because it publishes an https base URL, which is
+    correct in production and unusable in a test. httpx is right to drop such a
+    cookie; the tests need the session, so they carry it by hand.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.jar: dict[str, str] = {}
+
+    def build_request(self, method, url, **kwargs):
+        request = super().build_request(method, url, **kwargs)
+        if self.jar:
+            request.headers["cookie"] = "; ".join(
+                f"{name}={value}" for name, value in self.jar.items()
+            )
+        return request
+
+    def send(self, request, **kwargs):
+        response = super().send(request, **kwargs)
+        for header in response.headers.get_list("set-cookie"):
+            name, _, rest = header.partition("=")
+            self.jar[name.strip()] = rest.split(";", 1)[0].strip('"')
+        return response
 
 
 class _RequireBearer:

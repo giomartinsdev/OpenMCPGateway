@@ -18,7 +18,8 @@ const SAMPLE = `gateways:
 prune: false
 `;
 
-export function ConfigPage() {
+export function ConfigPage({ me }) {
+  const canEdit = me?.is_admin === true;
   const [yaml, setYaml] = useState("");
   const [banner, setBanner] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -58,9 +59,11 @@ export function ConfigPage() {
         <div className="row">
           <button onClick={() => setYaml(SAMPLE)} disabled={busy}>Load example</button>
           <button onClick={() => run(api.validateConfig)} disabled={busy}>Validate</button>
-          <button className="primary" onClick={() => run(api.applyConfig)} disabled={busy}>
-            {busy ? "Working…" : "Apply"}
-          </button>
+          {canEdit && (
+            <button className="primary" onClick={() => run(api.applyConfig)} disabled={busy}>
+              {busy ? "Working…" : "Apply"}
+            </button>
+          )}
         </div>
       </div>
 

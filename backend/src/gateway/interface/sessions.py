@@ -26,14 +26,24 @@ class SessionError(RuntimeError):
 
 
 class Session(BaseModel):
-    """Who is signed in. Frozen: a session is a claim about the past."""
+    """Who is signed in. Frozen: a session is a claim about the past.
+
+    `tenant_id` is constant today (one deployment is one tenant) and carried
+    anyway: every authorisation decision names the tenant it is about, so
+    multi-tenancy is a change here rather than a change in each endpoint.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     operator_id: str
     email: str
     is_admin: bool
+    tenant_id: str
     expires_at: int
+
+    @property
+    def role(self) -> str:
+        return "admin" if self.is_admin else "member"
 
 
 def _sign(payload: bytes, secret: str) -> str:
@@ -41,11 +51,13 @@ def _sign(payload: bytes, secret: str) -> str:
 
 
 def issue_session(*, secret: str, operator_id: str, email: str,
-                  is_admin: bool, ttl_seconds: int = SESSION_TTL_SECONDS) -> str:
+                  is_admin: bool, tenant_id: str,
+                  ttl_seconds: int = SESSION_TTL_SECONDS) -> str:
     body = {
         "sub": operator_id,
         "email": email,
         "admin": is_admin,
+        "tenant": tenant_id,
         "exp": int(time.time()) + ttl_seconds,
     }
     encoded = base64.urlsafe_b64encode(
@@ -71,6 +83,9 @@ def read_session(token: str, *, secret: str) -> Session:
         operator_id=body["sub"],
         email=body["email"],
         is_admin=bool(body.get("admin")),
+        # A cookie issued before tenants existed has no claim; it belongs to the
+        # deployment's tenant like every other account.
+        tenant_id=body.get("tenant") or "tn_local",
         expires_at=int(body["exp"]),
     )
 

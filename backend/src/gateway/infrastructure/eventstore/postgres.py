@@ -287,6 +287,35 @@ class PostgresEventStore:
                 or 0
             )
 
+    async def list_operators(self) -> list[dict[str, Any]]:
+        """Accounts and their tenant role, oldest first.
+
+        Read from the log rather than a table: `operator.registered` is the only
+        event that can create an account, so a projection would be a copy of one
+        JSONB read with a migration attached.
+        """
+        query = (
+            select(
+                events.c.aggregate_id,
+                events.c.payload["email"].astext.label("email"),
+                events.c.payload["is_admin"].astext.label("is_admin"),
+                events.c.occurred_at,
+            )
+            .where(events.c.event_type == "operator.registered")
+            .order_by(events.c.global_seq)
+        )
+        async with self._db.session() as session:
+            rows = (await session.execute(query)).mappings()
+            return [
+                {
+                    "operator_id": row["aggregate_id"],
+                    "email": row["email"],
+                    "role": "admin" if row["is_admin"] == "true" else "member",
+                    "registered_at": row["occurred_at"].isoformat(),
+                }
+                for row in rows
+            ]
+
     async def all_slugs(self) -> dict[str, str]:
         async with self._db.session() as session:
             rows = (

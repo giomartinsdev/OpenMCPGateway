@@ -30,7 +30,7 @@ const NAV = [
   ["/traffic", "Traffic"],
   ["/audit", "Audit log"],
   ["/config", "Config as code"],
-  ["/settings", "Settings"],
+  ["/settings", "Settings", true],
 ];
 
 export function App() {
@@ -48,12 +48,13 @@ export function App() {
   const isGatewayDetail = segment[0] === "gateways" && segment[1];
 
   let page;
-  if (isGatewayDetail) page = <GatewayDetail id={segment[1]} />;
+  if (isGatewayDetail) page = <GatewayDetail id={segment[1]} me={me} />;
   else if (path === "/traffic") page = <Traffic />;
   else if (path === "/audit") page = <Audit />;
-  else if (path === "/config") page = <ConfigPage />;
-  else if (path === "/settings") page = <Settings />;
-  else page = <Gateways />;
+  else if (path === "/config") page = <ConfigPage me={me} />;
+  else if (path === "/settings" && me.is_admin) page = <Settings />;
+  else if (path === "/settings") page = <Gateways />;
+  else page = <Gateways me={me} />;
 
   return (
     <div className="shell">
@@ -65,7 +66,7 @@ export function App() {
           </div>
         </div>
         <nav className="nav">
-          {NAV.map(([href, label]) => (
+          {NAV.filter(([, , adminOnly]) => !adminOnly || me.is_admin).map(([href, label]) => (
             <a
               key={href}
               href={`#${href}`}
@@ -81,7 +82,12 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <div className="who">{me.email}</div>
+          <div className="who">
+            {me.email}
+            <div style={{ marginTop: 2 }}>
+              {me.role ?? (me.is_admin ? "admin" : "member")} · {me.tenant_id}
+            </div>
+          </div>
           <button
             className="ghost sm"
             onClick={async () => {
