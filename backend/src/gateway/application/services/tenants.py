@@ -18,16 +18,40 @@ from gateway.log import log
 #: derived from the tenant name: it is the thing a new operator pastes into their
 #: client, and "find out what yours is called" is a step nobody should take.
 #:
-#: Slugs are global, because `/g/<slug>/mcp` is a public URL, so on a deployment
-#: with several tenants the first one gets `console` and the next gets
-#: `console-2`, `console-3`…
+#: Slugs are global, because `/g/<slug>/mcp` is a public URL, so the first tenant
+#: on a deployment gets `console` and the rest need a suffix. The suffix is derived
+#: from the tenant id — public, stable, unique by construction — instead of being
+#: counted (`console-2`, `console-3`): a counter says nothing about whose gateway
+#: it is, and the URL would change if a tenant in between were deleted.
 CONSOLE_SLUG = "console"
 
 
-async def _free_slug(container: Container) -> str:
-    candidate, suffix = CONSOLE_SLUG, 2
+def console_slug(tenant_id: str, *, plain: bool) -> str:
+    """`console`, or `console-<tenant id>` when someone else already has it.
+
+    The id is stripped of its `tn_` prefix because the slug is a URL segment and
+    the prefix is already implied. A tenant id is not a secret — the join code is
+    — and it is the string the panel already shows, so the address still says
+    whose gateway it is instead of being a number that means nothing.
+    """
+    if plain:
+        return CONSOLE_SLUG
+    return f"{CONSOLE_SLUG}-{tenant_id.removeprefix('tn_')}"
+
+
+async def _free_slug(container: Container, tenant_id: str) -> str:
+    """The shortest slug this tenant can have.
+
+    A single-tenant deployment — the common case — gets the plain `console`, and
+    a suffix only appears when someone got there first. Claiming is what actually
+    decides (`create_gateway` inserts the slug under a primary key), so the loop
+    below exists only so a hand-made gateway holding the same slug does not make
+    the seed fail.
+    """
+    plain = await container.store.resolve_slug(CONSOLE_SLUG) is None
+    candidate, suffix = console_slug(tenant_id, plain=plain), 2
     while await container.store.resolve_slug(candidate):
-        candidate = f"{CONSOLE_SLUG}-{suffix}"
+        candidate = f"{console_slug(tenant_id, plain=plain)}-{suffix}"
         suffix += 1
     return candidate
 
@@ -71,7 +95,7 @@ async def seed_console_gateway(
     refusing the whole signup over a convenience gateway trades a real account
     for a broken one. The owner can create one by hand.
     """
-    slug = await _free_slug(container)
+    slug = await _free_slug(container, tenant_id)
     try:
         gateway_id = await container.commands.create_gateway(
             tenant_id=tenant_id,
@@ -104,7 +128,11 @@ async def seed_console_gateway(
         log.warning(
             "tenant.console_gateway_failed", tenant_id=tenant_id, error=repr(exc)
         )
-        return {"slug": CONSOLE_SLUG, "api_key": "", "error": str(exc)}
+        return {
+            "slug": console_slug(tenant_id, plain=False),
+            "api_key": "",
+            "error": str(exc),
+        }
     await container.refresh_router()
     return {"id": gateway_id, "slug": slug, "api_key": api_key}
 
@@ -171,6 +199,7 @@ async def current(container: Container, caller: Caller) -> dict[str, Any]:
 __all__ = [
     "CONSOLE_SLUG",
     "backfill_console_gateways",
+    "console_slug",
     "create",
     "current",
     "join",

@@ -155,6 +155,32 @@ def list_includes(listing: dict, slug: str) -> None:
     assert slug in slugs, listing
 
 
+@given("another tenant is created by a different account", target_fixture="second")
+def another_tenant(owner: httpx.Client) -> dict:
+    """A second account and its own tenant on the same deployment.
+
+    The browser is separate on purpose: the point of the scenario is two tenants
+    in one installation, and sessions are what make tenants distinct here.
+    """
+    other = SecureCookieClient(base_url=str(owner.base_url), follow_redirects=False)
+    account = owner_account(other, "second@example.dev", "Second Co")
+    try:
+        yield account
+    finally:
+        other.close()
+
+
+@then(parsers.parse('its console slug is "{prefix}" followed by its tenant id'))
+def slug_names_the_tenant(second: dict) -> None:
+    response = second["browser"].get("/api/gateways")
+    assert response.status_code == 200, response.text
+    [gateway] = [
+        g for g in response.json()["gateways"] if g["slug"].startswith("console")
+    ]
+    expected = f"console-{second['tenant_id'].removeprefix('tn_')}"
+    assert gateway["slug"] == expected, (gateway["slug"], expected)
+
+
 @given("the tenant's console gateway row is removed")
 def remove_console_row(account: dict, container, runner) -> None:
     """A tenant that never saw the seed: no rows at all, not a soft-deleted one.

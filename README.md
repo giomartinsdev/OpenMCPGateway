@@ -226,8 +226,10 @@ hour" before anyone configures an upstream:
 }
 ```
 
-Delete it if you would rather point agents at `/mcp` directly; the slug is global,
-so a second tenant's seeded gateway becomes `console-2`.
+Delete it if you would rather point agents at `/mcp` directly. The slug is global,
+because `/g/<slug>/mcp` is a public URL, so the first tenant on a deployment gets
+`console` and later ones get `console-<tenant id>` — named after the tenant rather
+than numbered, so the address still says whose gateway it is.
 
 Each gateway's page in the panel carries a **Test this gateway** card with the
 exact requests for its auth mode, as `curl` or Python. A public gateway is one

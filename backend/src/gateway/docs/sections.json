@@ -53,7 +53,7 @@
       "title": "Gateways",
       "body": [
         "A gateway is a slug, an upstream URL, and a policy. The slug is global: `/g/<slug>/mcp` is the string people paste into clients, so two tenants cannot both own `rancher`.",
-        "One gateway is created for you and cannot be confused with a hand-made one: `console`, pointing at this deployment's own read-only MCP. On a deployment with several tenants the seeded gateway takes the next free slug (`console`, `console-2`, …), because a slug is global.",
+        "One gateway is created for you: `console`, pointing at this deployment's own read-only MCP. The slug is global because `/g/<slug>/mcp` is a public URL, so on a deployment with several tenants the first one takes `console` and the others take `console-<tenant id>` — the id, not a counter, so the address still says whose gateway it is.",
         "`target_url` is the streamable-HTTP endpoint of the upstream, including its path (`http://rancher-mcp.support.svc.cluster.local:8000/mcp`). It must be `http://` or `https://`."
       ],
       "table": {

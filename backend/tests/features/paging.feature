@@ -103,6 +103,14 @@ Feature: Cursor pagination and filtering on every list
     Then the list includes a gateway called "console"
     And its target is this deployment's console
 
+  Scenario: A second tenant's console slug names the tenant, not a counter
+    # A slug is global because `/g/<slug>/mcp` is a public URL, so the first
+    # tenant gets `console` and everyone else needs a suffix. Counting
+    # (`console-2`) would say nothing about whose gateway it is, and would move
+    # if a tenant in between disappeared.
+    Given another tenant is created by a different account
+    Then its console slug is "console-" followed by its tenant id
+
   Scenario: A tenant that predates the seed gets one on the next boot
     # "The feature exists but mine is missing" is worse than no feature: a
     # deployment upgraded to this version has tenants that never saw `create`,
