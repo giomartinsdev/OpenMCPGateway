@@ -512,11 +512,14 @@ class Gateway(_Aggregate):
         if not subject:
             return False
         # No allowlist configured means "any authenticated principal".
-        return (
-            not self.allowed_subjects
-            or subject in self.allowed_subjects
-            or "*" in self.allowed_subjects
-        )
+        if not self.allowed_subjects or "*" in self.allowed_subjects:
+            return True
+        # A key is a credential minted for this gateway, not an identity a
+        # provider vouched for; its subject embeds the key id, so listing it
+        # would break on the next rotation. See `GatewayAuth`/guard.
+        if subject.startswith("api-key:"):
+            return True
+        return subject in self.allowed_subjects
 
     def matches_key_hash(self, key_hash: str) -> str | None:
         """Return the subject for a matching key hash, if any."""

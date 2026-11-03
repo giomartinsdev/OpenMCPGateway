@@ -15,10 +15,12 @@ Feature: Reason, usage, retention, key expiry and reachability
   # panel cannot ask it after the fact.
 
   Scenario: A refused subject records the allowlist as the reason
+    # Keys bypass the allowlist (their subject embeds a key id that rotation
+    # replaces), so the refusal is produced by an identity a provider vouched
+    # for: that is the caller the list is about.
     Given a gateway "demo" with api_key auth proxying a real MCP server
     And the principal "someone-else" is allowed
-    And an API key was issued for the gateway
-    When a caller with the issued key calls it once
+    When an outsider calls the gateway
     Then the traffic log records reason "subject not in allowlist"
 
   Scenario: A refused tool records the tool's name as the reason

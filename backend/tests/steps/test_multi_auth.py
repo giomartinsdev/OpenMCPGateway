@@ -134,6 +134,17 @@ def issued_key(container, runner, operator: str, gateway: dict) -> dict:
 def issued_key_step(issued_key: dict) -> dict:
     return issued_key
 
+@given(parsers.parse('the principal "{subject}" is allowed'))
+def allow_principal(container, runner, operator: str, gateway: dict,
+                    subject: str) -> None:
+    async def allow() -> None:
+        await container.commands.allow_principal(
+            gateway["id"], subject=subject, actor=operator
+        )
+        await container.refresh_router()
+
+    runner.run(allow())
+
 @given("the gateway also accepts API keys")
 def also_accepts_keys(container, runner, operator: str, gateway: dict,
                       issued_key: dict) -> None:
@@ -189,6 +200,50 @@ def revoke_every_key(container, runner, operator: str, gateway: dict,
     )
     runner.run(container.refresh_router())
     return issued_key
+
+@when("the operator rotates that key", target_fixture="rotated_key")
+def rotate_key(container, runner, operator: str, gateway: dict,
+               issued_key: dict) -> dict:
+    async def rotate() -> dict:
+        plaintext, key_id = await container.commands.rotate_api_key(
+            gateway["id"], key_id=issued_key["key_id"], actor=operator
+        )
+        await container.refresh_router()
+        return {"plaintext": plaintext, "key_id": key_id}
+
+    return runner.run(rotate())
+
+@then("the rotated key lists the tools")
+def rotated_key_lists(live_server: str, gateway: dict, rotated_key: dict) -> None:
+    probe = _tools_list(live_server, gateway["slug"], rotated_key["plaintext"])
+    assert probe["status"] == 200, probe["body"][:300]
+    assert "echo" in probe["body"], probe["body"][:300]
+
+@when(parsers.parse('the identity "{subject}" is resolved against the gateway'),
+      target_fixture="resolved")
+def resolve_identity(container, runner, gateway: dict, subject: str) -> dict:
+    """Ask the live guard, with `resolve` stubbed to the identity under test.
+
+    The allowlist is the real one; only the provider's signature check is
+    bypassed, because it needs a real IdP. Same approach as the proxy suite.
+    """
+    async def check() -> dict:
+        from gateway.proxy.identity import Identity
+
+        live = container.router.live_gateways[gateway["slug"]]
+        endpoint = next(
+            route.endpoint for route in live.routes
+            if hasattr(route.endpoint, "_authorized")
+        )
+        identity = Identity(subject=subject, method="oauth")
+        return {"subject": subject,
+                "allowed": bool(endpoint._authorized(identity.subject))}
+
+    return runner.run(check())
+
+@then("the identity is refused")
+def identity_refused(resolved: dict) -> None:
+    assert resolved["allowed"] is False, f"{resolved['subject']} was admitted"
 
 @when("a caller presents a token issued by that authorization server",
       target_fixture="probe")

@@ -105,6 +105,7 @@
         "**`oauth`** - 网关自身就是 OAuth 资源服务器。没有令牌的客户端会得到 `401` 和 `WWW-Authenticate: Bearer resource_metadata=...`；它发现元数据文档、自行注册并打开浏览器。操作员批准一次，此后该主体即被加入允许列表。",
         "OAuth 模式下客户端不需要把令牌签入 dotfile——这正是重点。API 密钥模式则需如此，这也是密钥按网关划分、可单独吊销的原因。",
         "一个网关也可以有多种进入方式。开启 `allow_api_key` 后，`oauth` 模式在同一路由上同时接受 API 密钥，并接受 `verifiers` 中列出的额外签发方的令牌——每项包含标签、签发方、可选 audience 和 JWKS 地址。这些额外签发方没有自己的登录流程：客户端已持有其提供方的令牌，网关只校验签名、签发方和 audience。一个 URL、同一份白名单、同一个速率限制，无需按凭据类型拆分网关。",
+        "允许名单列出的是由身份提供方担保的主体，不适用于 API 密钥：密钥的主体包含密钥 id，把它列入名单会在下次轮换时失效。密钥的哈希与本网关中有效密钥匹配即放行，撤销密钥即拒绝。",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
       ]
     },

@@ -17,7 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from gateway.log import log
 from gateway.observability import Metrics, RequestRecorder
-from gateway.proxy.identity import GatewayAuth, Identity
+from gateway.proxy.identity import GatewayAuth, Identity, is_key_subject
 from gateway.proxy.rate_limit import RateLimiter
 
 _RESOURCE_METADATA = "/.well-known/oauth-protected-resource"
@@ -206,7 +206,14 @@ class GuardMiddleware:
 
     def _authorized(self, subject: str) -> bool:
         allowed: list[str] = self.config.get("allowed_subjects") or []
-        return not allowed or subject in allowed or "*" in allowed
+        if not allowed or subject in allowed or "*" in allowed:
+            return True
+        # A key is a credential the operator minted for *this* gateway, and its
+        # subject is derived from the key id. Listing it would make every
+        # rotation a silent lockout, so the allowlist — a gate on identities a
+        # provider vouched for — does not apply. `resolve` only produces this
+        # subject after the hash matched a live key.
+        return is_key_subject(subject)
 
     def _blocked_tool(self, body: bytes) -> str | None:
         """The tool name this request asks for that the gateway does not expose.

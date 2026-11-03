@@ -244,6 +244,33 @@ def tool_calls(live_server: str, gateway: dict, issued: dict, tool: str,
 def anonymous(live_server: str, gateway: dict) -> dict:
     return {"status": _call(live_server, gateway["slug"], None)}
 
+@when("an outsider calls the gateway", target_fixture="probe")
+def outsider_call(container, live_server: str, gateway: dict) -> dict:
+    """A caller the guard can identify but the allowlist does not name.
+
+    An API key cannot produce this: a key's subject is minted per key and the
+    allowlist does not apply to it. So the identity is supplied the way a real
+    provider would supply one — `resolve` is stubbed only for the signature
+    check, and the request still goes over HTTP so the guard records the row.
+    """
+    from gateway.proxy.identity import Identity
+
+    live = container.router.live_gateways[gateway["slug"]]
+    endpoint = next(
+        route.endpoint for route in live.routes
+        if hasattr(route.endpoint, "_authorized")
+    )
+
+    async def admit(_token: str | None) -> Identity:
+        return Identity(subject="stranger", method="oauth")
+
+    original = endpoint.auth.resolve
+    endpoint.auth.resolve = admit  # type: ignore[method-assign]
+    try:
+        return {"status": _call(live_server, gateway["slug"], "any-token")}
+    finally:
+        endpoint.auth.resolve = original  # type: ignore[method-assign]
+
 @then(parsers.parse("the gateway answers {status:d}"))
 def gateway_status(probe: dict, status: int) -> None:
     assert probe["status"] == status, probe

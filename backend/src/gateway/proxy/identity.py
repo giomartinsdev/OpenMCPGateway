@@ -123,3 +123,11 @@ def _source_of(access: Any, *, key_subject: str | None) -> str:
     except ValueError:
         return ""
     return str(parts[0]) if isinstance(parts, list) and parts else ""
+
+def is_key_subject(subject: str) -> bool:
+    """True for the subject a gateway-minted API key resolves to.
+
+    One predicate for both places that decide who gets in, so the guard and the
+    domain cannot drift on what "this is a key, not a person" means.
+    """
+    return subject.startswith("api-key:")

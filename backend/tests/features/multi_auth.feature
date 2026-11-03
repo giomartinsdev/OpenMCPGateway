@@ -66,3 +66,33 @@ Feature: More than one way in
     Given a gateway "demo" with oauth github auth
     When the operator enables API keys on it
     Then configuring it fails with "issue a key first"
+
+  # The allowlist names *people*: it is a second gate on an identity a provider
+  # vouched for. A key has no identity to vet — it is a credential the operator
+  # minted for this gateway on purpose — and its subject is derived from the key
+  # id, so requiring it in the list would break on the next rotation.
+  Scenario: An allowlisted gateway still admits its own key
+    Given a gateway "demo" with oauth github auth proxying a real MCP server
+    And the principal "octocat" is allowed
+    And an API key was issued for the gateway
+    And the gateway also accepts API keys
+    When a caller with the issued key lists the tools
+    Then the backend tool "echo" is visible
+
+  Scenario: Rotating a key does not demand an allowlist edit
+    # Rotation mints a new key id, which is a new subject. If the allowlist
+    # applied to keys, every rotation would silently lock the caller out.
+    Given a gateway "demo" with oauth github auth proxying a real MCP server
+    And the principal "octocat" is allowed
+    And an API key was issued for the gateway
+    And the gateway also accepts API keys
+    When the operator rotates that key
+    Then the rotated key lists the tools
+
+  Scenario: Keys do not widen the allowlist for people
+    Given a gateway "demo" with oauth github auth
+    And the principal "octocat" is allowed
+    And an API key was issued for the gateway
+    And the gateway also accepts API keys
+    When the identity "stranger" is resolved against the gateway
+    Then the identity is refused
