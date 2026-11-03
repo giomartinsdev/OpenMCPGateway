@@ -384,8 +384,11 @@ has already applied. Boot runs whatever this build has not seen, inside one
 transaction behind an advisory lock, so a rollout is the upgrade path and two
 pods starting together queue instead of colliding.
 
-Tables prefixed `rm_` are read models — projections of the event log,
-rebuildable by replay. `events` is the log itself.
+Tables prefixed `rm_` are read models — projections of the event log, rebuildable
+by replay — and they live in their own schema, `readmodels`. `events`, the
+uniqueness tables and the history stay in `public`. That split is what makes a
+reset safe to offer: `DROP SCHEMA readmodels CASCADE` and a restart rebuilds every
+projection from the log, because nothing the log depends on is in that schema.
 
 ## Architecture
 

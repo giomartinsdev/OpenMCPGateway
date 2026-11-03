@@ -113,20 +113,23 @@ async def _truncate(dsn: str) -> None:
     engine = create_async_engine(as_async_dsn(dsn))
     try:
         async with engine.begin() as connection:
-            # Before the first Container.create the schema does not exist yet;
-            # that is a clean database, not an error.
-            exists = await connection.scalar(
-                text("SELECT to_regclass('public.events')")
-            )
-            if exists is None:
+            # Discovered, not hard-coded: a migration test can leave the database
+            # in the middle of an upgrade — a schema dropped, a table still in
+            # `public` — and truncating a name that does not exist is an error
+            # that hides the test's own failure.
+            rows = (
+                await connection.execute(
+                    text(
+                        "SELECT format('%I.%I', schemaname, tablename) FROM pg_tables "
+                        "WHERE schemaname IN ('public', 'readmodels') "
+                        "AND tablename <> 'schema_migrations'"
+                    )
+                )
+            ).scalars().all()
+            if not rows:
                 return
             await connection.execute(
-                text(
-                    "TRUNCATE events, projection_checkpoints, gateway_slugs, "
-                    "operator_emails, rm_gateways, rm_principals, rm_api_keys, "
-                    "rm_request_stats, rm_requests_tail, rm_roles, rm_operators "
-                    "RESTART IDENTITY CASCADE"
-                )
+                text(f"TRUNCATE {', '.join(rows)} RESTART IDENTITY CASCADE")
             )
     finally:
         await engine.dispose()

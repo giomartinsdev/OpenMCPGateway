@@ -20,7 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from gateway.domain.events import TENANT_OF_DEPLOYMENT
-from gateway.infrastructure.db.tables import metadata
+from gateway.infrastructure.db.tables import READMODELS_SCHEMA, metadata
 from gateway.log import log
 
 Step = Callable[[AsyncConnection], Awaitable[None]]
@@ -51,6 +51,12 @@ async def _baseline(connection: AsyncConnection) -> None:
     schema a second time is one more place for the two to disagree, and the
     declaration in `tables.py` is already the truth.
     """
+    # Explicit, not left to `create_all`'s own schema handling: migration 4 runs
+    # against this schema on a fresh database too, and a missing schema there is
+    # an error instead of a no-op.
+    await connection.execute(
+        text(f"CREATE SCHEMA IF NOT EXISTS {READMODELS_SCHEMA}")
+    )
     await connection.run_sync(metadata.create_all)
 
 
@@ -88,10 +94,41 @@ async def _key_reveal_and_tools(connection: AsyncConnection) -> None:
         await connection.execute(text(statement))
 
 
+async def _readmodels_schema(connection: AsyncConnection) -> None:
+    """Move every `rm_*` table from `public` into `readmodels`.
+
+    A read model is rebuildable by definition, so it deserves a schema you can
+    drop in one statement — `DROP SCHEMA readmodels CASCADE`, then a boot. That
+    promise only holds if nothing the event log needs lives there, which is why
+    `events`, `schema_migrations` and the uniqueness tables stay in `public`.
+
+    `ALTER TABLE IF EXISTS … SET SCHEMA` is a no-op when the table is already in
+    `readmodels`, which is the fresh-database path: `create_all` puts it there
+    before this step runs, so the same statement is correct on both paths.
+    """
+    await connection.execute(
+        text(f"CREATE SCHEMA IF NOT EXISTS {READMODELS_SCHEMA}")
+    )
+    for name in (
+        "rm_tenants",
+        "rm_roles",
+        "rm_operators",
+        "rm_gateways",
+        "rm_principals",
+        "rm_api_keys",
+        "rm_request_stats",
+        "rm_requests_tail",
+    ):
+        await connection.execute(
+            text(f"ALTER TABLE IF EXISTS public.{name} SET SCHEMA {READMODELS_SCHEMA}")
+        )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline", _baseline),
     Migration(2, "tenancy", _tenancy),
     Migration(3, "key_reveal_and_tools", _key_reveal_and_tools),
+    Migration(4, "readmodels_schema", _readmodels_schema),
 )
 
 
@@ -100,6 +137,14 @@ async def run(engine: AsyncEngine) -> list[Migration]:
     applied: list[Migration] = []
     async with engine.begin() as connection:
         await connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _LOCK})
+        # Older steps name `rm_*` tables without a schema, which was correct when
+        # they lived in `public`. `readmodels` on the search path keeps those
+        # steps honest on a converted database *and* on a fresh one, where
+        # `create_all` already put them there. Transaction-local, so no other
+        # connection inherits it.
+        await connection.execute(
+            text(f"SET LOCAL search_path TO public, {READMODELS_SCHEMA}")
+        )
         await connection.execute(text(_HISTORY))
         seen = set(
             (await connection.execute(text("SELECT version FROM schema_migrations"))).scalars()
@@ -116,6 +161,19 @@ async def run(engine: AsyncEngine) -> list[Migration]:
             log.info(
                 "database.migration", version=migration.version, name=migration.name
             )
+        # `DROP SCHEMA readmodels CASCADE` is the documented way to rebuild every
+        # projection. History still says version 1 ran, so nothing would recreate
+        # them — the log would survive and the read models would not. One catalog
+        # lookup per boot buys that promise; on the normal path nothing is created.
+        missing = await connection.scalar(
+            text(f"SELECT to_regclass('{READMODELS_SCHEMA}.rm_gateways')")
+        )
+        if missing is None:
+            await connection.execute(
+                text(f"CREATE SCHEMA IF NOT EXISTS {READMODELS_SCHEMA}")
+            )
+            await connection.run_sync(metadata.create_all)
+            log.info("database.readmodels_recreated")
     log.info("database.migrated", tables=len(metadata.tables), applied=len(applied))
     return applied
 

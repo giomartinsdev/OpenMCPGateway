@@ -654,9 +654,10 @@ def wipe_read_model(container, runner) -> None:
         async with container.database.session() as session, session.begin():
             await session.execute(
                 text(
-                    "TRUNCATE rm_gateways, rm_principals, rm_api_keys, "
-                    "rm_request_stats, rm_requests_tail, rm_roles, rm_operators "
-                    "CASCADE"
+                    "TRUNCATE readmodels.rm_gateways, readmodels.rm_principals, "
+                    "readmodels.rm_api_keys, readmodels.rm_request_stats, "
+                    "readmodels.rm_requests_tail, readmodels.rm_roles, "
+                    "readmodels.rm_operators, readmodels.rm_tenants CASCADE"
                 )
             )
 

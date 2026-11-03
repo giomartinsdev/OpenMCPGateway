@@ -29,6 +29,12 @@ from gateway.domain.events import TENANT_OF_DEPLOYMENT
 
 metadata = MetaData()
 
+#: Where the read models live. Not `public`: a projection can be rebuilt from the
+#: log, so `DROP SCHEMA readmodels CASCADE` followed by a boot is a safe reset —
+#: and that is only true if nothing the log depends on is in there. `events`,
+#: `schema_migrations` and the uniqueness tables stay in `public`.
+READMODELS_SCHEMA = "readmodels"
+
 # --------------------------------------------------------------------------
 # Event log
 # --------------------------------------------------------------------------
@@ -91,6 +97,7 @@ rm_tenants = Table(
     Column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),
+    schema=READMODELS_SCHEMA,
 )
 
 rm_roles = Table(
@@ -112,6 +119,7 @@ rm_roles = Table(
     Column(
         "updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),
+    schema=READMODELS_SCHEMA,
 )
 
 rm_operators = Table(
@@ -126,6 +134,7 @@ rm_operators = Table(
     Column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),
+    schema=READMODELS_SCHEMA,
 )
 
 # --------------------------------------------------------------------------
@@ -163,6 +172,7 @@ rm_gateways = Table(
     Column(
         "updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),
+    schema=READMODELS_SCHEMA,
 )
 
 rm_principals = Table(
@@ -175,6 +185,7 @@ rm_principals = Table(
         "added_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),
     Column("revoked", Boolean, nullable=False, default=False, server_default=false()),
+    schema=READMODELS_SCHEMA,
 )
 
 rm_api_keys = Table(
@@ -198,6 +209,7 @@ rm_api_keys = Table(
     ),
     Column("revoked", Boolean, nullable=False, default=False, server_default=false()),
     Index("rm_api_keys_hash_idx", "key_hash"),
+    schema=READMODELS_SCHEMA,
 )
 
 rm_request_stats = Table(
@@ -211,6 +223,7 @@ rm_request_stats = Table(
     Column("count", BigInteger, nullable=False, default=0),
     Column("total_ms", BigInteger, nullable=False, default=0),
     Column("max_ms", Integer, nullable=False, default=0),
+    schema=READMODELS_SCHEMA,
 )
 
 rm_requests_tail = Table(
@@ -226,6 +239,7 @@ rm_requests_tail = Table(
     Column("tool", Text),
     Column("method", Text, nullable=False),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
+    schema=READMODELS_SCHEMA,
 )
 
 # Indexes that only make sense on an expression are declared after the tables.
@@ -242,6 +256,7 @@ Index("rm_stats_bucket_idx", rm_request_stats.c.bucket.desc())
 Index("rm_tail_time_idx", rm_requests_tail.c.occurred_at.desc())
 
 __all__ = [
+    "READMODELS_SCHEMA",
     "TENANT_OF_DEPLOYMENT",
     "events",
     "gateway_slugs",
