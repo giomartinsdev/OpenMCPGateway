@@ -26,7 +26,7 @@ test("the landing page links to the manual, and the manual renders signed out", 
   expect(errors).toEqual([]);
 });
 
-test("the rail groups navigation and survives a narrow viewport", async ({ page }) => {
+test("the bar groups navigation and survives a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
@@ -37,42 +37,42 @@ test("the rail groups navigation and survives a narrow viewport", async ({ page 
   await page.getByRole("button", { name: "Create tenant" }).click();
   await expect(page.getByRole("heading", { name: "Gateways" }).first()).toBeVisible();
 
-  await expect(page.locator(".nav-label")).toHaveText([
-    "Gateway",
-    "Traffic & Logs",
-    "Settings",
-    "Help",
-  ]);
   // One icon per entry, and the animation got a box to live in.
   await expect(page.locator(".nav a .icon")).toHaveCount(7);
   await expect(page.locator(".mark svg")).toHaveCount(1);
 
-  // Config as code moved under Settings, next to Members and Roles: a file and
+  // Config as code sits under Settings, next to Members and Roles: a file and
   // the forms edit the same state, so they belong in one place.
   await expect(
     page.locator(".nav a", { hasText: "Config as code" }),
   ).toBeVisible();
+
+  // The bar is one row of chrome at the top, not a 248px column: the page gets
+  // that width, and the bar never scrolls out of reach.
+  const bar = await page.locator(".topbar").boundingBox();
+  expect(bar.height).toBeLessThanOrEqual(60);
+  expect(await page.locator(".topbar").evaluate((el) => getComputedStyle(el).position)).toBe(
+    "sticky",
+  );
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBe(0);
 
-  // Narrow: the rail becomes a bar across the top rather than a column, and it
-  // grows downwards instead of sideways — a nav that hides entries behind a
-  // horizontal scroll is a nav nobody discovers.
+  // Narrow: the bar wraps onto a second row instead of hiding entries behind a
+  // horizontal scroll — a nav whose tail is off-screen is a nav nobody finds.
   await page.setViewportSize({ width: 720, height: 900 });
-  const bar = await page.locator(".rail").boundingBox();
-  expect(bar.width).toBe(720);
-  expect(bar.height).toBeLessThan(120);
+  const narrow = await page.locator(".topbar").boundingBox();
+  expect(narrow.width).toBe(720);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     ),
   ).toBe(0);
-  // Every entry is still on screen, not clipped out of the bar.
   for (const link of await page.locator(".nav a").all()) {
     const box = await link.boundingBox();
-    expect(box.y + box.height).toBeLessThanOrEqual(bar.height + 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(721);
+    expect(box.y + box.height).toBeLessThanOrEqual(narrow.y + narrow.height + 1);
   }
 });

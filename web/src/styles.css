@@ -115,23 +115,92 @@ code, .mono {
 
 /* -- app frame ---------------------------------------------------------- */
 
+/* A column: a sticky bar, then the page. No rail — seven links do not get to
+   own 248px of every screen when the screens are tables. */
 .frame {
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-/* A rail, not a page: one tone below the content, hairline instead of shadow. */
-.rail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s5);
+.topbar {
   position: sticky;
   top: 0;
-  height: 100vh;
-  padding: var(--s5) var(--s3) var(--s4);
-  background: var(--panel);
-  border-right: 1px solid var(--line);
+  z-index: 20;
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  width: 100%;
+  height: 56px;
+  padding: 0 var(--s5);
+}
+.topbar .logo { padding: 0; gap: 8px; }
+
+/* Groups stay, their labels go: a hairline says "new section" in 1px instead of
+   a 11px caption above six rows. */
+.nav { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.nav-group { display: flex; align-items: center; gap: 2px; }
+.nav-group + .nav-group {
+  margin-left: var(--s2);
+  padding-left: var(--s2);
+  border-left: 1px solid var(--line);
+}
+.nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-xs);
+  color: var(--fg-4);
+  font: 500 var(--t-body) / 1 var(--sans);
+  white-space: nowrap;
+  transition: background-color var(--hover) var(--ease), color var(--hover) var(--ease);
+}
+.nav a:hover { color: var(--fg); background: var(--panel-2); }
+.nav a:hover .icon { opacity: 1; }
+.nav a.active { color: var(--fg); background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-2); }
+.nav a.active .icon { opacity: 1; color: var(--apur); }
+
+.topbar-side { margin-left: auto; display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.who .avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--panel-3);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--fg-2);
+  font: 500 var(--t-micro) / 1 var(--sans);
+  text-transform: uppercase;
+}
+.who-text { min-width: 0; line-height: 1.35; }
+.who-text strong {
+  display: block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2);
+  font-size: var(--t-label);
+  font-weight: 500;
+}
+.who-text span {
+  display: block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-5);
+  font-size: var(--t-micro);
 }
 
 .logo {
@@ -172,66 +241,6 @@ a.logo:hover .logo-text { color: var(--fg); }
 .logo-text span { color: var(--fg-4); }
 
 .icon { flex: 0 0 auto; opacity: 0.72; transition: opacity var(--hover) var(--ease); }
-
-.nav { display: flex; flex-direction: column; gap: var(--s3); }
-.nav-group { display: flex; flex-direction: column; gap: 1px; }
-.nav-label {
-  padding: var(--s1) var(--s3) 6px;
-  color: var(--fg-5);
-  font: 500 var(--t-micro) / 1 var(--sans);
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-.nav a {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 33px;
-  padding: 0 10px;
-  border-radius: var(--radius-xs);
-  color: var(--fg-3);
-  font: 500 var(--t-body) / 1 var(--sans);
-  transition: background-color var(--hover) var(--ease), color var(--hover) var(--ease),
-    padding-left var(--hover) var(--ease);
-}
-.nav a:hover { color: var(--fg); background: var(--panel-2); }
-.nav a:hover .icon { opacity: 1; }
-.nav a.active {
-  color: var(--fg);
-  background: var(--panel-3);
-  box-shadow: inset 0 0 0 1px var(--line-2);
-}
-.nav a.active .icon { opacity: 1; color: var(--apur); }
-/* Config as code sits below the two RBAC forms it can overwrite: the hairline
-   is the same one the rail uses, so it reads as a section break, not decoration. */
-.nav a.divided { position: relative; margin-top: var(--s2); }
-.nav a.divided::after {
-  content: "";
-  position: absolute;
-  inset: -5px 0 auto;
-  height: 1px;
-  background: var(--line);
-}
-/* A 2px accent rail on the active row: the row already moved, this names why. */
-.nav a.active { position: relative; }
-.nav a.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2px;
-  height: 15px;
-  border-radius: var(--pill);
-  background: var(--apur);
-  box-shadow: 0 0 10px rgba(61, 214, 140, 0.6);
-}
-
-.rail-foot { margin-top: auto; padding: var(--s4) var(--s2) 0; border-top: 1px solid var(--line); }
-.who { font-size: var(--t-label); line-height: 1.5; margin-bottom: var(--s3); min-width: 0; }
-.who strong { display: block; color: var(--fg-2); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.who span { display: block; color: var(--fg-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.who .roles { color: var(--fg-5); font-family: var(--mono); font-size: var(--t-micro); }
 
 .content { min-width: 0; display: flex; flex-direction: column; }
 
@@ -962,6 +971,13 @@ pre.code {
   flex-direction: column;
   gap: 1px;
 }
+.docs-toc .nav-label {
+  padding: var(--s1) 10px 6px;
+  color: var(--fg-5);
+  font: 500 var(--t-micro) / 1 var(--sans);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
 .docs-toc a {
   padding: 7px 10px;
   border-radius: var(--radius-xs);
@@ -1028,38 +1044,22 @@ pre.code.docs-code {
 }
 
 @media (max-width: 860px) {
-  .frame { grid-template-columns: minmax(0, 1fr); }
-  /* The rail becomes a bar. It wraps instead of scrolling sideways: a nav that
-     hides two of its four entries off-screen is a nav nobody discovers, and the
-     second row costs 34px of a screen that is about to be scrolled anyway. */
-  .rail {
-    position: static;
+  /* The bar wraps instead of scrolling sideways: a nav that hides entries
+     off-screen is a nav nobody discovers, and the second row costs 34px of a
+     screen that is about to be scrolled anyway. */
+  .topbar-inner {
     height: auto;
-    /* The rail is a grid item, so `stretch` would make it as tall as the page
-       and then distribute that slack between the wrapped rows. Anchor it. */
-    align-self: start;
-    align-content: start;
-    flex-direction: row;
     flex-wrap: wrap;
-    align-items: center;
     gap: var(--s2);
-    padding: var(--s2) var(--s3);
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+    padding: var(--s2) var(--s4);
   }
-  /* Row one is the mark and the way out; row two is the whole nav. Letting the
-     nav take its own line keeps every entry visible, which is the point. */
-  .rail .logo { padding: 0 8px 0 0; flex: 0 0 auto; }
-  .nav { order: 3; flex: 1 0 100%; flex-direction: row; flex-wrap: wrap; gap: 2px; min-width: 0; }
-  .nav-group { flex-direction: row; flex-wrap: wrap; gap: 2px; }
-  .nav-label { display: none; }
-  .nav a { height: 30px; padding: 0 10px; }
-  .nav a.active::before { display: none; }
+  /* Row one is the mark and the way out; row two is the whole nav. */
+  .nav { order: 3; flex: 1 0 100%; flex-wrap: wrap; gap: 2px; }
+  .nav-group { flex-wrap: wrap; }
+  .nav a { height: 28px; padding: 0 9px; }
   .nav a .icon { display: none; }
-  .nav a.divided { margin-top: 0; }
-  .nav a.divided::after { display: none; }
-  .rail-foot { order: 2; margin: 0 0 0 auto; padding: 0; border: 0; flex: 0 0 auto; }
-  .who { display: none; }
+  .nav-group + .nav-group { margin-left: 0; padding-left: 0; border-left: 0; }
+  .who-text { display: none; }
   .page { padding: var(--s4) var(--s4) var(--s6); }
   .page-head { gap: var(--s3); }
   .grid-2, .grid-3, .grid-4, .field-row, .features, .steps, .docs-band { grid-template-columns: minmax(0, 1fr); }

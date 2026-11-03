@@ -22,6 +22,7 @@ from gateway.infrastructure.eventstore.postgres import PostgresEventStore
 from gateway.infrastructure.eventstore.projections import ProjectionRunner, ReadModels
 from gateway.log import log
 from gateway.observability import RequestRecorder
+from gateway.proxy.providers import close_client_storage, configure_client_storage
 from gateway.proxy.router import GatewayRouter
 from gateway.proxy.runtime import RateLimiter
 
@@ -45,6 +46,12 @@ class Container(BaseModel):
     async def create(cls, settings: Settings) -> Container:
         database = Database(settings.database_url)
         await database.migrate()
+
+        # Before the router installs anything: a provider built without a backend
+        # would hand out tokens nothing else can read.
+        configure_client_storage(
+            settings.database_url, secret=settings.session_secret.get_secret_value()
+        )
 
         store = PostgresEventStore(database)
         projections = ProjectionRunner(database)
@@ -82,6 +89,7 @@ class Container(BaseModel):
     async def close(self) -> None:
         await self.recorder.stop()
         await self.router.shutdown()
+        await close_client_storage()
         await self.database.close()
 
 

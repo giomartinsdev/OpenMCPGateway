@@ -109,12 +109,83 @@ def test_a_reminted_token_resolves_after_a_reinstall(oauth_config: dict) -> None
 
 def test_a_deleted_gateway_releases_its_state(oauth_config: dict) -> None:
     """Dropping a gateway must not leak its store for the process lifetime."""
+    import asyncio
+
     from gateway.proxy.providers import forget_client_store
 
     _token, provider = _issue(oauth_config)
     store = provider._client_storage
 
-    forget_client_store(oauth_config["id"])
+    asyncio.run(forget_client_store(oauth_config["id"]))
 
     _rebuilt_token, rebuilt = _issue(oauth_config)
     assert rebuilt._client_storage is not store
+
+
+def test_oauth_state_survives_the_process_that_wrote_it(settings, runner) -> None:
+    """A rollout must not log every connected client out.
+
+    In-memory state was the last 401: token verifies by signature, then its
+    `jti` pointer resolves to nothing because the previous process took the rows
+    with it. Postgres is what makes the pointer outlive the pod — and, once the
+    table is shared, a second replica too.
+
+    Runs on the suite's single loop, not `asyncio.run`: the store's pool belongs
+    to the loop that opened it.
+    """
+    from fastmcp.server.auth.oauth_proxy.models import JTIMapping
+
+    from gateway.proxy.providers import (
+        build_auth_provider,
+        close_client_storage,
+        configure_client_storage,
+    )
+
+    config = {
+        "id": "gw_durable01",
+        "slug": "durable",
+        "auth_mode": "oauth",
+        "idp": "google",
+        "required_scopes": ["openid", "email"],
+    }
+    dsn = settings.database_url
+    secret = settings.session_secret.get_secret_value()
+
+    async def write() -> None:
+        configure_client_storage(dsn, secret=secret)
+        first = build_auth_provider(
+            config, base_url="https://gw.example.dev", credentials=dict(CREDENTIALS)
+        )
+        assert first is not None
+        first.set_mcp_path("/mcp")
+        await first._jti_mapping_store.put(
+            key="jti-durable",
+            value=JTIMapping(
+                jti="jti-durable",
+                upstream_token_id="tok_durable",
+                created_at=int(__import__("time").time()),
+            ),
+            ttl=600,
+        )
+
+    async def restart_and_read() -> object:
+        # A rollout: the process ends, a new one boots against the same database.
+        await close_client_storage()
+        configure_client_storage(dsn, secret=secret)
+        second = build_auth_provider(
+            config, base_url="https://gw.example.dev", credentials=dict(CREDENTIALS)
+        )
+        assert second is not None
+        second.set_mcp_path("/mcp")
+        return await second._jti_mapping_store.get(key="jti-durable")
+
+    try:
+        runner.run(write())
+        found = runner.run(restart_and_read())
+    finally:
+        # Leave the module on the in-memory default: the other tests in this file
+        # ask about store lifetime, not about Postgres.
+        runner.run(close_client_storage())
+
+    assert found is not None, "the jti mapping did not survive the restart"
+    assert found.upstream_token_id == "tok_durable"

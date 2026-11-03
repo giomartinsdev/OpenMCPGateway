@@ -17,26 +17,96 @@ from gateway.proxy.identity import GatewayNotReady
 # by signature and then reads back as unauthenticated, so clients get a 401
 # moments after a successful login.
 #
-# ponytail: a process-local dict, so two replicas would each only honour their
-# own tokens. One replica is the current deployment shape (see k8s comment: the
-# rate limiter is in-process too). Move to the same Postgres/Redis store as the
-# read models when scaling out.
+# So the store is per gateway, not per install: `_CLIENT_STORES` caches one view
+# per gateway id, and every rebuild of that gateway reads the same rows.
+#
+# And the rows live in Postgres, not in the process. In memory they died with the
+# pod, so a rollout logged every connected client out — the same 401, one deploy
+# later. `configure_client_storage` points the shared backend at the app
+# database; without it (unit tests that never boot a container) the store stays
+# per-process, which is not a deployment anyone should run.
 _CLIENT_STORES: dict[str, Any] = {}
+_BACKEND: Any = None
+_BACKEND_STORE: Any = None
+
+
+def configure_client_storage(dsn: str, *, secret: str) -> None:
+    """Point OAuth state at Postgres so it survives rollouts and multiple replicas.
+
+    One table, one connection pool, shared by every gateway: each gateway reads
+    the table through a collection prefix, which is what keeps two gateways'
+    `mcp-jti-mappings` apart. Values are encrypted at rest because upstream
+    access and refresh tokens are bearer credentials — the same reason FastMCP
+    encrypts the file store it would have created itself.
+    """
+    global _BACKEND, _BACKEND_STORE
+
+    from key_value.aio.stores.postgresql import PostgreSQLStore
+    from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
+
+    _BACKEND_STORE = PostgreSQLStore(url=_asyncpg_dsn(dsn), table_name="oauth_state")
+    _BACKEND = FernetEncryptionWrapper(
+        key_value=_BACKEND_STORE,
+        source_material=secret,
+        salt="openmcp-gateway/oauth-state",
+        # A rotated secret makes old rows unreadable; treating that as a cache
+        # miss costs one re-login instead of a 500 on every existing token.
+        raise_on_decryption_error=False,
+    )
+    _CLIENT_STORES.clear()
+
+
+async def close_client_storage() -> None:
+    """Release the pool. Called on shutdown; a restart reconfigures."""
+    global _BACKEND, _BACKEND_STORE
+    if _BACKEND_STORE is not None:
+        await _BACKEND_STORE.close()
+    _BACKEND = None
+    _BACKEND_STORE = None
+    _CLIENT_STORES.clear()
+
+
+def _asyncpg_dsn(dsn: str) -> str:
+    """Drop the SQLAlchemy driver suffix: asyncpg only speaks `postgresql://`."""
+    for suffix in ("+asyncpg", "+psycopg2"):
+        dsn = dsn.replace(suffix, "")
+    return dsn
 
 
 def _client_store(gateway_id: str) -> Any:
-    """The durable-per-process OAuth store for one gateway."""
-    from key_value.aio.stores.memory import MemoryStore
-
+    """The OAuth store for one gateway: a prefix over the shared backend."""
     store = _CLIENT_STORES.get(gateway_id)
-    if store is None:
-        store = _CLIENT_STORES[gateway_id] = MemoryStore()
+    if store is not None:
+        return store
+
+    if _BACKEND is None:
+        from key_value.aio.stores.memory import MemoryStore
+
+        store = MemoryStore()
+    else:
+        from key_value.aio.wrappers.prefix_collections import PrefixCollectionsWrapper
+
+        store = PrefixCollectionsWrapper(key_value=_BACKEND, prefix=gateway_id)
+    _CLIENT_STORES[gateway_id] = store
     return store
 
 
-def forget_client_store(gateway_id: str) -> None:
-    """Drop a gateway's OAuth state. Called when the gateway stops serving."""
+async def forget_client_store(gateway_id: str) -> None:
+    """Drop a gateway's OAuth state. Called when the gateway stops serving.
+
+    Dropping the cached view is not enough once the rows are durable: the tokens
+    would outlive the gateway forever, still valid against the upstream. Delete
+    the prefixed collections, enumerated from the backend rather than listed by
+    hand so a new FastMCP collection is cleaned up without a change here.
+    """
     _CLIENT_STORES.pop(gateway_id, None)
+    if _BACKEND_STORE is None:
+        return
+
+    prefix = f"{gateway_id}__"
+    for collection in await _BACKEND_STORE.collections():
+        if collection.startswith(prefix):
+            await _BACKEND_STORE.destroy_collection(collection)
 
 
 def build_auth_provider(

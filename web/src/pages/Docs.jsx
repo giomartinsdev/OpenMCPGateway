@@ -144,6 +144,7 @@ const SECTIONS = [
       "Logs are one JSON object per line on stdout, built for Loki → Grafana. Useful fields to build dashboards on: `event`, `gateway`, `subject`, `outcome`, `status`, `duration_ms`. Set the level with `OMG_LOG_LEVEL`.",
       "```json\n{\"ts\":\"2026-11-02T11:04:14.538Z\",\"level\":\"info\",\"logger\":\"gateway\",\"msg\":\"proxy.request\",\"event\":\"proxy.request\",\"gateway\":\"rancher\",\"subject\":\"api-key:key_ab12\",\"outcome\":\"allowed\",\"status\":200,\"duration_ms\":18,\"ip\":\"203.0.113.7\"}\n```",
       "Rate limiting is in-process: with N replicas the effective limit is N×. Correct for a single-replica deployment, which is the current design.",
+      "OAuth proxy state (client registrations, upstream tokens, `jti` mappings) lives in the same Postgres, encrypted at rest, so a rollout does not log every connected client out. That part is already replica-safe; only the limiter is not.",
       "State is event-sourced. Every change is an append-only event and the read models are projections of it, which is what makes the audit log trustworthy and lets two replicas share one database without a cache-coherence story.",
     ],
     table: {

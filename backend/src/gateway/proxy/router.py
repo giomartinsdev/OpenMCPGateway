@@ -281,7 +281,7 @@ class GatewayRouter(BaseModel):
             # The OAuth state outlives the provider on purpose (a reinstall must
             # not invalidate tokens already handed out), so it has to be
             # released here or a deleted gateway keeps it forever.
-            forget_client_store(live.gateway_id)
+            await forget_client_store(live.gateway_id)
             log.info("gateway.dropped", gateway=slug)
 
     def _publish(self) -> None:

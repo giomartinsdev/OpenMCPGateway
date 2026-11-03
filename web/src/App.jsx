@@ -61,7 +61,7 @@ const NAV = [
       // edit the same state, and reading them in that order says so.
       { to: "/members", label: "Members", read: "members:read", icon: "users" },
       { to: "/roles", label: "Roles", read: "roles:read", icon: "shield" },
-      { to: "/config", label: "Config as code", read: "config:read", icon: "code", divider: true },
+      { to: "/config", label: "Config as code", read: "config:read", icon: "code" },
     ],
   },
   {
@@ -79,55 +79,66 @@ function useVisibleNav(me) {
     .filter((group) => group.items.length > 0);
 }
 
-/** The frame every signed-in page renders inside. */
+/** The frame every signed-in page renders inside.
+ *
+ * A bar, not a rail. The rail cost 248px of every screen for seven links — on
+ * the pages that matter here (traffic tables, gateway config) that width is the
+ * content. The bar keeps the same groups, marked by hairline dividers instead of
+ * labels, and gives the width back.
+ */
 function Frame({ me, page, path, isDetail, onSignOut }) {
   const groups = useVisibleNav(me);
   return (
     <div className="frame">
-      <aside className="rail">
-        <a className="logo" href="#/" aria-label="OpenMCPGateway home">
-          <Mark size={34} />
-          <div className="logo-text">
-            OpenMCP<span>Gateway</span>
-          </div>
-        </a>
-        <nav className="nav" aria-label="Main">
-          {groups.map((group) => (
-            <div className="nav-group" key={group.group}>
-              <div className="nav-label">{group.group}</div>
-              {group.items.map((item) => {
-                const active =
-                  item.to === "/"
-                    ? !isDetail && path === "/"
-                    : path.startsWith(item.to);
-                return (
-                  <a
-                    key={item.to}
-                    href={`#${item.to}`}
-                    className={[active && "active", item.divider && "divided"]
-                      .filter(Boolean)
-                      .join(" ")}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <Icon name={item.icon} size={15} />
-                    <span>{item.label}</span>
-                  </a>
-                );
-              })}
+      <header className="topbar">
+        <div className="topbar-inner">
+          <a className="logo" href="#/" aria-label="OpenMCPGateway home">
+            <Mark size={28} />
+            <div className="logo-text">
+              OpenMCP<span>Gateway</span>
             </div>
-          ))}
-        </nav>
-        <div className="rail-foot">
-          <div className="who">
-            <strong>{me.email}</strong>
-            <span>{me.tenant_name || "tenant"}</span>
-            <span className="roles">{(me.roles ?? []).join(", ") || "no role"}</span>
+          </a>
+          <nav className="nav" aria-label="Main">
+            {groups.map((group) => (
+              <div className="nav-group" key={group.group}>
+                {group.items.map((item) => {
+                  const active =
+                    item.to === "/"
+                      ? !isDetail && path === "/"
+                      : path.startsWith(item.to);
+                  return (
+                    <a
+                      key={item.to}
+                      href={`#${item.to}`}
+                      className={active ? "active" : undefined}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      <Icon name={item.icon} size={14} />
+                      <span>{item.label}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+          <div className="topbar-side">
+            <div className="who">
+              <span className="avatar" aria-hidden="true">
+                {(me.email || "?").slice(0, 1)}
+              </span>
+              <div className="who-text">
+                <strong>{me.email}</strong>
+                <span>
+                  {me.tenant_name || "tenant"} · {(me.roles ?? []).join(", ") || "no role"}
+                </span>
+              </div>
+            </div>
+            <button className="ghost sm" onClick={onSignOut}>
+              Sign out
+            </button>
           </div>
-          <button className="ghost sm" onClick={onSignOut}>
-            Sign out
-          </button>
         </div>
-      </aside>
+      </header>
       <main className="content">
         <div className="page">{page}</div>
       </main>
@@ -143,24 +154,29 @@ export function App() {
     api.me().then(setMe, () => setMe(null));
   }, []);
 
-  // The first paint after a reload is a skeleton of the frame, not a centred
-  // "Loading…": the rail is the same width either way, so nothing shifts.
+  // The first paint after a reload is a skeleton of the bar, not a centred
+  // "Loading…": the bar is the same height either way, so nothing shifts.
   if (me === undefined) {
     return (
       <div className="frame">
-        <aside className="rail">
-          <div className="logo">
-            <div className="logo-mark" />
-            <div className="logo-text">
-              OpenMCP<span>Gateway</span>
+        <header className="topbar">
+          <div className="topbar-inner">
+            <div className="logo">
+              <div className="logo-mark" />
+              <div className="logo-text">
+                OpenMCP<span>Gateway</span>
+              </div>
+            </div>
+            <div className="nav" style={{ gap: 10 }}>
+              {[0, 1, 2, 3].map((i) => (
+                <Bone key={i} height={13} width={i === 3 ? 70 : 86} />
+              ))}
+            </div>
+            <div className="topbar-side">
+              <Bone height={13} width={150} />
             </div>
           </div>
-          <div className="nav" style={{ gap: 10, padding: "0 10px" }}>
-            {[0, 1, 2, 3].map((i) => (
-              <Bone key={i} height={14} width={i === 3 ? "60%" : "82%"} />
-            ))}
-          </div>
-        </aside>
+        </header>
         <main className="content">
           <div className="page">
             <div className="page-head">
