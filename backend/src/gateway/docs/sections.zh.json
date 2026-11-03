@@ -1,0 +1,396 @@
+{
+  "sections": [
+    {
+      "id": "overview",
+      "title": "这是什么",
+      "body": [
+        "OpenMCPGateway 位于一个或多个 MCP 服务器之前。客户端指向 `https://<host>/g/<slug>/mcp`；网关认证调用方，应用允许列表和每分钟预算，通过私有网络将请求转发给真实服务器，并记录发生的情况。",
+        "上游不需要能从互联网访问，也不需要知道调用方是谁：网关负责终止身份，并在上游要求凭据时代为转发自己的凭据（`upstream_token`）。",
+        "面板以相同的形状回答同样的问题：Traffic 界面给出总量及与上一窗口的对比、一张流量图，以及按结果、网关和调用方的细分——任意表格中的一行都会打开抽屉显示该行的其余内容，而不是离开列表。"
+      ],
+      "table": {
+        "head": [
+          "层",
+          "行为"
+        ],
+        "rows": [
+          [
+            "认证",
+            "每个网关的 OAuth 代理（Google、GitHub、Microsoft、Discord、自定义 OIDC），或使用 SHA-256 哈希的 bearer 密钥"
+          ],
+          [
+            "授权",
+            "可选的主体允许列表。为空表示任何已认证的调用方"
+          ],
+          [
+            "速率限制",
+            "按主体、按网关计数 JSON-RPC 请求。握手不计费"
+          ],
+          [
+            "可观测性",
+            "记录每次尝试：主体、结果、状态、延迟、IP"
+          ],
+          [
+            "故障关闭",
+            "没有凭据的 OAuth 网关返回 503，绝不表现为开放代理"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "quickstart",
+      "title": "快速开始",
+      "body": [
+        "你需要一个网关能连上的 Postgres，以及一个在其前面终止 TLS 的主机名。",
+        "```bash\n# 1. run it\nexport OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg\nexport OMG_SESSION_SECRET=$(openssl rand -hex 32)\nexport OMG_BASE_URL=https://gateway.example.com\nomg serve\n\n# 2. create the first account, then a tenant, in the browser\nopen https://gateway.example.com\n```",
+        "第一个账号会创建一个租户并成为其 `owner`。其他人要么用租户的加入码加入，要么由管理员添加。",
+        "租户创建时自带一个 `console` 网关，已指向本部署自己的只读 MCP。用其页面上的 API 密钥将 agent 指向 `/g/console/mcp`，问它部署在做什么——无需配置任何上游。",
+        "网关一存在就可以让客户端指向它：",
+        "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"my-server\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/g/my-server/mcp\"\n    }\n  }\n}\n```"
+      ]
+    },
+    {
+      "id": "gateways",
+      "title": "网关",
+      "body": [
+        "网关是一个 slug、一个上游 URL 和一套策略。slug 是全局的：`/g/<slug>/mcp` 是人们粘贴到客户端里的字符串，因此两个租户不能同时拥有 `rancher`。",
+        "系统为你创建一个网关：`console`，指向本部署自己的只读 MCP。slug 是全局的，因为 `/g/<slug>/mcp` 是公开 URL，所以在有多个租户的部署上，第一个租户占用 `console`，其余租户使用 `console-<tenant id>`——用 id 而非计数器，这样地址仍然表明它是谁的网关。",
+        "`target_url` 是上游的 streamable-HTTP 端点，包含其路径（`http://rancher-mcp.support.svc.cluster.local:8000/mcp`）。必须是 `http://` 或 `https://`。"
+      ],
+      "table": {
+        "head": [
+          "字段",
+          "含义"
+        ],
+        "rows": [
+          [
+            "slug",
+            "`[a-z0-9-]+`，2-40 个字符。出现在公开路径中"
+          ],
+          [
+            "target_url",
+            "上游 MCP 端点，包含路径"
+          ],
+          [
+            "auth_mode",
+            "`none`、`api_key` 或 `oauth`"
+          ],
+          [
+            "idp",
+            "配合 `oauth`：`github`、`google`、`azure`、`discord` 或 `oidc`"
+          ],
+          [
+            "upstream_token",
+            "上游要求的 Bearer。只写：API 从不返回"
+          ],
+          [
+            "rate_limit",
+            "每个主体每分钟的请求数。`0` 表示不限制"
+          ],
+          [
+            "enabled",
+            "已禁用的网关返回 404 而非 403——它不会被公告"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "auth",
+      "title": "认证方式",
+      "body": [
+        "**`none`** - 无认证。在私有网络上没问题；只要有任何此类网关启用，面板就会警告。",
+        "**`api_key`** - 调用方发送 `Authorization: Bearer omg_...`。密钥以 SHA-256 哈希存储，只在签发它们的响应中以明文显示一次。",
+        "**`oauth`** - 网关自身就是 OAuth 资源服务器。没有令牌的客户端会得到 `401` 和 `WWW-Authenticate: Bearer resource_metadata=...`；它发现元数据文档、自行注册并打开浏览器。操作员批准一次，此后该主体即被加入允许列表。",
+        "OAuth 模式下客户端不需要把令牌签入 dotfile——这正是重点。API 密钥模式则需如此，这也是密钥按网关划分、可单独吊销的原因。",
+        "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
+      ]
+    },
+    {
+      "id": "rbac",
+      "title": "成员与角色",
+      "body": [
+        "一切都以租户为范围：网关、成员、角色、流量、审计日志。来自其他租户的 id 返回 404，而不是会确认其存在的 403。",
+        "权限是一个封闭的目录。拼写错误会以 422 拒绝并指出字段名，因为另一种结果是一个不授予任何权限也不说明任何事的角色。"
+      ],
+      "bodyAfter": [
+        "有两个内置角色，无法编辑或删除，因为两者都不是策略决策：",
+        "| 角色 | Id | 权限 |\n| --- | --- | --- |\n| `owner` | `role_owner` | 全部 |\n| `viewer` | `role_viewer` | 所有读取权限 |",
+        "未指定角色添加的成员会落到 `viewer`：遗漏只会收窄访问，绝不会放宽。委派也只能收窄——没有人能授予自己不拥有的权限，否则 `members:write` 就会成为通往 `role_owner` 的路径。同样的规则适用于配置文件。",
+        "权限在每次请求时从读模型解析，因此编辑角色或重新分配某人会在其下一次点击时生效。无需重新登录，没有过期会话。"
+      ],
+      "table": {
+        "head": [
+          "权限",
+          "授予"
+        ],
+        "rows": [
+          [
+            "gateways:read / write",
+            "查看网关列表，并修改 slug、目标、认证和限制"
+          ],
+          [
+            "keys:read / write",
+            "查看密钥 id，并签发、轮换或吊销密钥"
+          ],
+          [
+            "traffic:read",
+            "读取请求统计和最近请求日志"
+          ],
+          [
+            "audit:read",
+            "读取仅追加的事件日志"
+          ],
+          [
+            "config:read / write",
+            "导出并应用 YAML 文件"
+          ],
+          [
+            "members:read / write",
+            "查看通讯录，并添加人员"
+          ],
+          [
+            "roles:read / write",
+            "查看角色表，并定义或编辑角色"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "config",
+      "title": "配置即代码",
+      "body": [
+        "面板和 YAML 文件是通向同一命令处理器的两扇前门。两者都没有特权：在浏览器中创建的网关会导出到文件，而由 CI 应用的文件与一次点击进入同一个事件日志。",
+        "`gateways`、`roles` 和 `members` 都在文件中声明，因此租户可以从一次提交重建。密钥永不导出——写下 `${ENV_VAR}`，服务器在应用时从自己的环境解析它。",
+        "```yaml\n# gateways.yaml\ngateways:\n  - slug: rancher\n    name: Rancher cluster\n    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp\n    description: read the cluster, restart and scale\n    auth:\n      mode: oauth\n      idp: google\n      client_id: ${GOOGLE_CLIENT_ID}\n      client_secret: ${GOOGLE_CLIENT_SECRET}\n      upstream_token: ${RANCHER_MCP_TOKEN}\n    rate_limit: 120\n    allow: [someone@example.com]\n\nroles:\n  - name: Auditor\n    permissions: [gateways:read, traffic:read, audit:read]\n\nmembers:\n  - email: auditor@example.com\n    password: ${MEMBER_PASSWORD}\n    roles: [Auditor]\n\nprune: false\n```",
+        "合并语义：文件对其声明的内容具有权威性。文件中省略的网关会保留，因此拼写错误无法删除生产环境。`prune: true` 选择启用删除——它仅适用于网关；成员绝不会因为省略而被清理，因为从文件中消失的账号更可能是合并事故而非有意为之。",
+        "成员按 email 对账：角色不同的现有成员会被替换角色，角色相同的则保持不变。`password` 仅在账号尚不存在时使用，因此它出现在经过审阅的文件中为 `${MEMBER_PASSWORD}`，而绝不会出现在导出中——这也是导出再重新应用是空操作的原因。没有密码的新账号会被拒绝，因为凭空编造一个将是谁都无法登录的凭据。",
+        "名称与内置角色（`owner`、`viewer`）相同的角色可以被点名但不可重定义：否则文件会一次性收窄所有现有成员。"
+      ],
+      "bodyAfter": [
+        "```bash\n# round-trip from the shell\nomg export --tenant tn_local > gateways.yaml\nomg apply gateways.yaml --tenant tn_local\n```",
+        "`omg apply` 打印变更内容和任何错误，并在某个声明失败时以非零退出——这正是它可用于 CI 的原因。新签发的 API 密钥只打印一次，因为那是明文唯一存在的时刻。",
+        "面板的 Config as code 页面做同样的事：**Validate** 解析并解析占位符而不触碰状态，**Apply** 执行命令。"
+      ]
+    },
+    {
+      "id": "api",
+      "title": "HTTP API",
+      "body": [
+        "面板所做的一切都是 `/api` 下的端点，由 `HttpOnly` 会话 cookie 认证。MCP 路由本身位于 `/g/<slug>/mcp`，使用 JSON-RPC，而不是这套 API。",
+        "每个列表都是游标分页：`?limit=50&before=<cursor>`，返回 `{items, next}`。`next` 在最后一页为 null，`limit` 会被钳制到 200 而不是被拒绝。",
+        "每个列表还接受自己的过滤字段作为查询参数，对应面板中每列一个输入框。文本列匹配片段（`?name=anch` 可找到 `rancher`），`status` 和 `enabled` 精确匹配，每个列表都带有一个 `id` 输入框，用于你只复制了一半的那一行。未知字段会返回 422 并列出存在的字段——被静默忽略的过滤比报错更糟。",
+        "排序是 `?sort=<column>&order=asc|desc`。可排序列对每个列表是封闭集合：网关按 `created_at`、`updated_at`、`name` 或 `slug`；流量按 `occurred_at`、`duration_ms`、`status` 或 `subject`；审计日志按 `occurred_at`、`actor` 或 `type`；成员按 `email` 和 `created_at`；角色按 `name` 和 `created_at`。未知的键会返回 422 并列出合法的键。",
+        "游标意味着*在此行之后，按此顺序*，因此它绑定于签发它的排序。更改 `sort` 或 `order` 后请从第一页开始：复用旧游标会得到 422，而不是一个静默有洞的列表。"
+      ],
+      "table": {
+        "head": [
+          "方法与路径",
+          "作用"
+        ],
+        "rows": [
+          [
+            "POST /api/auth/login",
+            "使用 email 和密码登录"
+          ],
+          [
+            "GET /api/auth/me",
+            "身份、租户、角色和扁平权限列表"
+          ],
+          [
+            "GET /api/gateways?slug=&name=&auth_mode=&enabled=",
+            "一页网关，最新的在前"
+          ],
+          [
+            "POST /api/gateways",
+            "创建一个（需要 `gateways:write`）"
+          ],
+          [
+            "GET /api/gateways/{id}/connect",
+            "为该网关生成可复制粘贴的指引"
+          ],
+          [
+            "PUT /api/gateways/{id}/auth",
+            "认证模式、IdP 凭据、上游令牌"
+          ],
+          [
+            "POST /api/gateways/{id}/keys",
+            "签发 API 密钥；明文只返回一次"
+          ],
+          [
+            "POST /api/gateways/{id}/keys/{kid}/rotate",
+            "原地轮换：旧密钥在同一次追加中失效"
+          ],
+          [
+            "GET /api/stats?minutes=60",
+            "该窗口及前一个等长窗口的总量，按结果、调用方 IP 和网关 slug、最忙的一分钟以及时间序列"
+          ],
+          [
+            "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
+            "一页请求日志；每个带过滤框的列都会收窄它"
+          ],
+          [
+            "GET /api/events?type=&aggregate=&actor=&since=&until=",
+            "一页审计日志"
+          ],
+          [
+            "GET /api/docs",
+            "本手册，作为数据（公开）"
+          ],
+          [
+            "POST /api/mcp/token",
+            "为 console MCP 签发只读令牌"
+          ],
+          [
+            "POST /api/config/validate",
+            "解析文档而不应用"
+          ],
+          [
+            "POST /api/config/apply",
+            "对账网关、角色和成员"
+          ],
+          [
+            "GET /api/config/export",
+            "将当前状态渲染为 YAML，不含密钥"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "console",
+      "title": "console MCP",
+      "body": [
+        "网关在 `/mcp` 暴露自己的只读 MCP 服务器，因此 agent 可以回答关于*本部署*的问题：存在哪些网关、过去一小时什么失败了、审计日志对某次角色变更说了什么。",
+        "它在构造上就是只读的——每个工具都是查询，没有一个是命令——并且以租户为范围：某个租户操作员签发的令牌只能读取该租户的行。",
+        "每个新租户都已经有一个指向它的网关。它随租户一起创建，名为 `console`，以上游为本部署自己的 `/mcp`，并为调用方准备一个 API 密钥——因此新租户要做的第一件事就是接入一个 agent，无需任何配置。它和其他网关一样：相同的认证、相同的速率限制，它的问题会和其他每次调用一样落在流量日志中。",
+        "在此功能之前存在的租户会在下次启动时获得相同的网关：回填会请求那些没有指向 `/mcp` 的网关行的租户，因此删除了自己网关的 owner 会保持删除状态。",
+        "连接方式与手工创建的网关完全相同：",
+        "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"gateway-console\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/g/console/mcp\",\n      \"headers\": { \"Authorization\": \"Bearer omgc_gateway_api_key\" }\n    }\n  }\n}\n```",
+        "密钥在租户创建时签发，并在网关页面上显示一次。如果泄漏就在那里轮换；如果你更愿意直接调用 `/mcp`，就删除该网关。",
+        "1. 签发令牌：用你的会话 cookie 调用 `POST /api/mcp/token`。明文只返回一次，与 API 密钥完全相同。",
+        "2. 让客户端指向它：",
+        "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"gateway-console\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/mcp\",\n      \"headers\": { \"Authorization\": \"Bearer omg_...\" }\n    }\n  }\n}\n```",
+        "3. 向它提问：*现在哪些网关在失败*、*给我看 rancher 网关最近 20 次被限流的调用*、*今天审计日志里有什么变化*。",
+        "令牌使用部署密钥签名，携带操作员 id 和签发时间，90 天后过期。通过轮换 `OMG_SESSION_SECRET` 来吊销它——这也会让所有人退出登录，所以如果这更要紧，请优先使用较短的过期时间。"
+      ],
+      "table": {
+        "head": [
+          "工具",
+          "回答"
+        ],
+        "rows": [
+          [
+            "search_docs",
+            "搜索本手册；返回匹配的章节及其文本"
+          ],
+          [
+            "list_gateways",
+            "租户中的网关，可按 slug、名称、认证模式过滤"
+          ],
+          [
+            "get_gateway",
+            "单个网关：策略、允许列表、密钥、统计、最近调用"
+          ],
+          [
+            "search_requests",
+            "请求日志，可按网关、结果、主体、工具、状态过滤"
+          ],
+          [
+            "search_events",
+            "审计日志，可按类型、聚合、操作者、时间过滤"
+          ],
+          [
+            "traffic_stats",
+            "某窗口的总量、按结果、按 IP 和按网关的计数"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ops",
+      "title": "运维",
+      "body": [
+        "日志在 stdout 上每行一个 JSON 对象，为 Loki / Grafana 构建。可用于构建仪表盘的有用字段：`event`、`gateway`、`subject`、`outcome`、`status`、`duration_ms`。用 `OMG_LOG_LEVEL` 设置级别。",
+        "```json\n{\"ts\":\"2026-11-02T11:04:14.538Z\",\"level\":\"info\",\"logger\":\"gateway\",\"msg\":\"proxy.request\",\"event\":\"proxy.request\",\"gateway\":\"rancher\",\"subject\":\"api-key:key_ab12\",\"outcome\":\"allowed\",\"status\":200,\"duration_ms\":18,\"ip\":\"203.0.113.7\"}\n```",
+        "速率限制在进程内：有 N 个副本时有效限制是 N 倍。对当前设计的单副本部署是正确的。",
+        "OAuth 代理状态（客户端注册、上游令牌、`jti` 映射）位于同一个 Postgres 中，静态加密，因此滚动发布不会让每个已连接的客户端退出登录。这部分已经是副本安全的；只有限流器不是。",
+        "状态是事件溯源的。每次变更都是一个仅追加的事件，读模型是其投影，这正是审计日志可信的原因，也让两个副本共享一个数据库而无需缓存一致性方案。",
+        "schema 在代码中版本化（`infrastructure/db/migrations.py`）：一个编号的步骤列表，记录在 `schema_migrations` 中。启动时应用此构建尚未应用的所有内容，因此升级是一次滚动发布，而不是手动 `psql` 会话。以 `rm_` 为前缀的表是读模型——事件日志的投影，可从中重建——而 `events` 就是日志本身。"
+      ],
+      "table": {
+        "head": [
+          "症状",
+          "通常是什么"
+        ],
+        "rows": [
+          [
+            "网关路由返回 503",
+            "没有客户端凭据的 OAuth 网关。按设计故障关闭"
+          ],
+          [
+            "每次调用都返回 401",
+            "上游令牌错误或未设置，或客户端的密钥已被轮换"
+          ],
+          [
+            "带着主体返回 403",
+            "网关有允许列表，而该主体不在其中"
+          ],
+          [
+            "429",
+            "该网关的每主体预算已用尽"
+          ],
+          [
+            "工具似乎挂起",
+            "网关前面的 ingress 有代理缓冲：将其关闭，调高读取超时"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "env",
+      "title": "环境变量",
+      "body": [
+        "登录配置是部署配置，不是租户配置：一个租户的 owner 绝不能改变所有人登录的方式。因此它来自环境，且没有对应的界面。"
+      ],
+      "table": {
+        "head": [
+          "变量",
+          "含义"
+        ],
+        "rows": [
+          [
+            "OMG_DATABASE_URL",
+            "Postgres DSN（必需）"
+          ],
+          [
+            "OMG_SESSION_SECRET",
+            "至少 32 字节（必需）"
+          ],
+          [
+            "OMG_BASE_URL",
+            "公开 URL；OAuth 重定向由此派生"
+          ],
+          [
+            "OMG_ADMIN_EMAIL / OMG_ADMIN_PASSWORD",
+            "可选的引导账号"
+          ],
+          [
+            "OMG_GOOGLE_CLIENT_ID / SECRET",
+            "面板自身的 Google 登录"
+          ],
+          [
+            "OMG_OPERATOR_ALLOWLIST",
+            "允许创建账号的地址，逗号分隔"
+          ],
+          [
+            "OMG_LOG_LEVEL",
+            "默认 `info`"
+          ],
+          [
+            "OMG_CONFIG_FILE",
+            "启动时应用的可选 YAML"
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -10,16 +10,22 @@ from typing import Any
 from fastapi import APIRouter
 
 from gateway.console.tokens import TOKEN_TTL_SECONDS, mint
-from gateway.docs_content import sections
+from gateway.docs_content import LANGUAGES, normalise, sections
 from gateway.interface.dependencies import ContainerDep, PrincipalDep
 
 router = APIRouter()
 
 
 @router.get("/docs")
-async def docs() -> dict[str, Any]:
-    """The manual, as data. Same text the panel renders and the console searches."""
-    return {"sections": list(sections())}
+async def docs(lang: str = "") -> dict[str, Any]:
+    """The manual, as data. Same text the panel renders and the console searches.
+
+    `lang` is a preference, not a parameter that can fail: an unknown code gets
+    the English manual, because the one page a stranger reads before signing in
+    should never be an error.
+    """
+    code = normalise(lang)
+    return {"lang": code, "languages": list(LANGUAGES), "sections": list(sections(code))}
 
 
 @router.post("/mcp/token", status_code=201)

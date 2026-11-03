@@ -97,9 +97,16 @@ def build_console(container: Container, secret: str) -> FastMCP:
         )
 
     @server.tool
-    async def search_docs(query: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Search this project's manual. Use it before guessing how anything works."""
-        return search_docs_content(query, limit)
+    async def search_docs(
+        query: str, limit: int = 5, lang: str = "en"
+    ) -> list[dict[str, Any]]:
+        """Search this project's manual. Use it before guessing how anything works.
+
+        `lang` picks which translation to search: en, pt, es, zh or ru. The text
+        is matched, not translated on the way out, so a Portuguese question gets
+        Portuguese paragraphs and an unknown code gets English.
+        """
+        return search_docs_content(query, limit, lang)
 
     @server.tool
     async def list_gateways(

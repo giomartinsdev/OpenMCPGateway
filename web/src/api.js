@@ -99,7 +99,8 @@ export const api = {
   // every other key is a filter field the endpoint declares.
   requests: (params) => call("GET", `/requests?${query(params)}`),
   events: (params) => call("GET", `/events?${query(params)}`),
-  docs: () => call("GET", "/docs"),
+  // The manual is served per language; an unknown code gets English.
+  docs: (lang) => call("GET", `/docs${lang ? `?lang=${lang}` : ""}`),
   // A read-only token for the console MCP; the plaintext is returned once.
   mintConsoleToken: () => call("POST", "/mcp/token"),
 

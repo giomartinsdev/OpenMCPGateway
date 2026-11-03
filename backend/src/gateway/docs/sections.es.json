@@ -1,0 +1,396 @@
+{
+  "sections": [
+    {
+      "id": "overview",
+      "title": "Qué es esto",
+      "body": [
+        "OpenMCPGateway se sitúa delante de uno o varios servidores MCP. Los clientes apuntan a `https://<host>/g/<slug>/mcp`; el gateway autentica al llamante, aplica una lista de permitidos y un presupuesto por minuto, reenvía la petición al servidor real por la red privada y registra lo que ha ocurrido.",
+        "El upstream no necesita ser accesible desde internet, y no necesita saber quién es el llamante: el gateway termina la identidad y reenvía su propia credencial cuando el upstream exige una (`upstream_token`).",
+        "El panel responde las mismas preguntas con la misma forma: la pantalla Traffic lleva totales con la variación respecto a la ventana anterior, un gráfico de volumen y desgloses por resultado, gateway y llamante — y una fila de cualquier tabla abre un cajón con el resto de esa fila en lugar de navegar fuera de la lista."
+      ],
+      "table": {
+        "head": [
+          "Capa",
+          "Comportamiento"
+        ],
+        "rows": [
+          [
+            "Autenticación",
+            "Proxy OAuth por gateway (Google, GitHub, Microsoft, Discord, OIDC personalizado) o una clave bearer hasheada con SHA-256"
+          ],
+          [
+            "Autorización",
+            "Lista de permitidos opcional de sujetos. Vacía significa cualquier llamante autenticado"
+          ],
+          [
+            "Límite de tasa",
+            "Por sujeto, por gateway, contando peticiones JSON-RPC. Los handshakes son gratis"
+          ],
+          [
+            "Observabilidad",
+            "Cada intento registrado: sujeto, resultado, estado, latencia, IP"
+          ],
+          [
+            "Fallo cerrado",
+            "Un gateway OAuth sin credenciales responde 503, nunca como proxy abierto"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "quickstart",
+      "title": "Inicio rápido",
+      "body": [
+        "Necesita un Postgres accesible desde el gateway y un nombre de host que termine TLS delante de él.",
+        "```bash\n# 1. run it\nexport OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg\nexport OMG_SESSION_SECRET=$(openssl rand -hex 32)\nexport OMG_BASE_URL=https://gateway.example.com\nomg serve\n\n# 2. create the first account, then a tenant, in the browser\nopen https://gateway.example.com\n```",
+        "La primera cuenta crea un tenant y pasa a ser su `owner`. El resto o bien se une con el código de unión del tenant o lo añade un administrador.",
+        "El tenant llega con un gateway `console` ya apuntando al MCP de solo lectura de este propio despliegue. Apunte un agente a `/g/console/mcp` con la clave de API de su página y pregúntele qué está haciendo el despliegue — sin upstream que configurar.",
+        "Apunte un cliente a un gateway en cuanto exista uno:",
+        "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"my-server\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/g/my-server/mcp\"\n    }\n  }\n}\n```"
+      ]
+    },
+    {
+      "id": "gateways",
+      "title": "Gateways",
+      "body": [
+        "Un gateway es un slug, una URL de upstream y una política. El slug es global: `/g/<slug>/mcp` es la cadena que la gente pega en los clientes, así que dos tenants no pueden poseer ambos `rancher`.",
+        "Hay un gateway creado por usted: `console`, apuntando al MCP de solo lectura de este propio despliegue. El slug es global porque `/g/<slug>/mcp` es una URL pública, así que en un despliegue con varios tenants el primero toma `console` y los demás toman `console-<tenant id>` — el id, no un contador, para que la dirección siga diciendo de quién es el gateway.",
+        "`target_url` es el endpoint streamable-HTTP del upstream, incluida su ruta (`http://rancher-mcp.support.svc.cluster.local:8000/mcp`). Debe ser `http://` o `https://`."
+      ],
+      "table": {
+        "head": [
+          "Campo",
+          "Significado"
+        ],
+        "rows": [
+          [
+            "slug",
+            "`[a-z0-9-]+`, 2-40 caracteres. Aparece en la ruta pública"
+          ],
+          [
+            "target_url",
+            "Endpoint MCP del upstream, incluida la ruta"
+          ],
+          [
+            "auth_mode",
+            "`none`, `api_key` u `oauth`"
+          ],
+          [
+            "idp",
+            "Con `oauth`: `github`, `google`, `azure`, `discord` u `oidc`"
+          ],
+          [
+            "upstream_token",
+            "Bearer que exige el upstream. Solo escritura: nunca lo devuelve la API"
+          ],
+          [
+            "rate_limit",
+            "Peticiones por minuto por sujeto. `0` significa ilimitado"
+          ],
+          [
+            "enabled",
+            "Un gateway deshabilitado responde 404, no 403 - no se anuncia"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "auth",
+      "title": "Modos de autenticación",
+      "body": [
+        "**`none`** - sin autenticación. Correcto en una red privada; el panel avisa mientras haya habilitado un gateway así.",
+        "**`api_key`** - el llamante envía `Authorization: Bearer omg_...`. Las claves se guardan como hashes SHA-256 y se muestran en texto plano exactamente una vez, en la respuesta que las emitió.",
+        "**`oauth`** - el gateway es su propio servidor de recursos OAuth. Un cliente sin token recibe un `401` con `WWW-Authenticate: Bearer resource_metadata=...`; descubre los documentos de metadatos, se registra y abre un navegador. El operador aprueba una vez, y el sujeto queda en la lista de permitidos a partir de entonces.",
+        "El cliente no necesita un token metido en un dotfile para el modo OAuth — de eso se trata. Para el modo API-key sí lo necesita, y por eso la clave es por gateway y revocable por sí sola.",
+        "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
+      ]
+    },
+    {
+      "id": "rbac",
+      "title": "Miembros y roles",
+      "body": [
+        "Todo está acotado a un tenant: gateways, miembros, roles, tráfico, el registro de auditoría. Un id de otro tenant es un 404, no un 403 que confirma que existe.",
+        "Los permisos son un catálogo cerrado. Una errata se rechaza con un 422 que nombra el campo, porque la alternativa es un rol que no concede nada y no dice nada."
+      ],
+      "table": {
+        "head": [
+          "Permiso",
+          "Concede"
+        ],
+        "rows": [
+          [
+            "gateways:read / write",
+            "Ver la lista de gateways, y cambiar slugs, destinos, autenticación y límites"
+          ],
+          [
+            "keys:read / write",
+            "Ver los ids de las claves, y emitirlas, rotarlas o revocarlas"
+          ],
+          [
+            "traffic:read",
+            "Leer estadísticas de peticiones y el registro de peticiones recientes"
+          ],
+          [
+            "audit:read",
+            "Leer el registro de eventos de solo adición"
+          ],
+          [
+            "config:read / write",
+            "Exportar y aplicar el archivo YAML"
+          ],
+          [
+            "members:read / write",
+            "Ver la libreta de direcciones, y añadir personas"
+          ],
+          [
+            "roles:read / write",
+            "Ver la tabla de roles, y definir o editar roles"
+          ]
+        ]
+      },
+      "bodyAfter": [
+        "Hay dos roles integrados que no se pueden editar ni borrar, porque ninguno es una decisión de política:",
+        "| Rol | Id | Permisos |\n| --- | --- | --- |\n| `owner` | `role_owner` | todo |\n| `viewer` | `role_viewer` | todos los permisos de lectura |",
+        "Un miembro añadido sin rol cae en `viewer`: una omisión estrecha el acceso, nunca lo amplía. La delegación también solo puede estrechar — nadie puede conceder un permiso que no tiene él mismo, o `members:write` sería un camino a `role_owner`. La misma regla se aplica al archivo de configuración.",
+        "Los permisos se resuelven por petición desde los read models, así que editar un rol o reasignar a alguien surte efecto en su siguiente clic. Sin volver a iniciar sesión, sin sesión obsoleta."
+      ]
+    },
+    {
+      "id": "config",
+      "title": "Configuración como código",
+      "body": [
+        "El panel y un archivo YAML son dos puertas de entrada al mismo manejador de comandos. Ninguno es privilegiado: un gateway creado en el navegador se exporta al archivo, y un archivo aplicado por CI llega al mismo registro de eventos que un clic.",
+        "`gateways`, `roles` y `members` se declaran todos en el archivo, así que un tenant se puede reconstruir desde un commit. Los secretos nunca se exportan — escriba `${ENV_VAR}` y el servidor lo resuelve desde su propio entorno en el momento de aplicar.",
+        "```yaml\n# gateways.yaml\ngateways:\n  - slug: rancher\n    name: Rancher cluster\n    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp\n    description: read the cluster, restart and scale\n    auth:\n      mode: oauth\n      idp: google\n      client_id: ${GOOGLE_CLIENT_ID}\n      client_secret: ${GOOGLE_CLIENT_SECRET}\n      upstream_token: ${RANCHER_MCP_TOKEN}\n    rate_limit: 120\n    allow: [someone@example.com]\n\nroles:\n  - name: Auditor\n    permissions: [gateways:read, traffic:read, audit:read]\n\nmembers:\n  - email: auditor@example.com\n    password: ${MEMBER_PASSWORD}\n    roles: [Auditor]\n\nprune: false\n```",
+        "Semántica de fusión: el archivo es autoritativo sobre lo que declara. Un gateway omitido del archivo sobrevive, así que una errata no puede borrar producción. `prune: true` opta por el borrado — se aplica solo a gateways; los miembros nunca se purgan por omisión, porque una cuenta que desaparece de un archivo es mucho más probable que sea un accidente de fusión que una intención.",
+        "Los miembros se reconcilian por email: a un miembro existente cuyos roles difieren se le reemplazan, y al que coincide se le deja igual. `password` solo se usa cuando la cuenta aún no existe, así que aparece en un archivo revisado como `${MEMBER_PASSWORD}` y nunca en una exportación — que es también por qué exportar y volver a aplicar es una no-op. Una cuenta nueva sin contraseña se rechaza, porque inventarla sería una credencial con la que nadie puede iniciar sesión.",
+        "Un rol cuyo nombre coincide con uno integrado (`owner`, `viewer`) puede nombrarse pero no redefinirse: de lo contrario el archivo estrecharía a todos los miembros existentes a la vez."
+      ],
+      "bodyAfter": [
+        "```bash\n# round-trip from the shell\nomg export --tenant tn_local > gateways.yaml\nomg apply gateways.yaml --tenant tn_local\n```",
+        "`omg apply` imprime lo que cambió y cualquier error, y sale con código distinto de cero cuando una declaración falló — que es lo que lo hace usable en CI. Las claves de API recién emitidas se imprimen una vez, porque es la única vez que existe el texto plano.",
+        "La página Config as code del panel hace lo mismo: **Validate** analiza y resuelve los marcadores de posición sin tocar el estado, **Apply** ejecuta los comandos."
+      ]
+    },
+    {
+      "id": "api",
+      "title": "API HTTP",
+      "body": [
+        "Todo lo que hace el panel es un endpoint bajo `/api`, autenticado por una cookie de sesión `HttpOnly`. Las rutas MCP viven en `/g/<slug>/mcp` y hablan JSON-RPC, no esta API.",
+        "Cada lista está paginada por cursor: `?limit=50&before=<cursor>`, y responde `{items, next}`. `next` es null en la última página, y `limit` se recorta a 200 en lugar de rechazarse.",
+        "Cada lista acepta además sus propios campos de filtro como parámetros de consulta, una caja por columna en el panel. Las columnas de texto coinciden por fragmento (`?name=anch` encuentra `rancher`), `status` y `enabled` coinciden exactamente, y cada lista lleva una caja `id` para la fila que copió a medias. Un campo desconocido es un 422 que nombra los campos que existen — un filtro ignorado en silencio es peor que un error.",
+        "El orden es `?sort=<column>&order=asc|desc`. Las columnas ordenables son un conjunto cerrado por lista: gateways por `created_at`, `updated_at`, `name` o `slug`; traffic por `occurred_at`, `duration_ms`, `status` o `subject`; el registro de auditoría por `occurred_at`, `actor` o `type`; members por `email` y `created_at`; roles por `name` y `created_at`. Una clave desconocida es un 422 que enumera las legales.",
+        "Un cursor significa *después de esta fila, en este orden*, así que está ligado al orden con el que se emitió. Cambie `sort` u `order` y empiece por la primera página: reutilizar el cursor antiguo es un 422, no una lista con agujeros silenciosos."
+      ],
+      "table": {
+        "head": [
+          "Método y ruta",
+          "Hace"
+        ],
+        "rows": [
+          [
+            "POST /api/auth/login",
+            "Iniciar sesión con email y contraseña"
+          ],
+          [
+            "GET /api/auth/me",
+            "Identidad, tenant, roles y lista plana de permisos"
+          ],
+          [
+            "GET /api/gateways?slug=&name=&auth_mode=&enabled=",
+            "Una página de gateways, los más recientes primero"
+          ],
+          [
+            "POST /api/gateways",
+            "Crear uno (requiere `gateways:write`)"
+          ],
+          [
+            "GET /api/gateways/{id}/connect",
+            "Guía generada para copiar y pegar de ese gateway"
+          ],
+          [
+            "PUT /api/gateways/{id}/auth",
+            "Modo de autenticación, credenciales del IdP, token de upstream"
+          ],
+          [
+            "POST /api/gateways/{id}/keys",
+            "Emitir una clave de API; el texto plano se devuelve una vez"
+          ],
+          [
+            "POST /api/gateways/{id}/keys/{kid}/rotate",
+            "Rotar en sitio: la clave antigua muere en la misma adición"
+          ],
+          [
+            "GET /api/stats?minutes=60",
+            "Totales de la ventana y de la ventana igual anterior, por resultado, IP del llamante y slug de gateway, el minuto más cargado y la serie"
+          ],
+          [
+            "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
+            "Una página del registro de peticiones; cada columna con caja de filtro lo estrecha"
+          ],
+          [
+            "GET /api/events?type=&aggregate=&actor=&since=&until=",
+            "Una página del registro de auditoría"
+          ],
+          [
+            "GET /api/docs",
+            "Este manual, como datos (público)"
+          ],
+          [
+            "POST /api/mcp/token",
+            "Emitir un token de solo lectura para el MCP de consola"
+          ],
+          [
+            "POST /api/config/validate",
+            "Analizar un documento sin aplicarlo"
+          ],
+          [
+            "POST /api/config/apply",
+            "Reconciliar gateways, roles y miembros"
+          ],
+          [
+            "GET /api/config/export",
+            "Renderizar el estado actual como YAML, sin secretos"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "console",
+      "title": "El MCP de consola",
+      "body": [
+        "El gateway expone un servidor MCP de solo lectura propio en `/mcp`, para que un agente pueda responder preguntas sobre *este despliegue*: qué gateways existen, qué falló en la última hora, qué dice el registro de auditoría sobre un cambio de rol.",
+        "Es de solo lectura por construcción — cada herramienta es una consulta, ninguna es un comando — y está acotado al tenant: un token emitido por el operador de un tenant solo puede leer las filas de ese tenant.",
+        "Todo tenant nuevo ya tiene un gateway apuntando a él. Se crea con el tenant, llamado `console`, con el `/mcp` del propio despliegue como upstream y una clave de API para el llamante — así que lo primero que puede hacer un tenant nuevo es enchufar un agente sin configurar nada. Es un gateway como cualquier otro: misma autenticación, mismo límite de tasa, y sus preguntas llegan al registro de tráfico junto a cualquier otra llamada.",
+        "Los tenants que existían antes de esta función reciben el mismo gateway en el siguiente arranque: el backfill busca tenants sin ninguna fila de gateway que apunte a `/mcp`, así que un owner que borró el suyo lo mantiene borrado.",
+        "Conéctese a él exactamente igual que a un gateway hecho a mano:",
+        "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"gateway-console\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/g/console/mcp\",\n      \"headers\": { \"Authorization\": \"Bearer omgc_gateway_api_key\" }\n    }\n  }\n}\n```",
+        "La clave se emite al crear el tenant y se muestra una vez, en la página del gateway. Rótela allí si se filtra; borre el gateway si prefiere llamar a `/mcp` directamente.",
+        "1. Emita un token: `POST /api/mcp/token` con su cookie de sesión. El texto plano se devuelve una vez, exactamente igual que una clave de API.",
+        "2. Apunte un cliente a él:",
+        "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"gateway-console\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/mcp\",\n      \"headers\": { \"Authorization\": \"Bearer omg_...\" }\n    }\n  }\n}\n```",
+        "3. Pregúntele cosas: *qué gateways están fallando ahora mismo*, *muéstrame las últimas 20 llamadas limitadas por tasa del gateway rancher*, *qué cambió hoy en el registro de auditoría*.",
+        "El token se firma con el secreto del despliegue, lleva el id del operador y la hora de emisión, y caduca a los 90 días. Revóquelo rotando `OMG_SESSION_SECRET` — lo que además cierra la sesión de todos, así que prefiera una caducidad corta si eso importa más."
+      ],
+      "table": {
+        "head": [
+          "Herramienta",
+          "Responde"
+        ],
+        "rows": [
+          [
+            "search_docs",
+            "Buscar en este manual; devuelve las secciones coincidentes con su texto"
+          ],
+          [
+            "list_gateways",
+            "Gateways del tenant, filtrables por slug, nombre y modo de autenticación"
+          ],
+          [
+            "get_gateway",
+            "Un gateway: política, lista de permitidos, claves, estadísticas, llamadas recientes"
+          ],
+          [
+            "search_requests",
+            "El registro de peticiones, filtrable por gateway, resultado, sujeto, herramienta y estado"
+          ],
+          [
+            "search_events",
+            "El registro de auditoría, filtrable por tipo, agregado, actor y tiempo"
+          ],
+          [
+            "traffic_stats",
+            "Totales, recuentos por resultado, por IP y por gateway para una ventana"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ops",
+      "title": "Operarlo",
+      "body": [
+        "Los logs son un objeto JSON por línea en stdout, construidos para Loki / Grafana. Campos útiles sobre los que construir dashboards: `event`, `gateway`, `subject`, `outcome`, `status`, `duration_ms`. Fije el nivel con `OMG_LOG_LEVEL`.",
+        "```json\n{\"ts\":\"2026-11-02T11:04:14.538Z\",\"level\":\"info\",\"logger\":\"gateway\",\"msg\":\"proxy.request\",\"event\":\"proxy.request\",\"gateway\":\"rancher\",\"subject\":\"api-key:key_ab12\",\"outcome\":\"allowed\",\"status\":200,\"duration_ms\":18,\"ip\":\"203.0.113.7\"}\n```",
+        "El límite de tasa es en proceso: con N réplicas el límite efectivo es N veces. Correcto para un despliegue de una sola réplica, que es el diseño actual.",
+        "El estado del proxy OAuth (registros de clientes, tokens de upstream, mapeos de `jti`) vive en el mismo Postgres, cifrado en reposo, así que un despliegue no desconecta a todos los clientes conectados. Esa parte ya es segura entre réplicas; solo el limitador no lo es.",
+        "El estado está basado en eventos. Cada cambio es un evento de solo adición y los read models son proyecciones de él, que es lo que hace fiable el registro de auditoría y permite que dos réplicas compartan una base de datos sin una historia de coherencia de caché.",
+        "El esquema está versionado en código (`infrastructure/db/migrations.py`): una lista numerada de pasos, registrada en `schema_migrations`. El arranque aplica todo lo que esta build aún no ha aplicado, así que una actualización es un despliegue, no una sesión manual de `psql`. Las tablas con prefijo `rm_` son read models — proyecciones del registro de eventos, reconstruibles a partir de él — y `events` es el propio registro."
+      ],
+      "table": {
+        "head": [
+          "Síntoma",
+          "Qué suele ser"
+        ],
+        "rows": [
+          [
+            "503 en una ruta de gateway",
+            "Un gateway OAuth sin credenciales de cliente. Fallo cerrado, por diseño"
+          ],
+          [
+            "401 en cada llamada",
+            "El token de upstream es incorrecto o no está puesto, o la clave del cliente fue rotada"
+          ],
+          [
+            "403 con un sujeto",
+            "El gateway tiene lista de permitidos y este sujeto no está en ella"
+          ],
+          [
+            "429",
+            "Presupuesto por sujeto agotado para ese gateway"
+          ],
+          [
+            "Las herramientas parecen colgarse",
+            "Buffering del proxy en el ingress delante del gateway: desactívelo, suba el timeout de lectura"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "env",
+      "title": "Entorno",
+      "body": [
+        "La configuración de inicio de sesión es configuración del despliegue, no del tenant: un owner de un tenant nunca debe poder cambiar cómo inicia sesión todo el mundo. Por eso viene del entorno, y no hay pantalla para ello."
+      ],
+      "table": {
+        "head": [
+          "Variable",
+          "Significado"
+        ],
+        "rows": [
+          [
+            "OMG_DATABASE_URL",
+            "DSN de Postgres (obligatorio)"
+          ],
+          [
+            "OMG_SESSION_SECRET",
+            "Al menos 32 bytes (obligatorio)"
+          ],
+          [
+            "OMG_BASE_URL",
+            "URL pública; la redirección OAuth se deriva de ella"
+          ],
+          [
+            "OMG_ADMIN_EMAIL / OMG_ADMIN_PASSWORD",
+            "Cuenta de arranque opcional"
+          ],
+          [
+            "OMG_GOOGLE_CLIENT_ID / SECRET",
+            "Inicio de sesión con Google para el propio panel"
+          ],
+          [
+            "OMG_OPERATOR_ALLOWLIST",
+            "Direcciones separadas por comas que pueden crear una cuenta"
+          ],
+          [
+            "OMG_LOG_LEVEL",
+            "`info` por defecto"
+          ],
+          [
+            "OMG_CONFIG_FILE",
+            "YAML opcional aplicado en el arranque"
+          ]
+        ]
+      }
+    }
+  ]
+}

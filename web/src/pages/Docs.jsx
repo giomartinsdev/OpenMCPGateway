@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { useT } from "../i18n.jsx";
+import { useI18n, useT } from "../i18n.jsx";
 import { Bone, Notice } from "../ui.jsx";
 
 /** Split `code fences` out of prose so they render as blocks, not inline text. */
@@ -73,16 +73,30 @@ function Table({ table }) {
 
 export function Docs({ signedIn = false }) {
   const t = useT();
+  const { lang } = useI18n();
   const [sections, setSections] = useState(null);
   const [error, setError] = useState("");
   const [active, setActive] = useState("");
 
+  // The manual is deployment content, so it is fetched per language rather than
+  // translated in the browser: one copy of the prose, on the server, that the
+  // console MCP searches too.
   useEffect(() => {
-    api.docs().then(
-      (data) => setSections(data.sections),
-      (err) => setError(err.message),
+    let cancelled = false;
+    setSections(null);
+    setError("");
+    api.docs(lang).then(
+      (data) => {
+        if (!cancelled) setSections(data.sections);
+      },
+      (err) => {
+        if (!cancelled) setError(err.message);
+      },
     );
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
 
   // Highlight the section you are reading, not the one you clicked. The
   // observer's rootMargin leaves the top third of the viewport as "current".

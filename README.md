@@ -226,8 +226,16 @@ English rather than blank, and there is no second naming scheme to keep in sync.
 relative times and `toLocaleString` follow the same choice. The default is the
 browser's language, falling back to English.
 
-The manual itself stays in English: it is generated content served by the
-deployment (`sections.json`), not page chrome.
+The manual is translated too, but not in the browser: `GET /api/docs?lang=pt`
+answers the whole document in that language, from `sections.<code>.json` next to
+the English `sections.json`. The panel refetches when the language changes, and
+the console MCP's `search_docs` takes the same `lang` — so the paragraphs an
+agent reads are the paragraphs a reader sees, not a second copy. An unknown code
+falls back to English, because the one page a stranger reads before signing in
+should never be an error. The five files are the English manual translated, with
+the same section ids, paragraph counts and table shapes; `python -m
+gateway.docs_check` fails the build if a translation drops a section or mangles a
+code fence.
 
 ## Calling a gateway
 
@@ -344,8 +352,9 @@ permission it does not hold itself.
 gateway field, auth modes, the config-as-code schema, the HTTP API, the console
 MCP, environment variables and a troubleshooting table. It is reachable signed
 out, and linked from the landing page. The copy lives in
-`backend/src/gateway/docs/sections.json` and is served by `GET /api/docs`, so the
-panel and the console MCP read the same text.
+`backend/src/gateway/docs/sections.json` — plus one `sections.<code>.json` per
+language — and is served by `GET /api/docs?lang=xx`, so the panel and the console
+MCP read the same text in the same language.
 
 ## Schema
 

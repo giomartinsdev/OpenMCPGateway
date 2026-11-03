@@ -78,6 +78,31 @@ test("a translated language reaches the panel, not just the landing page", async
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 
+test("the manual follows the language, body and all", async ({ page }) => {
+  // The page chrome was already translated; the manual is deployment content, so
+  // this is the assertion that the two halves agree.
+  await page.goto("/#/docs");
+  await expect(page.getByRole("heading", { level: 1, name: "The manual" })).toBeVisible();
+  await expect(page.locator(".docs-section").first()).toContainText("MCP servers");
+
+  await page.getByLabel("Language").selectOption("pt");
+  await expect(page.getByRole("heading", { level: 1, name: "O manual" })).toBeVisible();
+  await expect(page.locator(".docs-section").first()).toContainText("servidores MCP");
+  // Same sections, translated: a section that failed to load would leave this
+  // count short, and a stale English fetch would leave the heading wrong.
+  expect(await page.locator(".docs-section").count()).toBeGreaterThanOrEqual(10);
+  await expect(page.locator(".docs-toc a")).toHaveCount(
+    await page.locator(".docs-section").count(),
+  );
+
+  await page.getByLabel("Idioma").selectOption("ru");
+  await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("The manual");
+  await expect(page.locator(".docs-section").first()).toContainText("MCP");
+
+  await page.getByLabel("Язык").selectOption("en");
+  await expect(page.getByRole("heading", { level: 1, name: "The manual" })).toBeVisible();
+});
+
 test("the theme switch flips the palette and remembers it", async ({ page }) => {
   await page.goto("/");
   const html = page.locator("html");

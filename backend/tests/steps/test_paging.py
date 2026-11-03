@@ -493,6 +493,33 @@ def read_manual(owner: httpx.Client) -> dict:
     assert response.status_code == 200, response.text
     return response.json()
 
+@when(parsers.parse('anyone reads the manual in "{language}"'), target_fixture="manual")
+def read_manual_in(owner: httpx.Client, language: str) -> dict:
+    response = owner.get("/api/docs", params={"lang": language})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+@then(parsers.parse('the manual is served in "{language}"'))
+def manual_language(manual: dict, language: str) -> None:
+    assert manual["lang"] == language, manual["lang"]
+
+@then("the manual is not the English one")
+def manual_differs(owner: httpx.Client, manual: dict) -> None:
+    english = owner.get("/api/docs").json()["sections"]
+    assert [s["title"] for s in manual["sections"]] != [s["title"] for s in english]
+    # Same shape, so a translated manual cannot lose a section or a table.
+    assert [s["id"] for s in manual["sections"]] == [s["id"] for s in english]
+    assert all(
+        len(a.get("body") or []) == len(b.get("body") or [])
+        for a, b in zip(manual["sections"], english, strict=True)
+    )
+
+@then(parsers.parse('the console searches the "{language}" manual for "{query}"'))
+def manual_searchable_in(language: str, query: str) -> None:
+    from gateway.docs_content import search
+
+    assert search(query, lang=language), query
+
 
 @then(parsers.parse("the manual has at least {count:d} sections"))
 def manual_sections(manual: dict, count: int) -> None:

@@ -145,6 +145,42 @@ Feature: Cursor pagination and filtering on every list
     Then the manual has at least 10 sections
     And the console searches the manual for "oauth"
 
+  # The manual is the one page a stranger reads before signing in, in the
+  # language they arrived in. It is fetched per language rather than translated
+  # in the browser, so the paragraphs an agent searches are the paragraphs a
+  # reader sees.
+  Scenario: The manual is served in the reader's language
+    When anyone reads the manual in "pt"
+    Then the manual is served in "pt"
+    And the manual is not the English one
+
+  # A language tag carries a region; the manual is per language, so the region
+  # is dropped rather than treated as an unknown code.
+  Scenario Outline: A regional tag resolves to its language
+    When anyone reads the manual in "<language>"
+    Then the manual is served in "<resolved>"
+
+    Examples:
+      | language | resolved |
+      | pt-BR    | pt       |
+      | zh-CN    | zh       |
+      | es-419   | es       |
+
+  Scenario Outline: An unknown language falls back to English
+    When anyone reads the manual in "<language>"
+    Then the manual is served in "en"
+
+    Examples:
+      | language |
+      | xx       |
+      | klingon  |
+
+  # A translated manual is only worth shipping if the console can search it:
+  # both consumers read the same file, per language.
+  Scenario: The console searches the translated manual
+    When anyone reads the manual in "pt"
+    Then the console searches the "pt" manual for "gateway"
+
   Scenario: A token signed with another secret is refused
     When anyone presents a console token signed with another secret
     Then the console refuses the request
