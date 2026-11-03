@@ -17,8 +17,9 @@ test("the landing page links to the manual, and the manual renders signed out", 
   await expect(page.getByRole("heading", { level: 1, name: "The manual" })).toBeVisible();
   // The table of contents is generated from the same list as the sections, so
   // one without the other is impossible; both being non-empty is the assertion.
-  await expect(page.locator(".docs-section")).toHaveCount(9);
-  await expect(page.locator(".docs-toc a")).toHaveCount(9);
+  const sections = await page.locator(".docs-section").count();
+  expect(sections).toBeGreaterThanOrEqual(10);
+  await expect(page.locator(".docs-toc a")).toHaveCount(sections);
 
   await page.goto("/#/config");
   await expect(page.getByRole("heading", { name: "The manual" })).toBeVisible();
@@ -30,8 +31,8 @@ test("the bar groups navigation and survives a narrow viewport", async ({ page }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: /^create account$/i }).click();
   await page.getByLabel("Tenant name").fill("Docs Co");
   await page.getByRole("button", { name: "Create tenant" }).click();

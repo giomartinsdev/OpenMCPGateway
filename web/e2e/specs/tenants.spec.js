@@ -12,8 +12,8 @@ test.describe.configure({ mode: "serial" });
 async function register(page, account) {
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
-  await page.getByLabel("Email").fill(account.email);
-  await page.getByLabel("Password").fill(account.password);
+  await page.getByLabel("Email", { exact: true }).fill(account.email);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
   await page.getByRole("button", { name: /^create account$/i }).click();
   await expect(page.getByRole("heading", { name: "Create a tenant" })).toBeVisible();
 }
@@ -26,8 +26,8 @@ async function signIn(page, account) {
     fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }),
   );
   await page.goto("/");
-  await page.getByLabel("Email").fill(account.email);
-  await page.getByLabel("Password").fill(account.password);
+  await page.getByLabel("Email", { exact: true }).fill(account.email);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
   await page.getByRole("button", { name: /^sign in$/i }).click();
 }
 

@@ -1,11 +1,12 @@
 """Members: who belongs, adding an account, and replacing someone's roles."""
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
 
-from gateway.application.services import members
+from gateway.application.services import listing
 from gateway.application.services.roles import RoleCatalog
+from gateway.domain.filters import MEMBER_FILTERS
 from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
 from gateway.interface.dependencies import (
     CanReadMembers,
@@ -13,16 +14,29 @@ from gateway.interface.dependencies import (
     PrincipalDep,
     permits,
 )
+from gateway.interface.listing import PageQuery, filters
 from gateway.interface.schemas import OperatorCreateRequest, RoleAssignRequest
 
 router = APIRouter()
 
 
 @router.get("/operators")
-async def list_operators(session: CanReadMembers, principal: PrincipalDep,
-                         container: ContainerDep) -> dict[str, Any]:
+async def list_operators(
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadMembers,
+    principal: PrincipalDep,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    """A page of the address book, ordered by email. Filter by `email`."""
     del session
-    return {"operators": await members.members(container, principal.caller)}
+    result = await listing.members(
+        container,
+        principal.caller,
+        window=page.window,
+        filters=filters(request, MEMBER_FILTERS),
+    )
+    return {"operators": result.items, "next": result.next}
 
 
 @router.post("/operators", status_code=201)

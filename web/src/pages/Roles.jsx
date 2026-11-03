@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
 import {
   Badge, Card, Empty, Notice, Skeleton, SAMPLE_ROLES, can,
 } from "../ui.jsx";
@@ -9,8 +10,17 @@ import {
 // tenant's own.
 export function Roles({ me }) {
   const canWrite = can(me, "roles:write");
-  const [roles, setRoles] = useState(null);
   const [catalog, setCatalog] = useState([]);
+  const [filters, setFilters] = useState({});
+  const {
+    items: roles, next, busy: listBusy, more, reload,
+  } = usePagedList(
+    async ({ limit, before, ...fields }) => {
+      const page = await api.roles({ limit, before, ...fields });
+      return { items: page.roles, next: page.next };
+    },
+    filters,
+  );
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
   const [editing, setEditing] = useState(null); // {id, name, permissions}
@@ -18,8 +28,8 @@ export function Roles({ me }) {
 
   async function load() {
     try {
-      const data = await api.roles();
-      setRoles(data.roles);
+      // One row is enough to read the catalog, which does not page.
+      const data = await api.roles({ limit: 1 });
       setCatalog(data.permissions);
     } catch (err) {
       setError(err.message);
@@ -57,7 +67,7 @@ export function Roles({ me }) {
       else await api.defineRole(editing.name, editing.permissions);
       setEditing(null);
       setBanner({ kind: "ok", text: "Saved. Members holding this role see it on their next click." });
-      load();
+      reload();
     } catch (err) {
       setBanner({ kind: "err", text: err.message });
     } finally {
@@ -70,7 +80,7 @@ export function Roles({ me }) {
     try {
       await api.deleteRole(role.id);
       setBanner({ kind: "ok", text: `Deleted "${role.name}".` });
-      load();
+      reload();
     } catch (err) {
       setBanner({ kind: "err", text: err.message });
     }
@@ -152,6 +162,11 @@ export function Roles({ me }) {
                     <th className="num">Holders</th>
                     <th />
                   </tr>
+                  <FilterRow
+                    fields={[{ key: "name", label: "Role" }, null, null, null]}
+                    value={filters}
+                    onChange={setFilters}
+                  />
                 </thead>
                 <tbody>
                   {rows.map((role) => (
@@ -195,6 +210,7 @@ export function Roles({ me }) {
             </div>
           )}
         </Skeleton>
+        <LoadMore next={next} busy={listBusy} onClick={more} />
         <p className="hint" style={{ marginBottom: 0, marginTop: 12 }}>
           A permission outside the catalog is refused when you save: a typo would
           otherwise be a role that grants nothing and says nothing.

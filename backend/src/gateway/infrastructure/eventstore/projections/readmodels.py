@@ -6,12 +6,15 @@ proxy hot path and the panel both go through this class so there is exactly one
 statement of "what the current state is".
 """
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select, update
 
 from gateway.domain.events import OperatorRegistered
+from gateway.domain.filters import Clause
+from gateway.domain.paging import Window, cut
 from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
 from gateway.domain.readmodels import (
     ApiKeyRow,
@@ -25,6 +28,7 @@ from gateway.domain.readmodels import (
     TrafficStats,
 )
 from gateway.infrastructure.db.database import Database
+from gateway.infrastructure.db.query import paged, predicates
 from gateway.infrastructure.db.tables import (
     events,
     rm_api_keys,
@@ -40,6 +44,24 @@ from gateway.infrastructure.db.tables import (
 # --------------------------------------------------------------------------
 # Queries against read models
 # --------------------------------------------------------------------------
+
+
+def _operator(row: dict[str, Any]) -> OperatorRow:
+    """The table column is `id`; the row's field is `operator_id`.
+
+    One function for both the paged and the unpaged read so the fallback from
+    "no roles assigned" to the default set cannot differ between the two.
+    """
+    return OperatorRow(
+        operator_id=row["id"],
+        email=row["email"],
+        tenant_id=row["tenant_id"],
+        is_admin=row["is_admin"],
+        role_ids=tuple(row["role_ids"] or ())
+        or ((OWNER_ROLE,) if row["is_admin"] else DEFAULT_ROLE_IDS),
+        created_at=row["created_at"],
+    )
+
 
 class ReadModels:
     """The query side. Returns typed rows that serialize straight to JSON."""
@@ -60,6 +82,31 @@ class ReadModels:
                 )
             ).mappings()
             return [GatewayRow.model_validate(dict(row)) for row in rows]
+
+    async def page_gateways(
+        self,
+        tenant_id: str,
+        *,
+        window: Window | None = None,
+        clauses: Iterable[Clause] = (),
+    ) -> tuple[list[GatewayRow], str | None]:
+        """A page of this tenant's gateways, newest first, plus the next cursor.
+
+        Ordered by `created_at` descending with the id as tiebreaker: a cursor
+        needs a total order, and two gateways created in the same second is the
+        normal case for a config apply.
+        """
+        page = window or Window.parse(None)
+        query = select(rm_gateways).where(
+            (rm_gateways.c.tenant_id == tenant_id) & rm_gateways.c.deleted.is_(False)
+        )
+        for predicate in predicates(rm_gateways, clauses):
+            query = query.where(predicate)
+        query = paged(query, rm_gateways, page, at="created_at", id="id")
+        async with self._db.session() as session:
+            rows = [dict(row) for row in (await session.execute(query)).mappings()]
+        items, next_cursor = cut(rows, page, at="created_at", id="id")
+        return [GatewayRow.model_validate(item) for item in items], next_cursor
 
     async def all_gateways(self) -> list[GatewayRow]:
         """Every live gateway, whoever owns it — the proxy's view.
@@ -191,10 +238,36 @@ class ReadModels:
             )
 
     async def request_tail(
-        self, gateway_id: str | None, limit: int = 100,
-        *, tenant_id: str | None = None,
+        self,
+        gateway_id: str | None,
+        limit: int = 100,
+        *,
+        tenant_id: str | None = None,
     ) -> list[RequestRow]:
+        """The newest `limit` requests, for "what just happened" summaries."""
+        rows, _next = await self.page_requests(
+            gateway_id, Window.parse(limit), tenant_id=tenant_id
+        )
+        return rows
+
+    async def page_requests(
+        self,
+        gateway_id: str | None,
+        window: Window,
+        *,
+        tenant_id: str | None = None,
+        clauses: Iterable[Clause] = (),
+    ) -> tuple[list[RequestRow], str | None]:
+        """A page of the request log, newest first, plus the next cursor.
+
+        Ordered by `(occurred_at, event_id)` descending. The id is part of the
+        order because a burst of requests shares a timestamp to the millisecond,
+        and a page boundary inside that burst would otherwise repeat or drop
+        rows.
+        """
+        page = window
         query = select(
+            rm_requests_tail.c.event_id,
             rm_requests_tail.c.gateway_id,
             rm_requests_tail.c.subject,
             rm_requests_tail.c.outcome,
@@ -211,13 +284,42 @@ class ReadModels:
             query = query.where(
                 rm_requests_tail.c.gateway_id.in_(_tenant_gateways(tenant_id))
             )
+        for predicate in predicates(rm_requests_tail, clauses):
+            query = query.where(predicate)
+        query = paged(query, rm_requests_tail, page, at="occurred_at", id="event_id")
         async with self._db.session() as session:
-            rows = (
-                await session.execute(
-                    query.order_by(rm_requests_tail.c.occurred_at.desc()).limit(limit)
-                )
-            ).mappings()
-            return [RequestRow.model_validate(dict(row)) for row in rows]
+            rows = [dict(row) for row in (await session.execute(query)).mappings()]
+        items, next_cursor = cut(rows, page, at="occurred_at", id="event_id")
+        return [RequestRow.model_validate(item) for item in items], next_cursor
+
+    async def page_operators(
+        self,
+        tenant_id: str,
+        *,
+        window: Window,
+        clauses: Iterable[Clause] = (),
+    ) -> tuple[list[OperatorRow], str | None]:
+        """A page of the address book, ordered by email.
+
+        Email rather than `created_at`: this list is something people scan for a
+        name, and a cursor that matches the reading order is one the client can
+        ask "what comes after this row" about.
+        """
+        query = select(
+            rm_operators.c.id,
+            rm_operators.c.email,
+            rm_operators.c.tenant_id,
+            rm_operators.c.role_ids,
+            rm_operators.c.is_admin,
+            rm_operators.c.created_at,
+        ).where(rm_operators.c.tenant_id == tenant_id)
+        for predicate in predicates(rm_operators, clauses):
+            query = query.where(predicate)
+        query = paged(query, rm_operators, window, at="email", id="id")
+        async with self._db.session() as session:
+            rows = [dict(row) for row in (await session.execute(query)).mappings()]
+        items, next_cursor = cut(rows, window, at="email", id="id")
+        return [_operator(row) for row in items], next_cursor
 
     async def list_roles(self, tenant_id: str) -> list[RoleRow]:
         """This tenant's custom roles. Built-ins are added by the API layer."""
@@ -233,6 +335,25 @@ class ReadModels:
                 )
             ).mappings()
             return [RoleRow.model_validate(dict(row)) for row in rows]
+
+    async def page_roles(
+        self,
+        tenant_id: str,
+        *,
+        window: Window,
+        clauses: Iterable[Clause] = (),
+    ) -> tuple[list[RoleRow], str | None]:
+        """A page of this tenant's custom roles, ordered by name."""
+        query = select(rm_roles).where(
+            (rm_roles.c.tenant_id == tenant_id) & rm_roles.c.deleted.is_(False)
+        )
+        for predicate in predicates(rm_roles, clauses):
+            query = query.where(predicate)
+        query = paged(query, rm_roles, window, at="name", id="id")
+        async with self._db.session() as session:
+            rows = [dict(row) for row in (await session.execute(query)).mappings()]
+        items, next_cursor = cut(rows, window, at="name", id="id")
+        return [RoleRow.model_validate(row) for row in items], next_cursor
 
     async def role_permissions(
         self, tenant_id: str
@@ -303,18 +424,7 @@ class ReadModels:
                     .order_by(rm_operators.c.created_at)
                 )
             ).mappings()
-            return [
-                OperatorRow(
-                    operator_id=row["id"],
-                    email=row["email"],
-                    tenant_id=row["tenant_id"],
-                    is_admin=row["is_admin"],
-                    role_ids=tuple(row["role_ids"] or ())
-                    or ((OWNER_ROLE,) if row["is_admin"] else DEFAULT_ROLE_IDS),
-                    created_at=row["created_at"],
-                )
-                for row in rows
-            ]
+            return [_operator(dict(row)) for row in rows]
 
     async def backfill_legacy_operators(self, tenant_id: str) -> int:
         """Put pre-tenancy accounts into `tenant_id`. Returns how many moved.

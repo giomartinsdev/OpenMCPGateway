@@ -1,6 +1,22 @@
 // Thin fetch wrapper. Every call is same-origin; the session lives in an
 // HttpOnly cookie, so there is no token to store and nothing to leak to XSS.
 
+/**
+ * Query string from a params object, dropping blanks.
+ *
+ * A blank filter input is an absent filter, not `field=`: the API treats empty
+ * as absent too, and sending it anyway would put a `?` on every first paint.
+ */
+function query(params = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, String(value));
+    }
+  }
+  return search.toString();
+}
+
 async function call(method, path, body) {
   const response = await fetch(`/api${path}`, {
     method,
@@ -37,14 +53,14 @@ export const api = {
   joinTenant: (code) => call("POST", "/tenants/join", { code }),
   tenant: () => call("GET", "/tenants/current"),
   // An administrator adding a member straight into this tenant.
-  operators: () => call("GET", "/operators"),
+  operators: (params) => call("GET", `/operators?${query(params)}`),
   // No role_ids means the default role: an omission must never widen access.
   addOperator: (email, password, roleIds = []) =>
     call("POST", "/operators", { email, password, role_ids: roleIds }),
   assignRoles: (operatorId, roleIds) =>
     call("PUT", `/operators/${operatorId}/roles`, { role_ids: roleIds }),
 
-  roles: () => call("GET", "/roles"),
+  roles: (params) => call("GET", `/roles?${query(params)}`),
   defineRole: (name, permissions) => call("POST", "/roles", { name, permissions }),
   updateRole: (id, name, permissions) =>
     call("PUT", `/roles/${id}`, { name, permissions }),
@@ -52,7 +68,7 @@ export const api = {
   logout: () => call("POST", "/auth/logout"),
   authMethods: () => call("GET", "/auth/methods"),
 
-  gateways: () => call("GET", "/gateways"),
+  gateways: (params) => call("GET", `/gateways?${query(params)}`),
   gateway: (id) => call("GET", `/gateways/${id}`),
   // Server-generated: the OAuth steps name endpoints the proxy serves.
   connectGuide: (id) => call("GET", `/gateways/${id}/connect`),
@@ -79,9 +95,13 @@ export const api = {
 
   stats: (gatewayId, minutes = 60) =>
     call("GET", `/stats?minutes=${minutes}${gatewayId ? `&gateway_id=${gatewayId}` : ""}`),
-  requests: (gatewayId, limit = 100) =>
-    call("GET", `/requests?limit=${limit}${gatewayId ? `&gateway_id=${gatewayId}` : ""}`),
-  events: (limit = 50) => call("GET", `/events?limit=${limit}`),
+  // Cursor lists: `before` is the cursor the previous page answered with, and
+  // every other key is a filter field the endpoint declares.
+  requests: (params) => call("GET", `/requests?${query(params)}`),
+  events: (params) => call("GET", `/events?${query(params)}`),
+  docs: () => call("GET", "/docs"),
+  // A read-only token for the console MCP; the plaintext is returned once.
+  mintConsoleToken: () => call("POST", "/mcp/token"),
 
   exportConfig: () => call("GET", "/config/export"),
   applyConfig: (yaml) => call("POST", "/config/apply", { yaml }),

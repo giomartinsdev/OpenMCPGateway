@@ -1,23 +1,45 @@
 """The role table: list, define, edit, delete."""
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from gateway.application.services import listing
 from gateway.application.services.roles import RoleCatalog
+from gateway.domain.filters import ROLE_FILTERS
 from gateway.domain.permissions import BUILTIN_ROLES, PERMISSIONS
 from gateway.interface.dependencies import CanReadRoles, ContainerDep, PrincipalDep, permits
+from gateway.interface.listing import PageQuery, filters
 from gateway.interface.schemas import RoleRequest
 
 router = APIRouter()
 
 
 @router.get("/roles")
-async def list_roles(session: CanReadRoles, principal: PrincipalDep,
-                     container: ContainerDep) -> dict[str, Any]:
+async def list_roles(
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadRoles,
+    principal: PrincipalDep,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    """Built-in roles first, then a page of the tenant's own. Filter by `name`.
+
+    `permissions` rides along on every page: it is the closed catalog the UI uses
+    to render the editor, and it does not page.
+    """
     del session
+    result = await listing.roles(
+        container,
+        principal.caller,
+        window=page.window,
+        filters=filters(request, ROLE_FILTERS),
+    )
+    builtin = [role for role in await RoleCatalog(container).all(
+        principal.caller.tenant_id) if role["builtin"]]
     return {
-        "roles": await RoleCatalog(container).all(principal.caller.tenant_id),
+        "roles": builtin + result.items,
+        "next": result.next,
         "permissions": list(PERMISSIONS),
     }
 

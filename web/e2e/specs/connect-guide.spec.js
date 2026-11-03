@@ -10,8 +10,8 @@ test.describe.configure({ mode: "serial" });
 async function signupOwner(page) {
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: /^create account$/i }).click();
   await page.getByLabel("Tenant name").fill("Guide Co");
   await page.getByRole("button", { name: "Create tenant" }).click();
@@ -22,7 +22,7 @@ async function createGateway(page, slug) {
   await page.goto("/#/gateways");
   await page.getByRole("button", { name: /new gateway/i }).first().click();
   await page.getByLabel("Slug").fill(slug);
-  await page.getByLabel("Name").fill(slug);
+  await page.getByLabel("Name", { exact: true }).fill(slug);
   await page.getByLabel("Upstream MCP URL").fill("http://127.0.0.1:1/mcp");
   // The create form defaults to API key; these scenarios change it afterwards.
   await page.getByLabel("Who may call it").selectOption("none");
@@ -50,8 +50,8 @@ test("an OAuth gateway shows the token flow before the call", async ({ page }) =
   // Each test gets a fresh browser context, so the account made above has to
   // sign in again; the tenant it owns is what the gateway goes into.
   await page.goto("/");
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: /^sign in$/i }).click();
   await expect(page.getByRole("heading", { name: "Gateways", level: 1 })).toBeVisible();
 

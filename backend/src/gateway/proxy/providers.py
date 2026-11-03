@@ -30,7 +30,7 @@ _BACKEND: Any = None
 _BACKEND_STORE: Any = None
 
 
-def configure_client_storage(dsn: str, *, secret: str) -> None:
+async def configure_client_storage(dsn: str, *, secret: str) -> None:
     """Point OAuth state at Postgres so it survives rollouts and multiple replicas.
 
     One table, one connection pool, shared by every gateway: each gateway reads
@@ -38,6 +38,9 @@ def configure_client_storage(dsn: str, *, secret: str) -> None:
     `mcp-jti-mappings` apart. Values are encrypted at rest because upstream
     access and refresh tokens are bearer credentials — the same reason FastMCP
     encrypts the file store it would have created itself.
+
+    The table is created here rather than on first use: a database user without
+    DDL rights should fail the boot, not the first sign-in.
     """
     global _BACKEND, _BACKEND_STORE
 
@@ -45,6 +48,7 @@ def configure_client_storage(dsn: str, *, secret: str) -> None:
     from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
 
     _BACKEND_STORE = PostgreSQLStore(url=_asyncpg_dsn(dsn), table_name="oauth_state")
+    await _BACKEND_STORE.setup()
     _BACKEND = FernetEncryptionWrapper(
         key_value=_BACKEND_STORE,
         source_material=secret,

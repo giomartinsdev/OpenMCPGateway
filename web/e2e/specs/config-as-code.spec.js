@@ -23,8 +23,8 @@ test("a role and a member declared in the file show up in the UI and the export"
 }) => {
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: /^create account$/i }).click();
   await page.getByLabel("Tenant name").fill("YAML Co");
   await page.getByRole("button", { name: "Create tenant" }).click();

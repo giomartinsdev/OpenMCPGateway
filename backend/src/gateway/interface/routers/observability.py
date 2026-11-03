@@ -1,10 +1,16 @@
-"""Traffic and the audit trail."""
+"""Traffic and the audit trail, both paged and both filterable.
 
-from typing import Any
+The two lists an operator actually searches: "which calls failed for this
+gateway", "when did someone change that role". The filter catalogue lives in
+`gateway.domain.filters`; this module only names which catalogue a route uses.
+"""
 
-from fastapi import APIRouter
+from typing import Annotated, Any
 
-from gateway.application.services import observability
+from fastapi import APIRouter, Depends, Request
+
+from gateway.application.services import listing
+from gateway.domain.filters import EVENT_FILTERS, REQUEST_FILTERS
 from gateway.domain.readmodels import TrafficStats
 from gateway.interface.dependencies import (
     CanReadAudit,
@@ -12,6 +18,7 @@ from gateway.interface.dependencies import (
     ContainerDep,
     PrincipalDep,
 )
+from gateway.interface.listing import PageQuery, filters
 
 router = APIRouter()
 
@@ -21,29 +28,47 @@ async def stats(session: CanReadTraffic, principal: PrincipalDep,
                 container: ContainerDep, gateway_id: str | None = None,
                 minutes: int = 60) -> TrafficStats:
     del session
+    from gateway.application.services import observability
+
     return await observability.stats(container, principal.caller, gateway_id, minutes)
 
 
 @router.get("/requests")
-async def requests(session: CanReadTraffic, principal: PrincipalDep,
-                   container: ContainerDep, gateway_id: str | None = None,
-                   limit: int = 100) -> dict[str, Any]:
+async def requests(
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadTraffic,
+    principal: PrincipalDep,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    """A page of the request log. Any field of `REQUEST_FILTERS` narrows it."""
     del session
-    return {
-        "requests": await observability.requests(
-            container, principal.caller, gateway_id, limit
-        )
-    }
+    result = await listing.requests(
+        container,
+        principal.caller,
+        window=page.window,
+        filters=filters(request, REQUEST_FILTERS),
+    )
+    return {"requests": result.items, "next": result.next}
 
 
 @router.get("/events")
-async def events(session: CanReadAudit, principal: PrincipalDep,
-                 container: ContainerDep, limit: int = 100) -> dict[str, Any]:
-    """Raw event log — the audit trail, with secrets redacted."""
+async def events(
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadAudit,
+    principal: PrincipalDep,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    """A page of the audit log. Any field of `EVENT_FILTERS` narrows it."""
     del session
-    return {
-        "events": await observability.events(container, principal.caller, limit)
-    }
+    result = await listing.events(
+        container,
+        principal.caller,
+        window=page.window,
+        filters=filters(request, EVENT_FILTERS),
+    )
+    return {"events": result.items, "next": result.next}
 
 
 __all__ = ["router"]

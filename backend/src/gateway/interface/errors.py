@@ -13,7 +13,9 @@ from gateway.application.services.roles import CannotGrant
 from gateway.application.services.signin import SignInRefused
 from gateway.configfile import ConfigFileError
 from gateway.domain.errors import DomainRefusal, NotFound
+from gateway.domain.filters import UnknownFilter
 from gateway.domain.model import DomainError
+from gateway.domain.paging import InvalidCursor
 from gateway.domain.permissions import PermissionCatalogError
 from gateway.infrastructure.eventstore.postgres import ConcurrencyError
 from gateway.log import log
@@ -31,6 +33,8 @@ _STATUS = {
     PermissionCatalogError: 422,
     ConfigFileError: 422,
     CannotGrant: 422,
+    UnknownFilter: 422,
+    InvalidCursor: 422,
 }
 
 

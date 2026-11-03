@@ -19,8 +19,8 @@ test("signed out, the landing page is the front door and the way in", async ({ p
 
   // Same form, same labels: the landing embeds the sign-in rather than linking
   // to a second copy that can drift.
-  await expect(page.getByLabel("Email")).toBeVisible();
-  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /create an account/i })).toBeVisible();
 
   expect(errors).toEqual([]);
@@ -32,5 +32,5 @@ test("the sign-in form switches to registration without leaving the page", async
 
   await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^create account$/i })).toBeVisible();
-  await expect(page.getByLabel("Email")).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
 });

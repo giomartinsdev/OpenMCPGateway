@@ -10,6 +10,9 @@ end up in `CommandHandler` — and what keeps a route readable at a glance.
 Responses never include secrets (password hashes, key hashes, upstream OAuth
 client secrets). The one exception is an API key's plaintext, which is returned
 exactly once at issue time and never stored.
+
+Every list pages the same way (`limit` + `before`, response `{items, next}`) and
+filters against a closed catalogue — see `gateway.interface.listing`.
 """
 
 from fastapi import APIRouter
@@ -18,6 +21,7 @@ from gateway.interface.routers import (
     auth,
     config,
     gateways,
+    mcp,
     members,
     observability,
     roles,
@@ -26,9 +30,8 @@ from gateway.interface.routers import (
 
 router = APIRouter(prefix="/api")
 for module in (
-    auth, tenants, members, roles, gateways, observability, config
+    auth, tenants, members, roles, gateways, observability, config, mcp
 ):
     router.include_router(module.router)
-
 
 __all__ = ["router"]

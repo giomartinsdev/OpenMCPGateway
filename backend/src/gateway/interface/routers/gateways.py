@@ -1,10 +1,11 @@
 """Gateway CRUD, auth configuration, and the sub-resources under a gateway."""
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
 
-from gateway.application.services import connect, gateways
+from gateway.application.services import connect, gateways, listing
+from gateway.domain.filters import GATEWAY_FILTERS
 from gateway.interface.dependencies import (
     CanReadGateways,
     CanReadKeys,
@@ -13,6 +14,7 @@ from gateway.interface.dependencies import (
     ContainerDep,
     PrincipalDep,
 )
+from gateway.interface.listing import PageQuery, filters
 from gateway.interface.schemas import (
     ApiKeyRequest,
     AuthConfigRequest,
@@ -26,10 +28,25 @@ router = APIRouter()
 
 
 @router.get("/gateways")
-async def list_gateways(session: CanReadGateways, principal: PrincipalDep,
-                        container: ContainerDep) -> dict[str, Any]:
+async def list_gateways(
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadGateways,
+    principal: PrincipalDep,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    """A page of this tenant's gateways. Filter by `slug`, `name`, `auth_mode`,
+    `enabled`."""
     del session
-    return {"gateways": await gateways.list_(container, principal.caller)}
+    result = await listing.gateways(
+        container,
+        principal.caller,
+        window=page.window,
+        filters=filters(request, GATEWAY_FILTERS),
+    )
+    # `gateways` and `next` rather than `items`/`next`: the key was there before
+    # the cursor was, and a list that only adds fields cannot break a client.
+    return {"gateways": result.items, "next": result.next}
 
 
 @router.post("/gateways", status_code=201)

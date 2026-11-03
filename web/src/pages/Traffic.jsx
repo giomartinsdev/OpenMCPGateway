@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
 import {
   Badge, Card, Chart, Empty, Notice, Skeleton, SAMPLE_REQUESTS,
   SAMPLE_STATS, Stat, outcomeKind, relative,
@@ -19,26 +20,30 @@ const OUTCOME_LABEL = {
   rate_limited: "429 rate limited",
 };
 
+// One filter per column, under the column's own label.
+const FIELDS = [
+  null, // when: the window selector above already says it
+  { key: "gateway", label: "Gateway" },
+  { key: "subject", label: "Subject" },
+  { key: "outcome", label: "Outcome" },
+  { key: "status", label: "Status" },
+  null, // latency is shown, but nobody filters a log by milliseconds
+  { key: "tool", label: "Tool" },
+  { key: "ip", label: "IP" },
+];
+
 export function Traffic() {
   const [minutes, setMinutes] = useState(60);
   const [stats, setStats] = useState(null);
-  const [requests, setRequests] = useState(null);
-  const [gateways, setGateways] = useState([]);
+  const [filters, setFilters] = useState({});
   const [error, setError] = useState("");
 
   useEffect(() => {
     let alive = true;
     async function load() {
       try {
-        const [stats, log, list] = await Promise.all([
-          api.stats(null, minutes),
-          api.requests(null, 100),
-          api.gateways(),
-        ]);
-        if (!alive) return;
-        setStats(stats);
-        setRequests(log.requests);
-        setGateways(list.gateways);
+        const next = await api.stats(null, minutes);
+        if (alive) setStats(next);
       } catch (err) {
         if (alive) setError(err.message);
       }
@@ -48,7 +53,14 @@ export function Traffic() {
     return () => { alive = false; clearInterval(timer); };
   }, [minutes]);
 
-  const names = Object.fromEntries(gateways.map((g) => [g.id, g.name]));
+  const { items: requests, next, error: listError, busy, more } = usePagedList(
+    async ({ limit, before, ...fields }) => {
+      const page = await api.requests({ limit, before, ...fields });
+      return { items: page.requests, next: page.next };
+    },
+    filters,
+  );
+
   const rejected =
     (stats?.by_outcome?.unauthenticated ?? 0) +
     (stats?.by_outcome?.forbidden ?? 0) +
@@ -78,7 +90,7 @@ export function Traffic() {
         </div>
       </div>
 
-      <Notice kind="err">{error}</Notice>
+      <Notice kind="err">{error || listError}</Notice>
 
       <div className="grid-3" style={{ marginBottom: 12 }}>
         <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading requests">
@@ -173,18 +185,21 @@ export function Traffic() {
                     <th>Outcome</th>
                     <th className="num">Status</th>
                     <th className="num">Latency</th>
+                    <th>Tool</th>
                     <th>IP</th>
                   </tr>
+                  <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
                 <tbody>
-                  {rows.map((request, index) => (
-                    <tr key={`${request.occurred_at}-${index}`}>
+                  {rows.map((request) => (
+                    <tr key={request.event_id}>
                       <td className="hint nowrap">{relative(request.occurred_at)}</td>
-                      <td className="nowrap">{names[request.gateway_id] ?? request.gateway_id}</td>
+                      <td className="nowrap">{request.gateway}</td>
                       <td className="mono">{request.subject ?? "—"}</td>
                       <td><Badge kind={outcomeKind(request.outcome)}>{request.outcome}</Badge></td>
                       <td className="num">{request.status}</td>
                       <td className="num">{request.duration_ms} ms</td>
+                      <td className="mono hint">{request.tool || "—"}</td>
                       <td className="mono hint">{request.ip || "—"}</td>
                     </tr>
                   ))}
@@ -193,6 +208,7 @@ export function Traffic() {
             </div>
           )}
         </Skeleton>
+        <LoadMore next={next} busy={busy} onClick={more} />
       </Card>
     </>
   );

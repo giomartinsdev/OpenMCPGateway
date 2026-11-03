@@ -279,9 +279,22 @@ permission it does not hold itself.
 ## Documentation
 
 `/#/docs` serves the full manual from the running deployment — concepts, every
-gateway field, auth modes, the config-as-code schema, the HTTP API, environment
-variables and a troubleshooting table. It is reachable signed out, and linked
-from the landing page.
+gateway field, auth modes, the config-as-code schema, the HTTP API, the console
+MCP, environment variables and a troubleshooting table. It is reachable signed
+out, and linked from the landing page. The copy lives in
+`backend/src/gateway/docs/sections.json` and is served by `GET /api/docs`, so the
+panel and the console MCP read the same text.
+
+## Schema
+
+The schema is versioned in code: `backend/src/gateway/infrastructure/db/migrations.py`
+holds a numbered list of steps, and `schema_migrations` records what a database
+has already applied. Boot runs whatever this build has not seen, inside one
+transaction behind an advisory lock, so a rollout is the upgrade path and two
+pods starting together queue instead of colliding.
+
+Tables prefixed `rm_` are read models — projections of the event log,
+rebuildable by replay. `events` is the log itself.
 
 ## Architecture
 

@@ -9,7 +9,6 @@ language against `tables.metadata`.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -17,21 +16,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from gateway.infrastructure.db.tables import TENANT_OF_DEPLOYMENT, metadata
+from gateway.infrastructure.db import migrations
 from gateway.log import log
-
-# Columns added after their table shipped. `create_all` ignores existing tables,
-# so an installation that upgraded needs these spelled out. Kept as plain SQL
-# because `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` has no portable expression-
-# language equivalent, and being unportable is fine: this module only talks to
-# Postgres.
-_ADDED_COLUMNS = (
-    "ALTER TABLE rm_operators ADD COLUMN IF NOT EXISTS tenant_id TEXT",
-    f"ALTER TABLE rm_gateways ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL "
-    f"DEFAULT '{TENANT_OF_DEPLOYMENT}'",
-    f"ALTER TABLE rm_roles ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL "
-    f"DEFAULT '{TENANT_OF_DEPLOYMENT}'",
-)
 
 
 class Database:
@@ -63,20 +49,13 @@ class Database:
             yield session
 
     async def migrate(self) -> None:
-        """Create anything missing, then add columns to tables that predate them.
+        """Bring the schema to the current version.
 
-        `create_all` only creates whole tables: it will not add a column to a
-        table that already exists, which is exactly the upgrade case for an
-        installation that has been running. Two `ADD COLUMN IF NOT EXISTS` lines
-        are cheaper than a migration tool, and idempotent, so every boot runs
-        them. A real schema history is the upgrade path when a change needs a
-        backfill, not just a new nullable column.
+        The steps live in `migrations.py`, in order, and each one runs once per
+        database. Every boot calls this; a database already at the latest version
+        does no work.
         """
-        async with self._engine.begin() as connection:
-            await connection.run_sync(metadata.create_all)
-            for statement in _ADDED_COLUMNS:
-                await connection.execute(text(statement))
-        log.info("database.migrated", tables=len(metadata.tables))
+        await migrations.run(self._engine)
 
     async def close(self) -> None:
         # `dispose` closes the pool without waiting for graceful per-connection

@@ -59,19 +59,27 @@ def create_admin_app(settings: Settings) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        log.info("app.starting", base_url=settings.base_url)
-        app.state.container = await Container.create(settings)
+        # A caller that already built a container (tests, an embedding) keeps it:
+        # building a second one here would leak its pool and serve requests from
+        # the fixture's container while this one owned the storage.
+        owned = app.state.container is None
+        if owned:
+            log.info("app.starting", base_url=settings.base_url)
+            app.state.container = await Container.create(settings)
         try:
             yield
         finally:
-            await app.state.container.close()
-            app.state.container = None
-            log.info("app.stopped")
+            if owned:
+                await app.state.container.close()
+                app.state.container = None
+                log.info("app.stopped")
 
     app = FastAPI(
         title="OpenMCPGateway",
         version=_version(),
-        docs_url="/api/docs",
+        # `/api/docs` is the manual — a product surface an operator reads. Swagger
+        # gets out of its way; the OpenAPI document keeps its address.
+        docs_url="/api/swagger",
         openapi_url="/api/openapi.json",
         lifespan=lifespan,
     )
@@ -133,19 +141,37 @@ def create_admin_app(settings: Settings) -> FastAPI:
 
 
 class GatewayDispatcher:
-    """Gateway traffic first; discovery and admin routes otherwise."""
+    """Gateway traffic first; the console MCP; discovery and admin routes otherwise.
+
+    The console is mounted lazily for the same reason the gateways are: it needs
+    the container, and the container needs the app's lifespan to have run. Building
+    it on the first request keeps one startup path instead of two.
+    """
 
     def __init__(self, admin_app: FastAPI) -> None:
         self.admin_app = admin_app
+        self._console: Any = None
+
+    def _console_app(self, container: Container) -> Any:
+        if self._console is None:
+            from gateway.console.mount import console_app
+
+            self._console = console_app(container)
+        return self._console
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] in {"http", "websocket"}:
             container: Container | None = getattr(
                 self.admin_app.state, "container", None
             )
-            if container is not None and container.router.owns(scope.get("path", "")):
-                await container.router(scope, receive, send)
-                return
+            path = scope.get("path", "")
+            if container is not None:
+                if container.router.owns(path):
+                    await container.router(scope, receive, send)
+                    return
+                if path == "/mcp" or path.startswith("/mcp/"):
+                    await self._console_app(container)(scope, receive, send)
+                    return
         await self.admin_app(scope, receive, send)
 
 

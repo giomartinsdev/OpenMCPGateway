@@ -1,14 +1,29 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "../api.js";
-import { Badge, Card, Empty, Notice, Skeleton, SAMPLE_EVENTS, relative } from "../ui.jsx";
+import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
+import {
+  Badge, Card, Empty, Notice, Skeleton, SAMPLE_EVENTS, relative,
+} from "../ui.jsx";
+
+// The filter fields are the table's own labels, in the table's own order, which
+// is why this is a list of objects and not a toolbar of inputs.
+const FIELDS = [
+  null, // the sequence number is not a filter
+  { key: "type", label: "Type" },
+  { key: "aggregate", label: "Aggregate" },
+  { key: "actor", label: "Actor" },
+  null,
+];
 
 export function Audit() {
-  const [events, setEvents] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    api.events(200).then((data) => setEvents(data.events), (err) => setError(err.message));
-  }, []);
+  const [filters, setFilters] = useState({});
+  const { items, next, error, busy, more } = usePagedList(
+    async ({ limit, before, ...fields }) => {
+      const page = await api.events({ limit, before, ...fields });
+      return { items: page.events, next: page.next };
+    },
+    filters,
+  );
 
   return (
     <>
@@ -20,7 +35,7 @@ export function Audit() {
           </div>
         </div>
         <div className="actions">
-          <Badge kind="info">{events ? `${events.length} events` : "loading"}</Badge>
+          <Badge kind="info">{items ? `${items.length} events` : "loading"}</Badge>
         </div>
       </div>
 
@@ -28,10 +43,10 @@ export function Audit() {
 
       <Card title="Events">
         <Skeleton
-          data={events}
+          data={items}
           sample={SAMPLE_EVENTS}
           label="Loading the audit log"
-          empty={events?.length === 0}
+          empty={items?.length === 0}
           emptyMessage={<Empty title="No events yet">Every change lands here.</Empty>}
         >
           {(rows) => (
@@ -45,10 +60,11 @@ export function Audit() {
                     <th>Actor</th>
                     <th className="num">When</th>
                   </tr>
+                  <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
                 <tbody>
                   {rows.map((event) => (
-                    <tr key={event.global_seq ?? event.event_id}>
+                    <tr key={event.event_id}>
                       <td className="num hint">{event.global_seq}</td>
                       <td className="mono strong">{event.event_type}</td>
                       <td className="mono hint">{event.aggregate_id}</td>
@@ -61,6 +77,7 @@ export function Audit() {
             </div>
           )}
         </Skeleton>
+        <LoadMore next={next} busy={busy} onClick={more} />
       </Card>
     </>
   );

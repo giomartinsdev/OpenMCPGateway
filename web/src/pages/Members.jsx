@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
 import {
   Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, SAMPLE_MEMBERS,
   can, relative,
@@ -10,7 +11,7 @@ import {
 export function Members({ me }) {
   const canWrite = can(me, "members:write");
   const canAssign = can(me, "roles:write");
-  const [operators, setOperators] = useState(null);
+  const [filters, setFilters] = useState({});
   const [roles, setRoles] = useState([]);
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
@@ -19,10 +20,18 @@ export function Members({ me }) {
   const [busy, setBusy] = useState(false);
   const [tenant, setTenant] = useState(null);
 
+  const {
+    items: operators, next, busy: listBusy, more, reload, error: listError,
+  } = usePagedList(
+    async ({ limit, before, ...fields }) => {
+      const page = await api.operators({ limit, before, ...fields });
+      return { items: page.operators, next: page.next };
+    },
+    filters,
+  );
+
   async function load() {
     try {
-      const { operators } = await api.operators();
-      setOperators(operators);
       // Listing members does not imply listing roles: a recruiter may add
       // people without seeing the permission table.
       if (can(me, "roles:read")) setRoles((await api.roles()).roles);
@@ -47,7 +56,7 @@ export function Members({ me }) {
         kind: "ok",
         text: "Member added. They sign in with that password and the role you chose.",
       });
-      load();
+      reload();
     } catch (err) {
       setBanner({ kind: "err", text: err.message });
     } finally {
@@ -66,7 +75,7 @@ export function Members({ me }) {
         kind: "ok",
         text: "Roles changed. The member's next request already uses them.",
       });
-      load();
+      reload();
     } catch (err) {
       setBanner({ kind: "err", text: err.message });
     } finally {
@@ -97,7 +106,7 @@ export function Members({ me }) {
         </div>
       </div>
 
-      <Notice kind="err">{banner?.kind === "err" ? banner.text : ""}</Notice>
+      <Notice kind="err">{banner?.kind === "err" ? banner.text : listError}</Notice>
       <Notice kind="ok">{banner?.kind === "ok" ? banner.text : ""}</Notice>
 
       <Card title="Join code">
@@ -126,6 +135,11 @@ export function Members({ me }) {
                     <th className="num">Joined</th>
                     <th />
                   </tr>
+                  <FilterRow
+                    fields={[{ key: "email", label: "Email" }, null, null, null]}
+                    value={filters}
+                    onChange={setFilters}
+                  />
                 </thead>
                 <tbody>
                   {rows.map((operator) => (
@@ -159,6 +173,7 @@ export function Members({ me }) {
             </div>
           )}
         </Skeleton>
+        <LoadMore next={next} busy={listBusy} onClick={more} />
       </Card>
 
       {editing && (

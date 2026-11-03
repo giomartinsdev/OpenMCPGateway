@@ -18,7 +18,7 @@ depend on the protocol, so a different log (in-memory for a domain test, another
 database) is a wiring change rather than an import rewrite.
 """
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Iterable, Sequence
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -26,7 +26,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
 from gateway.domain.events import ALL_EVENTS, Event
+from gateway.domain.filters import Clause
+from gateway.domain.paging import Window, cut
 from gateway.infrastructure.db.database import Database
+from gateway.infrastructure.db.query import paged, predicates
 from gateway.infrastructure.db.tables import (
     events,
     gateway_slugs,
@@ -190,7 +193,20 @@ class PostgresEventStore:
     async def recent_events(
         self, *, limit: int = 100, aggregate_ids: Sequence[str] | None = None
     ) -> list[dict[str, Any]]:
-        """Newest events first, redacted.
+        """Newest events first, redacted, without a cursor."""
+        rows, _next = await self.page_events(
+            Window.parse(limit), aggregate_ids=aggregate_ids
+        )
+        return rows
+
+    async def page_events(
+        self,
+        window: Window,
+        *,
+        aggregate_ids: Sequence[str] | None = None,
+        clauses: Iterable[Clause] = (),
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """A page of the audit log, newest first, plus the next cursor.
 
         `aggregate_ids` is how the audit page stays inside one tenant: the log is
         shared, so the caller names the streams it owns. The store does not know
@@ -199,23 +215,26 @@ class PostgresEventStore:
         query = select(events)
         if aggregate_ids is not None:
             query = query.where(events.c.aggregate_id.in_(list(aggregate_ids)))
-        query = query.order_by(events.c.global_seq.desc()).limit(limit)
+        for predicate in predicates(events, clauses):
+            query = query.where(predicate)
+        query = paged(query, events, window, at="occurred_at", id="event_id")
         async with self._db.session() as session:
-            rows = (await session.execute(query)).mappings()
-            return [
-                {
-                    "global_seq": row["global_seq"],
-                    "event_id": row["event_id"],
-                    "aggregate_id": row["aggregate_id"],
-                    "sequence": row["sequence"],
-                    "event_type": row["event_type"],
-                    "occurred_at": row["occurred_at"].isoformat(),
-                    "actor": row["actor"],
-                    # Payloads can hold hashes/secrets — redact before serving.
-                    "payload": _redact(row["payload"]),
-                }
-                for row in rows
-            ]
+            rows = [dict(row) for row in (await session.execute(query)).mappings()]
+        items, next_cursor = cut(rows, window, at="occurred_at", id="event_id")
+        return [
+            {
+                "global_seq": row["global_seq"],
+                "event_id": row["event_id"],
+                "aggregate_id": row["aggregate_id"],
+                "sequence": row["sequence"],
+                "event_type": row["event_type"],
+                "occurred_at": row["occurred_at"].isoformat(),
+                "actor": row["actor"],
+                # Payloads can hold hashes/secrets — redact before serving.
+                "payload": _redact(row["payload"]),
+            }
+            for row in items
+        ], next_cursor
 
     # -- projection bookkeeping -------------------------------------------
 

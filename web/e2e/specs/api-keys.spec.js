@@ -9,8 +9,8 @@ const OWNER = { email: "keys@gateway.test", password: "keys-password-123" };
 async function owner(page) {
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: /^create account$/i }).click();
   await page.getByLabel("Tenant name").fill("Keys Co");
   await page.getByRole("button", { name: "Create tenant" }).click();
@@ -18,7 +18,7 @@ async function owner(page) {
   await page.goto("/#/gateways");
   await page.getByRole("button", { name: /new gateway/i }).first().click();
   await page.getByLabel("Slug").fill("keys-mcp");
-  await page.getByLabel("Name").fill("keys-mcp");
+  await page.getByLabel("Name", { exact: true }).fill("keys-mcp");
   await page.getByLabel("Upstream MCP URL").fill("http://127.0.0.1:1/mcp");
   await page.getByRole("button", { name: "Create gateway" }).click();
   await expect(page.getByRole("heading", { name: "keys-mcp" })).toBeVisible();

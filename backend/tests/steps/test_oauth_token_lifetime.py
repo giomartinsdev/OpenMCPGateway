@@ -152,7 +152,7 @@ def test_oauth_state_survives_the_process_that_wrote_it(settings, runner) -> Non
     secret = settings.session_secret.get_secret_value()
 
     async def write() -> None:
-        configure_client_storage(dsn, secret=secret)
+        await configure_client_storage(dsn, secret=secret)
         first = build_auth_provider(
             config, base_url="https://gw.example.dev", credentials=dict(CREDENTIALS)
         )
@@ -171,7 +171,7 @@ def test_oauth_state_survives_the_process_that_wrote_it(settings, runner) -> Non
     async def restart_and_read() -> object:
         # A rollout: the process ends, a new one boots against the same database.
         await close_client_storage()
-        configure_client_storage(dsn, secret=secret)
+        await configure_client_storage(dsn, secret=secret)
         second = build_auth_provider(
             config, base_url="https://gw.example.dev", credentials=dict(CREDENTIALS)
         )

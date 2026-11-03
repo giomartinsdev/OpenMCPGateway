@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
 import {
   Badge, Card, Empty, Notice, Skeleton, SAMPLE_GATEWAYS, SAMPLE_STATS,
   Stat, can, relative,
@@ -8,27 +9,35 @@ import { navigate } from "../App.jsx";
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
 
+// One filter per column, under its own label. Endpoint and "updated" are derived,
+// not stored, so they are not filterable.
+const FIELDS = [
+  { key: "name", label: "Name" },
+  null,
+  { key: "auth_mode", label: "Auth" },
+  null,
+  { key: "enabled", label: "Status" },
+  null,
+];
+
 export function Gateways({ me }) {
   const canEdit = can(me, "gateways:write");
-  const [gateways, setGateways] = useState(null);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [filters, setFilters] = useState({});
+  const { items: gateways, next, busy, more, error: listError } = usePagedList(
+    async ({ limit, before, ...fields }) => {
+      const page = await api.gateways({ limit, before, ...fields });
+      return { items: page.gateways, next: page.next };
+    },
+    filters,
+  );
 
-  async function load() {
-    try {
-      const [list, stats] = await Promise.all([api.gateways(), api.stats(null, 60)]);
-      setGateways(list.gateways);
-      setStats(stats);
-    } catch (err) {
-      setError(err.message);
-      setGateways([]);
-    }
-  }
+  useEffect(() => {
+    api.stats(null, 60).then(setStats, (err) => setError(err.message));
+  }, []);
 
-  useEffect(() => { load(); }, []);
-
-  const live = (gateways ?? []).filter((g) => g.enabled);
   const open = (gateways ?? []).filter((g) => g.auth_mode === "none");
   const rejected =
     (stats?.by_outcome?.unauthenticated ?? 0) +
@@ -53,7 +62,7 @@ export function Gateways({ me }) {
         )}
       </div>
 
-      <Notice kind="err">{error}</Notice>
+      <Notice kind="err">{error || listError}</Notice>
 
       {open.length > 0 && (
         <Notice kind="info">
@@ -105,7 +114,7 @@ export function Gateways({ me }) {
         />
       )}
 
-      <Card title="All gateways" aside={gateways ? `${live.length} serving` : null}>
+      <Card title="All gateways" aside={gateways ? `${gateways.length} shown` : null}>
         <Skeleton
           data={gateways}
           sample={SAMPLE_GATEWAYS}
@@ -125,6 +134,7 @@ export function Gateways({ me }) {
                     <th>Status</th>
                     <th className="num">Updated</th>
                   </tr>
+                  <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
                 <tbody>
                   {rows.map((gateway) => (
@@ -162,6 +172,7 @@ export function Gateways({ me }) {
             </div>
           )}
         </Skeleton>
+        <LoadMore next={next} busy={busy} onClick={more} />
       </Card>
     </>
   );

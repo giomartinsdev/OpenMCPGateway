@@ -16,8 +16,8 @@ async function registerOwner(page) {
   // screen, and choosing to create one is what makes this account its owner.
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: /^create account$/i }).click();
   await expect(page.getByRole("heading", { name: "Create a tenant" })).toBeVisible();
   await page.getByLabel("Tenant name").fill(TENANT);
@@ -27,8 +27,8 @@ async function registerOwner(page) {
 
 async function signIn(page, account) {
   await page.goto("/");
-  await page.getByLabel("Email").fill(account.email);
-  await page.getByLabel("Password").fill(account.password);
+  await page.getByLabel("Email", { exact: true }).fill(account.email);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
   await page.getByRole("button", { name: /^sign in$/i }).click();
   await expect(page.getByRole("heading", { name: "Gateways", level: 1 })).toBeVisible();
 }
@@ -49,7 +49,7 @@ test("an administrator defines a role by ticking permissions", async ({ page }) 
 
   await page.goto("/#/roles");
   await page.getByRole("button", { name: "New role" }).click();
-  await page.getByLabel("Name").fill("Auditor");
+  await page.getByLabel("Name", { exact: true }).fill("Auditor");
   await page.locator(".permission", { hasText: "traffic:read" }).getByRole("checkbox").check();
   await page.locator(".permission", { hasText: "audit:read" }).getByRole("checkbox").check();
   await page.getByRole("button", { name: "Save role" }).click();
@@ -87,7 +87,7 @@ test("a member added without a role gets the viewer role", async ({ page }) => {
   await signIn(page, OWNER);
   await page.goto("/#/members");
 
-  await page.getByLabel("Email").fill(MEMBER.email);
+  await page.getByLabel("Email", { exact: true }).fill(MEMBER.email);
   await page.getByLabel("Initial password").fill(MEMBER.password);
   await page.getByRole("button", { name: "Add member" }).click();
 
@@ -142,7 +142,7 @@ test("granting a role takes effect on the member's next click, without signing i
   // so this covers the form as well as the effect.
   await ownerPage.goto("/#/roles");
   await ownerPage.getByRole("button", { name: "New role" }).click();
-  await ownerPage.getByLabel("Name").fill("Gateway editor");
+  await ownerPage.getByLabel("Name", { exact: true }).fill("Gateway editor");
   await ownerPage.locator(".permission", { hasText: "gateways:read" }).getByRole("checkbox").check();
   await ownerPage.locator(".permission", { hasText: "gateways:write" }).getByRole("checkbox").check();
   await ownerPage.getByRole("button", { name: "Save role" }).click();
@@ -167,7 +167,7 @@ test("granting a role takes effect on the member's next click, without signing i
   await expect(memberPage.getByRole("button", { name: "New gateway" })).toBeVisible();
 
   await memberPage.getByRole("button", { name: "New gateway" }).click();
-  await memberPage.getByLabel("Name").fill("Member's gateway");
+  await memberPage.getByLabel("Name", { exact: true }).fill("Member's gateway");
   await memberPage.getByLabel("Slug").fill("by-member");
   await memberPage.getByLabel("Upstream MCP URL").fill("http://upstream.test/mcp");
   await memberPage.getByRole("button", { name: "Create gateway" }).click();

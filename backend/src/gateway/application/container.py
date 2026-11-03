@@ -41,6 +41,11 @@ class Container(BaseModel):
     recorder: RequestRecorder
     limiter: RateLimiter
     router: GatewayRouter = Field(default=None)  # type: ignore[assignment]
+    #: The read-only console MCP, and the verifier in front of it. Built here so
+    #: a test can call a tool without standing up an HTTP transport, and so there
+    #: is exactly one of each per process.
+    console: Any = None
+    console_verifier: Any = None
 
     @classmethod
     async def create(cls, settings: Settings) -> Container:
@@ -49,7 +54,7 @@ class Container(BaseModel):
 
         # Before the router installs anything: a provider built without a backend
         # would hand out tokens nothing else can read.
-        configure_client_storage(
+        await configure_client_storage(
             settings.database_url, secret=settings.session_secret.get_secret_value()
         )
 
@@ -78,6 +83,12 @@ class Container(BaseModel):
             base_url=settings.base_url,
             store=store,
         )
+        from gateway.console import build_console
+
+        container.console = build_console(
+            container, settings.session_secret.get_secret_value()
+        )
+        container.console_verifier = container.console.auth
         await container.router.refresh()
         await bootstrap_admin(container)
         await adopt_legacy_tenants(container)
