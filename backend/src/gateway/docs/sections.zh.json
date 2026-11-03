@@ -104,6 +104,7 @@
         "**`api_key`** - 调用方发送 `Authorization: Bearer omg_...`。密钥以 SHA-256 哈希保存（鉴权比较的就是它），旁边是一份用部署密钥加密的明文封存副本。签发它的响应会返回明文，网关页面会给从未被读取过的密钥显示一个眼睛图标：点击会解密封存副本、把密钥显示一次，然后抹掉它。此后只剩哈希，想再拿到可读的密钥只能轮换。 密钥可以带有效期签发。过期后密钥不再通过认证，轮换会继承被替换密钥的期限——轮换是为了换密钥，而不是延长它被信任的时间。",
         "**`oauth`** - 网关自身就是 OAuth 资源服务器。没有令牌的客户端会得到 `401` 和 `WWW-Authenticate: Bearer resource_metadata=...`；它发现元数据文档、自行注册并打开浏览器。操作员批准一次，此后该主体即被加入允许列表。",
         "OAuth 模式下客户端不需要把令牌签入 dotfile——这正是重点。API 密钥模式则需如此，这也是密钥按网关划分、可单独吊销的原因。",
+        "一个网关也可以有多种进入方式。开启 `allow_api_key` 后，`oauth` 模式在同一路由上同时接受 API 密钥，并接受 `verifiers` 中列出的额外签发方的令牌——每项包含标签、签发方、可选 audience 和 JWKS 地址。这些额外签发方没有自己的登录流程：客户端已持有其提供方的令牌，网关只校验签名、签发方和 audience。一个 URL、同一份白名单、同一个速率限制，无需按凭据类型拆分网关。",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
       ]
     },
@@ -214,7 +215,7 @@
           ],
           [
             "PUT /api/gateways/{id}/auth",
-            "认证模式、IdP 凭据、上游令牌"
+            "鉴权模式与额外进入方式（API 密钥、校验签发方）"
           ],
           [
             "POST /api/gateways/{id}/keys",

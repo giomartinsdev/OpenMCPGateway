@@ -33,6 +33,18 @@ def render_gateway(gateway: dict[str, Any], principals: list[dict[str, Any]],
             )
             if gateway.get("config_url"):
                 lines.append(f"      config_url: {gateway['config_url']}")
+            # Extra ways in. `allow_api_key` is safe to export: it is a choice,
+            # not a secret. Verifiers carry no credential — a JWKS URL is public.
+            if gateway.get("allow_api_key"):
+                lines.append("      allow_api_key: true")
+            if gateway.get("verifiers"):
+                lines.append("      verifiers:")
+            for verifier in gateway.get("verifiers") or []:
+                lines.append(f"        - label: {verifier['label']!r}")
+                lines.append(f"          issuer: {verifier['issuer']}")
+                if verifier.get("audience"):
+                    lines.append(f"          audience: {verifier['audience']}")
+                lines.append(f"          jwks_uri: {verifier['jwks_uri']}")
     if gateway.get("requests_per_minute"):
         lines.append(f"    rate_limit: {gateway['requests_per_minute']}")
     if principals:

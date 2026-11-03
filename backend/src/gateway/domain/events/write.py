@@ -9,7 +9,12 @@ from datetime import datetime
 
 from pydantic import Field
 
-from gateway.domain.events.base import AuthMode, Event, IdentityProvider
+from gateway.domain.events.base import (
+    AuthMode,
+    Event,
+    IdentityProvider,
+    VerifierSpec,
+)
 
 TENANT_OF_DEPLOYMENT = "tn_local"
 """The tenant that accounts and gateways written before tenants existed belong to.
@@ -126,6 +131,12 @@ class GatewayAuthConfigured(Event):
     client_secret: str | None = None
     config_url: str | None = None
     required_scopes: tuple[str, ...] = ()
+    #: Accept API keys *as well as* the OAuth login above. One route, two ways
+    #: in: a browser client logs in, a script presents a key.
+    allow_api_key: bool = False
+    #: Additional issuers whose tokens this gateway verifies without hosting
+    #: their login. Empty means "only the login above".
+    verifiers: tuple[VerifierSpec, ...] = ()
     # Credential the *upstream* MCP server demands, if any. A gateway in front of
     # a server that already has its own token has to present it; otherwise the
     # only options are "leave the upstream open" or "keep the token in every

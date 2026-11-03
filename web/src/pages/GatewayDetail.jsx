@@ -312,6 +312,12 @@ export function GatewayDetail({ id, me }) {
                 <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
                   {authLabel(t, gateway.auth_mode)}
                   {gateway.idp ? ` · ${gateway.idp}` : ""}
+                  {gateway.allow_api_key ? ` ${t("+ keys")}` : ""}
+                  {gateway.verifiers?.length
+                    ? gateway.verifiers.length === 1
+                      ? ` ${t("+ 1 issuer")}`
+                      : ` ${t("+ {count} issuers", { count: gateway.verifiers.length })}`
+                    : ""}
                 </Badge>
               </div>
               <div>

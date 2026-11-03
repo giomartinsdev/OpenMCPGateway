@@ -58,6 +58,10 @@ class GatewayRow(ReadRow):
     client_id: str | None = None
     config_url: str | None = None
     required_scopes: list[str] = []
+    #: Accept keys as well as the login. Defaults keep pre-existing gateways on
+    #: exactly the behaviour they had before this column existed.
+    allow_api_key: bool = False
+    verifiers: list[dict[str, Any]] = []
     requests_per_minute: int = 0
     #: Upstream tools exposed through this gateway. Empty means all of them.
     tools: list[str] = []

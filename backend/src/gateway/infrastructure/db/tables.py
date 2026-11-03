@@ -165,6 +165,12 @@ rm_gateways = Table(
     Column("client_id", Text),
     Column("config_url", Text),
     Column("required_scopes", JSONB, nullable=False, default=list),
+    #: Accept keys as well as the OAuth login. One route, two ways in.
+    Column("allow_api_key", Boolean, nullable=False, default=False,
+           server_default=false()),
+    #: Extra issuers verified without hosting their login. `[{label, issuer,
+    #: audience, jwks_uri}]`.
+    Column("verifiers", JSONB, nullable=False, default=list),
     Column("requests_per_minute", Integer, nullable=False, default=0),
     #: Monthly ceiling, 0 = unlimited. A per-minute limit bounds a burst, not a
     #: bill; an integration that calls politely all month is invisible to it.

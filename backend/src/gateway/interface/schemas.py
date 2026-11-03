@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from gateway.domain.events import AuthMode, IdentityProvider
+from gateway.domain.events import AuthMode, IdentityProvider, VerifierSpec
 
 
 class LoginRequest(BaseModel):
@@ -60,6 +60,10 @@ class AuthConfigRequest(BaseModel):
     client_secret: str | None = None
     config_url: str | None = None
     required_scopes: list[str] = Field(default_factory=list)
+    #: Accept keys as well as the login above, on the same route.
+    allow_api_key: bool = False
+    #: Additional issuers verified without hosting their login.
+    verifiers: list[VerifierSpec] = Field(default_factory=list)
     # Bearer the upstream MCP server demands. Write-only: never read back.
     upstream_token: str | None = None
 

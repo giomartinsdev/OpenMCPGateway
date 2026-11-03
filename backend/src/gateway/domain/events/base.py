@@ -38,6 +38,26 @@ class IdentityProvider(StrEnum):
     DISCORD = "discord"
     OIDC = "oidc"  # any discovery-document-compliant issuer
 
+class VerifierSpec(BaseModel):
+    """A second authorization server whose tokens this gateway accepts.
+
+    Not a login flow: the client already holds a token from its own issuer, and
+    the gateway only checks the signature, the issuer and the audience. `label`
+    names the source in logs and must be unique, because "which provider
+    rejected this" is the first question after a 401.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    #: Expected `iss`. Exact match: a verifier that ignored it would accept any
+    #: token signed by a key it happens to trust.
+    issuer: str
+    #: Expected `aud`, when the issuer sets one. Empty means "do not check".
+    audience: str = ""
+    #: Where the signing keys live. Fetched and cached by the verifier.
+    jwks_uri: str
+
 
 def _now() -> datetime:
     return datetime.now(UTC)

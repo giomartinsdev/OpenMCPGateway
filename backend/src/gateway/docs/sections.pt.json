@@ -104,6 +104,7 @@
         "**`api_key`** - o chamador envia `Authorization: Bearer omg_...`. A chave é guardada como hash SHA-256 (é o que a autenticação compara) ao lado de uma cópia selada da plaintext, cifrada com o segredo da implantação. A resposta que a emite devolve a plaintext, e a página do gateway mostra um ícone de olho para chave que nunca foi lida: clicar decifra a cópia selada, mostra a chave uma vez e a apaga. Depois disso só resta o hash, e o único caminho de volta a uma chave legível é rotacioná-la. Uma chave pode ser emitida com validade. Depois dela a chave não autentica mais, e uma rotação herda o prazo da chave que substitui — o objetivo de rotacionar é trocar o segredo, não estender por quanto tempo ele é confiável.",
         "**`oauth`** - o gateway é seu próprio resource server OAuth. Um cliente sem token recebe `401` com `WWW-Authenticate: Bearer resource_metadata=...`; ele descobre os documentos de metadados, registra-se e abre um navegador. O operador aprova uma vez, e o subject fica na allowlist a partir daí.",
         "O cliente não precisa de um token versionado em dotfile para o modo OAuth - essa é a ideia. Para o modo API-key precisa, e é por isso que a chave é por gateway e revogável isoladamente.",
+        "Um gateway também pode ter mais de uma forma de entrar. O modo `oauth` aceita chaves de API na mesma rota quando `allow_api_key` está ligado, e aceita tokens de emissores adicionais listados em `verifiers` - cada um com rótulo, emissor, audience opcional e URL do JWKS. Os emissores extras não têm fluxo de login próprio: o cliente já tem o token do seu provedor, e o gateway apenas confere assinatura, emissor e audience. Uma URL, uma allowlist, um limite, e nenhum segundo gateway por tipo de credencial.",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
       ]
     },
@@ -214,7 +215,7 @@
           ],
           [
             "PUT /api/gateways/{id}/auth",
-            "Modo de autenticação, credenciais do IdP, token do upstream"
+            "Modo de autenticação e formas extras de entrar (chaves de API, emissores verificadores)"
           ],
           [
             "POST /api/gateways/{id}/keys",

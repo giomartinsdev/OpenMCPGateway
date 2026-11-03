@@ -196,7 +196,8 @@ class GatewayRouter(BaseModel):
         config = gateway
 
         provider = build_auth_provider(
-            config, base_url=self.base_url, credentials=credentials
+            config, base_url=self.base_url, credentials=credentials,
+            read_models=self.read_models,
         )
         auth = GatewayAuth(config, self.read_models, provider)
 
@@ -279,6 +280,8 @@ class GatewayRouter(BaseModel):
             gateway=slug,
             gateway_id=gateway["id"],
             auth_mode=gateway["auth_mode"],
+            allow_api_key=bool(gateway.get("allow_api_key")),
+            verifiers=len(gateway.get("verifiers") or []),
             routes=len(routes),
             replaced=previous is not None,
         )
@@ -395,6 +398,13 @@ def _signature(gateway: dict[str, Any], credentials: dict[str, str]) -> str:
         repr(gateway.get("monthly_quota")),
         ",".join(sorted(gateway.get("allowed_subjects") or [])),
         ",".join(gateway.get("tools") or []),
+        # Extra ways in are route-relevant: a new issuer or "also accept keys"
+        # must rebuild the guard, or the change only lands after a restart.
+        "keys" if gateway.get("allow_api_key") else "",
+        ",".join(
+            f"{v['label']}:{v['issuer']}:{v.get('audience') or ''}:{v['jwks_uri']}"
+            for v in gateway.get("verifiers") or []
+        ),
     ]
     return hashlib.sha256("\x00".join(parts).encode()).hexdigest()[:16]
 

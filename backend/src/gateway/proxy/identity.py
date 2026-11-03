@@ -38,9 +38,17 @@ class GatewayNotReady(RuntimeError):
 class GatewayAuth:
     """Resolves a bearer token into an Identity for one gateway.
 
-    For OAuth gateways this delegates to the FastMCP provider's own
-    `verify_token`, so there is exactly one implementation of "is this token
-    good" and the proxy layer cannot drift from the transport layer.
+    More than one credential path can be open at once, so `resolve` is a small
+    chain rather than a `match` on the mode:
+
+    * an API key, when the gateway issues keys at all;
+    * the OAuth provider's own `verify_token` — which, when the gateway was
+      built with extra issuers, is `MultiAuth` and tries each of them in turn.
+
+    The order matters only for speed (a hash lookup before a signature check),
+    never for correctness: a token that is not a key falls through. OAuth
+    verification is delegated so there is exactly one implementation of "is
+    this token good", and the proxy layer cannot drift from the transport layer.
     """
 
     def __init__(self, config: dict[str, Any], read_models: ReadModels,
@@ -49,9 +57,19 @@ class GatewayAuth:
         self._read_models = read_models
         self._provider = provider
         self.mode = AuthMode(config["auth_mode"])
+        #: True when this gateway hosts a login flow, which is what decides the
+        #: `WWW-Authenticate` challenge the guard sends.
+        self.hosts_login = self.mode is AuthMode.OAUTH
 
     async def resolve(self, token: str | None) -> Identity | None:
-        """Return the caller's identity, or None when no credential is valid."""
+        """Return the caller's identity, or None when no credential is valid.
+
+        Two paths, never both: a pure key gateway verifies the hash itself, and
+        every other gateway delegates to its provider — which, when the operator
+        allowed keys or extra issuers, is a `MultiAuth` already trying each of
+        them. Delegating keeps one implementation of "is this credential good"
+        and, more importantly, one that the transport agrees with.
+        """
         if self.mode is AuthMode.NONE:
             return Identity(subject="anonymous", method="none")
         if not token:
@@ -80,5 +98,28 @@ class GatewayAuth:
         return Identity(
             subject=str(subject),
             display=str(claims.get("name") or claims.get("email") or ""),
-            method=self.mode.value,
+            method=_source_of(access, key_subject=access.subject) or self.mode.value,
         )
+
+def _source_of(access: Any, *, key_subject: str | None) -> str:
+    """The source that accepted this token, for the traffic log.
+
+    `MultiAuth` prefixes the client id with the label it was configured with
+    (`["corp", ...]`), so a call can be attributed to *which* provider let it in
+    instead of a flat "oauth". A key is not labelled by `MultiAuth`; its subject
+    is already `api-key:<id>`, which is the more useful thing to log.
+    """
+    if key_subject and key_subject.startswith("api-key:"):
+        return "api_key"
+    client_id = getattr(access, "original_client_id", None) or getattr(
+        access, "client_id", None
+    )
+    if not isinstance(client_id, str) or not client_id.startswith("["):
+        return ""
+    try:
+        import json
+
+        parts = json.loads(client_id)
+    except ValueError:
+        return ""
+    return str(parts[0]) if isinstance(parts, list) and parts else ""

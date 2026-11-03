@@ -15,7 +15,6 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from gateway.domain.events import AuthMode
 from gateway.log import log
 from gateway.observability import Metrics, RequestRecorder
 from gateway.proxy.identity import GatewayAuth, Identity
@@ -236,7 +235,7 @@ class GuardMiddleware:
         return None
 
     def _unauthorized(self) -> JSONResponse:
-        if self.auth.mode is AuthMode.OAUTH:
+        if self.auth.hosts_login:
             challenge = (
                 f'Bearer resource_metadata="{self.base_url}'
                 f'{_RESOURCE_METADATA}/g/{self.config["slug"]}/mcp"'

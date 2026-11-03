@@ -173,6 +173,8 @@ async def configure_auth(gateway_id: str, payload: AuthConfigRequest,
         client_secret=payload.client_secret,
         config_url=payload.config_url,
         required_scopes=tuple(payload.required_scopes),
+        allow_api_key=payload.allow_api_key,
+        verifiers=tuple(payload.verifiers),
         upstream_token=payload.upstream_token,
         actor=session.email,
     )

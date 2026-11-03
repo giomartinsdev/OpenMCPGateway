@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastmcp.server.auth import AuthProvider
+from fastmcp.server.auth import AuthProvider, MultiAuth
 
 from gateway.domain.events import AuthMode, IdentityProvider
 from gateway.proxy.identity import GatewayNotReady
@@ -113,13 +113,76 @@ async def forget_client_store(gateway_id: str) -> None:
             await _BACKEND_STORE.destroy_collection(collection)
 
 
-def build_auth_provider(
-    config: dict[str, Any], *, base_url: str, credentials: dict[str, str]
-) -> AuthProvider | None:
-    """Instantiate the OAuth proxy for a gateway, or None for non-OAuth modes.
+class APIKeyVerifier(AuthProvider):
+    """The gateway's own keys, as a FastMCP verifier.
 
-    Only OAuth modes get a provider: API keys are verified by the gateway itself
-    and need no discovery document, and public routes need no auth at all.
+    Lives here, not in the guard, because FastMCP enforces bearer auth underneath
+    the middleware: a key the guard admits but this never sees would be a 401 on
+    a request that was already counted as allowed.
+    """
+
+    def __init__(self, gateway_id: str, read_models: Any) -> None:
+        super().__init__()
+        self._gateway_id = gateway_id
+        self._read_models = read_models
+
+    async def verify_token(self, token: str) -> Any:
+        from mcp.server.auth.provider import AccessToken
+
+        from gateway.infrastructure.security import hash_api_key
+
+        subject = await self._read_models.subject_for_key_hash(
+            self._gateway_id, hash_api_key(token)
+        )
+        if not subject:
+            return None
+        return AccessToken(
+            token=token, client_id="api_key", scopes=[], subject=subject
+        )
+
+class _AnySourceScopes(MultiAuth):
+    """`MultiAuth` that verifies every source but enforces no single one's scopes.
+
+    A token minted by a *different* issuer cannot carry the login provider's
+    scopes (GitHub's `user`, Google's `email`), so the transport's scope check
+    would 403 a token the gateway deliberately accepts. Scopes are still
+    advertised in the challenge and in the protected-resource metadata; who may
+    call is the guard's allowlist, not a claim comparison between unrelated
+    issuers.
+
+    `required_scopes=[]` is what keeps the transport check quiet, so the
+    challenge is overridden to keep asking the login provider for its own scopes
+    — dropping them would send every OAuth client to the IdP with none.
+    """
+
+    def __init__(self, server: AuthProvider, verifiers: dict[str, AuthProvider]):
+        super().__init__(server=server, verifiers=verifiers, required_scopes=[])
+
+    def get_challenge_scopes(
+        self, required_scopes: list[str] | None = None
+    ) -> list[str]:
+        if self.server is not None:
+            return self.server.get_challenge_scopes()
+        return super().get_challenge_scopes(required_scopes)
+
+def build_auth_provider(
+    config: dict[str, Any], *, base_url: str, credentials: dict[str, str],
+    read_models: Any = None,
+) -> AuthProvider | None:
+    """Instantiate the auth for a gateway, or None when it needs no provider.
+
+    Shapes, one entry point:
+
+    * **no provider** — public gateways and pure API-key gateways. Keys are
+      verified by the guard itself and need no discovery document.
+    * **one login, maybe more** — the OAuth proxy, wrapped in `MultiAuth` when
+      the gateway also accepts keys or extra issuers. `MultiAuth` delegates the
+      routes and metadata to the wrapped server, so the browser flow is
+      unchanged and the extra sources contribute only verification.
+
+    The key verifier is part of this list rather than a guard-side special case
+    because FastMCP enforces auth underneath the guard. A guard that accepted a
+    key the transport then rejected would 401 a request it had just admitted.
 
     Raises `GatewayNotReady` when an OAuth gateway has no credentials yet. That is
     a normal intermediate state — you create a gateway, then paste the client id —
@@ -130,6 +193,36 @@ def build_auth_provider(
     if mode is not AuthMode.OAUTH:
         return None
 
+    server = _oauth_server(config, base_url=base_url, credentials=credentials)
+    extra: dict[str, AuthProvider] = dict(_verifiers(config))
+    if config.get("allow_api_key") and read_models is not None:
+        extra["api_key"] = APIKeyVerifier(config["id"], read_models)
+    if not extra:
+        return server
+    # Labels become the source ids: they are what the caller's token is logged
+    # as, and the domain refuses duplicates, so `MultiAuth` cannot see two
+    # sources with the same name.
+    return _AnySourceScopes(server=server, verifiers=extra)
+
+def _verifiers(config: dict[str, Any]) -> dict[str, AuthProvider]:
+    """JWT verifiers for issuers the operator configured, keyed by their label."""
+    from fastmcp.server.auth.providers.jwt import JWTVerifier
+
+    built: dict[str, AuthProvider] = {}
+    for spec in config.get("verifiers") or []:
+        built[spec["label"]] = JWTVerifier(
+            jwks_uri=spec["jwks_uri"],
+            issuer=spec["issuer"],
+            # Empty audience means "this issuer does not set one"; passing ""
+            # would compare against an empty claim and reject every token.
+            audience=spec.get("audience") or None,
+        )
+    return built
+
+def _oauth_server(
+    config: dict[str, Any], *, base_url: str, credentials: dict[str, str]
+) -> AuthProvider:
+    """The provider that hosts this gateway's own login flow."""
     idp = IdentityProvider(config["idp"])
     if not credentials.get("client_id"):
         raise GatewayNotReady("OAuth is selected but no client_id is configured")

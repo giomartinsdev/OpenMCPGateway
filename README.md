@@ -5,6 +5,9 @@ Auth, authorisation, rate limiting and observability in front of any MCP server.
 Point an MCP client at the gateway instead of at the server. The gateway terminates
 OAuth (GitHub, Google, Microsoft, Discord, any OIDC provider) or verifies a bearer
 key, checks an allowlist, enforces a per-subject budget, and records every request.
+A single gateway can do both at once, and can also accept tokens from further
+issuers it only verifies — so one URL covers browser logins, scripts with keys, and
+clients that already hold a token.
 
 ```
 MCP client ──▶ https://gateway.example.com/g/<slug>/mcp ──▶ your MCP server
@@ -346,7 +349,7 @@ OAuth steps name endpoints the proxy itself serves.
 
 | Layer | Behaviour |
 | --- | --- |
-| Authentication | OAuth proxy per gateway, or bearer key hashed with SHA-256 |
+| Authentication | OAuth proxy per gateway, or bearer key hashed with SHA-256; one gateway may accept both, plus tokens from extra issuers it only verifies |
 | Authorisation | Optional allowlist of subjects; empty means "any authenticated caller" |
 | Tools | Optional allowlist of tool names per gateway; empty means "every tool the upstream serves" |
 | Rate limit | Per subject, per gateway, counting JSON-RPC requests (handshakes are free) |

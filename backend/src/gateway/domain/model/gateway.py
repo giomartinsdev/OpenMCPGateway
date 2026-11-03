@@ -32,6 +32,7 @@ from gateway.domain.events import (
     IdentityProvider,
     PrincipalAllowed,
     PrincipalRevoked,
+    VerifierSpec,
     WebhookDeleted,
     WebhookRegistered,
 )
@@ -54,6 +55,10 @@ class Gateway(_Aggregate):
     client_secret: str | None = None
     config_url: str | None = None
     required_scopes: tuple[str, ...] = ()
+    #: Accept API keys alongside the OAuth login. One route, two ways in.
+    allow_api_key: bool = False
+    #: Issuers whose tokens are verified without hosting their login.
+    verifiers: tuple[VerifierSpec, ...] = ()
     upstream_token: str | None = None
     requests_per_minute: int = 0  # 0 = unlimited
     #: Calls this gateway may serve per calendar month. 0 = unlimited.
@@ -101,6 +106,8 @@ class Gateway(_Aggregate):
                 self.client_secret = event.client_secret
                 self.config_url = event.config_url
                 self.required_scopes = event.required_scopes
+                self.allow_api_key = event.allow_api_key
+                self.verifiers = event.verifiers
                 self.upstream_token = event.upstream_token
             case GatewayRateLimitSet():
                 self.requests_per_minute = event.requests_per_minute
@@ -235,6 +242,8 @@ class Gateway(_Aggregate):
         client_secret: str | None = None,
         config_url: str | None = None,
         required_scopes: Sequence[str] = (),
+        allow_api_key: bool = False,
+        verifiers: Sequence[VerifierSpec] = (),
         upstream_token: str | None = None,
     ) -> list[Event]:
         self._ensure_live()
@@ -257,6 +266,7 @@ class Gateway(_Aggregate):
             raise DomainError(
                 "api_key auth requires at least one issued key; issue a key first"
             )
+        self._validate_extra_methods(auth_mode, allow_api_key, verifiers)
         return [
             GatewayAuthConfigured(
                 aggregate_id=self.id,
@@ -266,9 +276,48 @@ class Gateway(_Aggregate):
                 client_secret=client_secret,
                 config_url=config_url,
                 required_scopes=tuple(required_scopes),
+                allow_api_key=allow_api_key,
+                verifiers=tuple(verifiers),
                 upstream_token=upstream_token,
             )
         ]
+
+    def _validate_extra_methods(
+        self,
+        mode: AuthMode,
+        allow_api_key: bool,
+        verifiers: Sequence[VerifierSpec],
+    ) -> None:
+        """Refuse combinations that contradict each other, in words the form can show.
+
+        Each of these is a gateway that "saves" and then behaves in a way nobody
+        asked for: an open route that secretly demands a key, a route that
+        accepts keys while none exist, or two issuers with one name.
+        """
+        if allow_api_key and mode is not AuthMode.OAUTH:
+            raise DomainError(
+                "extra API keys cannot be combined with this auth mode; "
+                "choose oauth to accept both"
+            )
+        if allow_api_key and not self.api_key_ids:
+            raise DomainError(
+                "api_key auth requires at least one issued key; issue a key first"
+            )
+        if verifiers and mode is not AuthMode.OAUTH:
+            raise DomainError(
+                "extra token verifiers cannot be combined with this auth mode; "
+                "choose oauth to add issuers"
+            )
+        labels = [verifier.label.strip() for verifier in verifiers]
+        if any(not label for label in labels):
+            raise DomainError("each verifier needs a label")
+        if len(set(labels)) != len(labels):
+            raise DomainError("verifier labels must be unique; name each issuer")
+        for verifier in verifiers:
+            if not verifier.issuer.startswith(("http://", "https://")):
+                raise DomainError("verifier issuer must be an http(s) URL")
+            if not verifier.jwks_uri.startswith(("http://", "https://")):
+                raise DomainError("verifier jwks_uri must be an http(s) URL")
 
     def decide_set_rate_limit(self, *, requests_per_minute: int) -> list[Event]:
         self._ensure_live()

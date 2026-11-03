@@ -116,6 +116,8 @@ async def on_auth_configured(session: AsyncSession, event: Event) -> None:
             client_id=event.client_id,
             config_url=event.config_url,
             required_scopes=list(event.required_scopes),
+            allow_api_key=event.allow_api_key,
+            verifiers=[verifier.model_dump() for verifier in event.verifiers],
             updated_at=func.now(),
         )
     )

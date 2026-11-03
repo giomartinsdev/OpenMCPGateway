@@ -8,7 +8,7 @@
 module a class lives in; the split is about dependency direction, not imports.
 """
 
-from gateway.domain.events.base import AuthMode, Event, IdentityProvider
+from gateway.domain.events.base import AuthMode, Event, IdentityProvider, VerifierSpec
 from gateway.domain.events.read import READ_EVENTS, RequestObserved
 from gateway.domain.events.write import (
     TENANT_OF_DEPLOYMENT,
@@ -76,6 +76,7 @@ __all__ = [
     "RoleDefined",
     "RoleDeleted",
     "TenantCreated",
+    "VerifierSpec",
     "WebhookDeleted",
     "WebhookRegistered",
 ]

@@ -104,6 +104,7 @@
         "**`api_key`** - el llamador envía `Authorization: Bearer omg_...`. La clave se guarda como hash SHA-256 (eso es lo que compara la autenticación) junto a una copia sellada del texto plano, cifrada con el secreto del despliegue. La respuesta que la emite devuelve el texto plano, y la página del gateway muestra un icono de ojo para una clave que nunca se leyó: al pulsarlo se descifra la copia sellada, se muestra la clave una vez y se borra. Después de eso solo queda el hash, y el único camino de vuelta a una clave legible es rotarla. Una clave puede emitirse con caducidad. Pasada esa fecha la clave ya no autentica, y una rotación hereda el plazo de la clave que sustituye: rotar cambia el secreto, no cuánto tiempo se confía en él.",
         "**`oauth`** - el gateway es su propio servidor de recursos OAuth. Un cliente sin token recibe un `401` con `WWW-Authenticate: Bearer resource_metadata=...`; descubre los documentos de metadatos, se registra y abre un navegador. El operador aprueba una vez, y el sujeto queda en la lista de permitidos a partir de entonces.",
         "El cliente no necesita un token metido en un dotfile para el modo OAuth — de eso se trata. Para el modo API-key sí lo necesita, y por eso la clave es por gateway y revocable por sí sola.",
+        "Un gateway también puede tener más de una forma de entrar. El modo `oauth` acepta claves de API en la misma ruta cuando `allow_api_key` está activo, y acepta tokens de emisores adicionales listados en `verifiers` - cada uno con etiqueta, emisor, audience opcional y URL del JWKS. Los emisores extra no tienen flujo de inicio de sesión propio: el cliente ya tiene el token de su proveedor y el gateway solo comprueba firma, emisor y audience. Una URL, una lista de permitidos, un límite, y ningún segundo gateway por tipo de credencial.",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
       ]
     },
@@ -214,7 +215,7 @@
           ],
           [
             "PUT /api/gateways/{id}/auth",
-            "Modo de autenticación, credenciales del IdP, token de upstream"
+            "Modo de autenticación y formas extra de entrar (claves de API, emisores verificadores)"
           ],
           [
             "POST /api/gateways/{id}/keys",

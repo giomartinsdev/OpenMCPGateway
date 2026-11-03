@@ -33,10 +33,31 @@ export function AuthForm({ gateway, onSaved }) {
     client_secret: "",
     config_url: gateway.config_url ?? "",
     required_scopes: (gateway.required_scopes ?? []).join(" "),
+    allow_api_key: Boolean(gateway.allow_api_key),
+    verifiers: (gateway.verifiers ?? []).map((v) => ({
+      label: v.label ?? "", issuer: v.issuer ?? "",
+      audience: v.audience ?? "", jwks_uri: v.jwks_uri ?? "",
+    })),
     upstream_token: "",
   });
   const [busy, setBusy] = useState(false);
   const set = (key) => (event) => setForm({ ...form, [key]: event.target.value });
+
+  // One repeated row per extra issuer, edited in place. A row is only added on
+  // demand: most gateways have none, and an empty table of inputs reads as a
+  // requirement rather than an option.
+  const setVerifier = (index, key) => (event) => setForm({
+    ...form,
+    verifiers: form.verifiers.map((v, i) => (i === index ? { ...v, [key]: event.target.value } : v)),
+  });
+  const addVerifier = () => setForm({
+    ...form,
+    verifiers: [...form.verifiers, { label: "", issuer: "", audience: "", jwks_uri: "" }],
+  });
+  const removeVerifier = (index) => setForm({
+    ...form,
+    verifiers: form.verifiers.filter((_, i) => i !== index),
+  });
 
   async function submit(event) {
     event.preventDefault();
@@ -50,6 +71,12 @@ export function AuthForm({ gateway, onSaved }) {
         client_secret: form.client_secret || null,
         config_url: form.config_url || null,
         required_scopes: form.required_scopes.split(/\s+/).filter(Boolean),
+        allow_api_key: form.auth_mode === "oauth" && form.allow_api_key,
+        verifiers: form.auth_mode === "oauth"
+          ? form.verifiers
+              .filter((v) => v.label && v.issuer && v.jwks_uri)
+              .map((v) => ({ ...v, audience: v.audience || "" }))
+          : [],
         // Blank means "keep the stored upstream token", same as the secret.
         upstream_token: form.upstream_token || null,
       });
@@ -107,6 +134,42 @@ export function AuthForm({ gateway, onSaved }) {
             <label htmlFor="auth-scopes">{t("Required scopes")}</label>
             <input id="auth-scopes" value={form.required_scopes} onChange={set("required_scopes")}
                    placeholder="read:user" className="mono" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="auth-allow-key" className="row" style={{ gap: 8 }}>
+              <input id="auth-allow-key" type="checkbox" checked={form.allow_api_key}
+                     onChange={(event) => setForm({ ...form, allow_api_key: event.target.checked })} />
+              <span>{t("Also accept API keys on this gateway")}</span>
+            </label>
+            <div className="hint">
+              {t("A browser client logs in, a script presents a key — same URL, same allowlist, same rate limit. The gateway needs at least one issued key.")}
+            </div>
+          </div>
+
+          <div className="field">
+            <label>{t("Also accept tokens from other issuers")}</label>
+            {form.verifiers.map((verifier, index) => (
+              <div key={index} className="verifier-row">
+                <input value={verifier.label} onChange={setVerifier(index, "label")}
+                       placeholder={t("label")} aria-label={t("label")} />
+                <input value={verifier.issuer} onChange={setVerifier(index, "issuer")}
+                       placeholder="https://idp.example.com/" aria-label={t("Issuer")} className="mono" />
+                <input value={verifier.audience} onChange={setVerifier(index, "audience")}
+                       placeholder={t("audience (optional)")} aria-label={t("Audience")} className="mono" />
+                <input value={verifier.jwks_uri} onChange={setVerifier(index, "jwks_uri")}
+                       placeholder="https://idp.example.com/jwks.json" aria-label="JWKS" className="mono" />
+                <button type="button" className="ghost sm" onClick={() => removeVerifier(index)}>
+                  {t("Remove")}
+                </button>
+              </div>
+            ))}
+            <button type="button" className="ghost sm" onClick={addVerifier}>
+              {t("Add issuer")}
+            </button>
+            <div className="hint">
+              {t("No login flow for these: the client already holds the token, and the gateway checks its signature, issuer and audience. Use it for Auth0, Keycloak, or a second IdP beside the one above.")}
+            </div>
           </div>
         </>
       )}

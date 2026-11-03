@@ -19,6 +19,7 @@ from gateway.domain.events import (
     Event,
     IdentityProvider,
     OperatorLoggedIn,
+    VerifierSpec,
 )
 from gateway.domain.model import (
     JOIN_CODE_ALPHABET,
@@ -359,6 +360,8 @@ class CommandHandler:
         client_secret: str | None = None,
         config_url: str | None = None,
         required_scopes: tuple[str, ...] = (),
+        allow_api_key: bool = False,
+        verifiers: tuple[VerifierSpec, ...] = (),
         upstream_token: str | None = None,
         actor: str = "system",
     ) -> list[Event]:
@@ -370,6 +373,8 @@ class CommandHandler:
             client_secret=client_secret,
             config_url=config_url,
             required_scopes=required_scopes,
+            allow_api_key=allow_api_key,
+            verifiers=verifiers,
             upstream_token=upstream_token,
         )
         return await self._commit(gateway_id, events, gateway.version, actor=actor)

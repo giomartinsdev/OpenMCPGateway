@@ -185,6 +185,20 @@ async def _correlation_quota_and_hooks(connection: AsyncConnection) -> None:
     ):
         await connection.execute(text(statement))
 
+async def _multi_auth(connection: AsyncConnection) -> None:
+    """Two columns that let one gateway have more than one way in.
+
+    `allow_api_key` defaults to false and `verifiers` to `[]`, so every gateway
+    written before this release keeps exactly the behaviour it had.
+    """
+    for statement in (
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_gateways "
+        "ADD COLUMN IF NOT EXISTS allow_api_key BOOLEAN NOT NULL DEFAULT false",
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_gateways "
+        "ADD COLUMN IF NOT EXISTS verifiers JSONB NOT NULL DEFAULT '[]'::jsonb",
+    ):
+        await connection.execute(text(statement))
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline", _baseline),
     Migration(2, "tenancy", _tenancy),
@@ -192,6 +206,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(4, "readmodels_schema", _readmodels_schema),
     Migration(5, "key_expiry_and_reason", _key_expiry_and_reason),
     Migration(6, "correlation_quota_and_hooks", _correlation_quota_and_hooks),
+    Migration(7, "multi_auth", _multi_auth),
 )
 
 

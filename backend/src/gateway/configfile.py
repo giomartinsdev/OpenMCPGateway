@@ -32,7 +32,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-from gateway.domain.events import AuthMode, IdentityProvider
+from gateway.domain.events import AuthMode, IdentityProvider, VerifierSpec
 from gateway.domain.model import DomainError
 from gateway.domain.permissions import (
     BUILTIN_ROLES,
@@ -86,6 +86,10 @@ class GatewaySpec(BaseModel):
     client_secret: str | None = None
     config_url: str | None = None
     required_scopes: tuple[str, ...] = ()
+    #: Accept keys as well as the login above (`auth.allow_api_key`).
+    allow_api_key: bool = False
+    #: Extra issuers verified without hosting their login (`auth.verifiers`).
+    verifiers: tuple[VerifierSpec, ...] = ()
     # Bearer the upstream MCP server demands; write-only, like client_secret.
     upstream_token: str | None = None
     rate_limit: int = 0
@@ -219,6 +223,15 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
     idp_value = auth.get("idp")
     idp = IdentityProvider(str(idp_value)) if idp_value else None
     scopes = tuple(str(scope) for scope in (auth.get("scopes") or ()))
+    verifiers = tuple(
+        VerifierSpec(
+            label=str(entry["label"]),
+            issuer=str(entry["issuer"]),
+            audience=str(entry.get("audience") or ""),
+            jwks_uri=str(entry["jwks_uri"]),
+        )
+        for entry in (auth.get("verifiers") or ())
+    )
 
     return GatewaySpec(
         slug=slug,
@@ -231,6 +244,8 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
         client_secret=auth.get("client_secret"),
         config_url=auth.get("config_url"),
         required_scopes=scopes,
+        allow_api_key=bool(auth.get("allow_api_key", False)),
+        verifiers=verifiers,
         upstream_token=auth.get("upstream_token"),
         rate_limit=int(entry.get("rate_limit") or 0),
         allow=tuple(str(subject) for subject in (entry.get("allow") or ())),
@@ -238,6 +253,28 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
         enabled=bool(entry.get("enabled", True)),
     )
 
+
+def _auth_changed(current: dict[str, Any], spec: GatewaySpec) -> bool:
+    """True when the declared auth block differs from what the gateway holds.
+
+    Credentials are excluded on purpose: the file writes `${ENV}` placeholders
+    that resolve to the same secret every apply, and rotating one is an event
+    nobody asked for on a no-op sync.
+    """
+    if current["auth_mode"] != spec.auth_mode.value:
+        return True
+    if (current["idp"] or None) != (spec.idp.value if spec.idp else None):
+        return True
+    if bool(current["allow_api_key"]) != spec.allow_api_key:
+        return True
+    stored = [
+        (v["label"], v["issuer"], v.get("audience") or "", v["jwks_uri"])
+        for v in current["verifiers"]
+    ]
+    declared = [
+        (v.label, v.issuer, v.audience, v.jwks_uri) for v in spec.verifiers
+    ]
+    return stored != declared
 
 async def plan_document(document: ConfigDocument, read_models: Any, *,
                         tenant_id: str) -> dict[str, Any]:
@@ -272,7 +309,7 @@ async def plan_document(document: ConfigDocument, read_models: Any, *,
             changes.append("target_url")
         if (current["description"] or "") != spec.description:
             changes.append("description")
-        if current["auth_mode"] != spec.auth_mode.value:
+        if _auth_changed(current, spec):
             changes.append("auth")
         if int(current["requests_per_minute"]) != spec.rate_limit:
             changes.append("rate_limit")
@@ -340,6 +377,15 @@ async def apply_document(document: ConfigDocument, commands: Any,
                     actor=actor,
                 )
                 created.append(spec.slug)
+                # Keys before auth: a gateway that accepts keys has to have one
+                # to accept, and the domain refuses the combination otherwise.
+                for label in spec.api_keys:
+                    plaintext, _key_id = await commands.issue_api_key(
+                        gateway_id, label=label, actor=actor
+                    )
+                    issued_keys.append(
+                        {"gateway": spec.slug, "label": label, "key": plaintext}
+                    )
                 if spec.auth_mode is not AuthMode.NONE:
                     await commands.configure_auth(
                         gateway_id,
@@ -349,15 +395,10 @@ async def apply_document(document: ConfigDocument, commands: Any,
                         client_secret=spec.client_secret,
                         config_url=spec.config_url,
                         required_scopes=spec.required_scopes,
+                        allow_api_key=spec.allow_api_key,
+                        verifiers=spec.verifiers,
                         upstream_token=spec.upstream_token,
                         actor=actor,
-                    )
-                for label in spec.api_keys:
-                    plaintext, _key_id = await commands.issue_api_key(
-                        gateway_id, label=label, actor=actor
-                    )
-                    issued_keys.append(
-                        {"gateway": spec.slug, "label": label, "key": plaintext}
                     )
                 for subject in spec.allow:
                     await commands.allow_principal(
@@ -388,8 +429,7 @@ async def apply_document(document: ConfigDocument, commands: Any,
                                      if "description" in changed else None),
                         actor=actor,
                     )
-                if (current["auth_mode"] != spec.auth_mode.value
-                        or (current["idp"] or None) != (spec.idp.value if spec.idp else None)):
+                if (_auth_changed(current, spec)):
                     await commands.configure_auth(
                         current["id"],
                         auth_mode=spec.auth_mode,
@@ -398,6 +438,8 @@ async def apply_document(document: ConfigDocument, commands: Any,
                         client_secret=spec.client_secret,
                         config_url=spec.config_url,
                         required_scopes=spec.required_scopes,
+                        allow_api_key=spec.allow_api_key,
+                        verifiers=spec.verifiers,
                         upstream_token=spec.upstream_token,
                         actor=actor,
                     )
