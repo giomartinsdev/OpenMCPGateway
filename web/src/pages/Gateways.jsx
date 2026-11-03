@@ -1,36 +1,43 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Badge, Card, Empty, Metric, Notice, can, relative } from "../ui.jsx";
+import {
+  Badge, Card, Empty, Notice, Skeleton, SAMPLE_GATEWAYS, SAMPLE_STATS,
+  Stat, can, relative,
+} from "../ui.jsx";
 import { navigate } from "../App.jsx";
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
 
 export function Gateways({ me }) {
   const canEdit = can(me, "gateways:write");
-  const [state, setState] = useState({ loading: true, gateways: [], stats: null });
+  const [gateways, setGateways] = useState(null);
+  const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
 
   async function load() {
     try {
-      const [{ gateways }, stats] = await Promise.all([api.gateways(), api.stats(null, 60)]);
-      setState({ loading: false, gateways, stats });
+      const [list, stats] = await Promise.all([api.gateways(), api.stats(null, 60)]);
+      setGateways(list.gateways);
+      setStats(stats);
     } catch (err) {
       setError(err.message);
-      setState({ loading: false, gateways: [], stats: null });
+      setGateways([]);
     }
   }
 
   useEffect(() => { load(); }, []);
 
-  if (state.loading) return <div className="hint">Loading…</div>;
-
-  const live = state.gateways.filter((g) => g.enabled);
-  const open = state.gateways.filter((g) => g.auth_mode === "none");
+  const live = (gateways ?? []).filter((g) => g.enabled);
+  const open = (gateways ?? []).filter((g) => g.auth_mode === "none");
+  const rejected =
+    (stats?.by_outcome?.unauthenticated ?? 0) +
+    (stats?.by_outcome?.forbidden ?? 0) +
+    (stats?.by_outcome?.rate_limited ?? 0);
 
   return (
     <>
-      <div className="topbar">
+      <div className="page-head">
         <div>
           <h1>Gateways</h1>
           <div className="sub">
@@ -38,9 +45,11 @@ export function Gateways({ me }) {
           </div>
         </div>
         {canEdit && (
-          <button className="primary" onClick={() => setCreating(true)}>
-            New gateway
-          </button>
+          <div className="actions">
+            <button className="primary" onClick={() => setCreating(true)}>
+              New gateway
+            </button>
+          </div>
         )}
       </div>
 
@@ -49,27 +58,42 @@ export function Gateways({ me }) {
       {open.length > 0 && (
         <Notice kind="info">
           {open.length === 1 ? "1 gateway is" : `${open.length} gateways are`} proxying with no
-          authentication. That is fine on a private network; require a key or SSO before
-          exposing them.
+          authentication. Fine on a private network; require a key or SSO before exposing them.
         </Notice>
       )}
 
-      <div className="grid-3" style={{ marginBottom: 14 }}>
-        <Metric label="Gateways" value={state.gateways.length} hint={`${live.length} enabled`} />
-        <Metric
-          label="Requests / 60 min"
-          value={state.stats?.requests ?? 0}
-          hint={`avg ${state.stats?.avg_duration_ms ?? 0} ms`}
-        />
-        <Metric
-          label="Rejected"
-          value={
-            (state.stats?.by_outcome?.unauthenticated ?? 0) +
-            (state.stats?.by_outcome?.forbidden ?? 0) +
-            (state.stats?.by_outcome?.rate_limited ?? 0)
+      <div className="grid-3" style={{ marginBottom: 12 }}>
+        <Skeleton data={gateways} sample={SAMPLE_GATEWAYS} label="Loading gateways">
+          {(rows) => (
+            <Stat label="Gateways" value={rows.length} hint={`${rows.filter((g) => g.enabled).length} enabled`} />
+          )}
+        </Skeleton>
+        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading requests">
+          {(data) => (
+            <Stat
+              label="Requests / 60 min"
+              value={data.requests}
+              hint={`avg ${data.avg_duration_ms} ms`}
+            />
+          )}
+        </Skeleton>
+        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading rejections">
+          {(data) =>
+            rejected === 0 ? (
+              <Stat label="Rejected" value={0} hint="401 / 403 / 429" />
+            ) : (
+              <Stat
+                label="Rejected"
+                value={
+                  (data.by_outcome?.unauthenticated ?? 0) +
+                  (data.by_outcome?.forbidden ?? 0) +
+                  (data.by_outcome?.rate_limited ?? 0)
+                }
+                hint="401 / 403 / 429"
+              />
+            )
           }
-          hint="401 / 403 / 429"
-        />
+        </Skeleton>
       </div>
 
       {creating && (
@@ -81,59 +105,63 @@ export function Gateways({ me }) {
         />
       )}
 
-      <Card title="All gateways">
-        {state.gateways.length === 0 ? (
-          <Empty>No gateways yet. Create one to expose an MCP server.</Empty>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Endpoint</th>
-                <th>Auth</th>
-                <th className="num">Limit</th>
-                <th>Status</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.gateways.map((gateway) => (
-                <tr
-                  key={gateway.id}
-                  className="clickable"
-                  onClick={() => navigate(`/gateways/${gateway.id}`)}
-                >
-                  <td>
-                    <div style={{ color: "var(--fg)", fontWeight: 500 }}>
-                      {gateway.name}
-                    </div>
-                    <div className="hint mono">{gateway.slug}</div>
-                  </td>
-                  <td className="mono" style={{ fontSize: 11.5, color: "var(--fg-4)" }}>
-                    {gateway.endpoint}
-                  </td>
-                  <td>
-                    <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
-                      {AUTH_LABEL[gateway.auth_mode] ?? gateway.auth_mode}
-                      {gateway.idp ? ` · ${gateway.idp}` : ""}
-                    </Badge>
-                  </td>
-                  <td className="num">
-                    {gateway.requests_per_minute
-                      ? `${gateway.requests_per_minute}/min`
-                      : "—"}
-                  </td>
-                  <td>
-                    <Badge kind={gateway.enabled ? "ok" : "mute"}>
-                      {gateway.enabled ? "enabled" : "disabled"}
-                    </Badge>
-                  </td>
-                  <td className="hint">{relative(gateway.updated_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <Card title="All gateways" aside={gateways ? `${live.length} serving` : null}>
+        <Skeleton
+          data={gateways}
+          sample={SAMPLE_GATEWAYS}
+          label="Loading the gateway list"
+          empty={gateways?.length === 0}
+          emptyMessage={<Empty title="No gateways yet">Create one to expose an MCP server.</Empty>}
+        >
+          {(rows) => (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Endpoint</th>
+                    <th>Auth</th>
+                    <th className="num">Limit</th>
+                    <th>Status</th>
+                    <th className="num">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((gateway) => (
+                    <tr
+                      key={gateway.id}
+                      className="clickable"
+                      onClick={() => navigate(`/gateways/${gateway.id}`)}
+                    >
+                      <td className="strong nowrap">
+                        {gateway.name}
+                        <div className="sub-line">{gateway.slug}</div>
+                      </td>
+                      <td className="mono">{gateway.endpoint}</td>
+                      <td>
+                        <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
+                          {AUTH_LABEL[gateway.auth_mode] ?? gateway.auth_mode}
+                          {gateway.idp ? ` · ${gateway.idp}` : ""}
+                        </Badge>
+                      </td>
+                      <td className="num">
+                        {gateway.requests_per_minute
+                          ? `${gateway.requests_per_minute}/min`
+                          : "—"}
+                      </td>
+                      <td>
+                        <Badge kind={gateway.enabled ? "ok" : "mute"}>
+                          {gateway.enabled ? "enabled" : "disabled"}
+                        </Badge>
+                      </td>
+                      <td className="num hint">{relative(gateway.updated_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Skeleton>
       </Card>
     </>
   );
@@ -190,8 +218,8 @@ function CreateGateway({ onCancel, onCreated }) {
           <div className="field">
             <label htmlFor="slug">Slug</label>
             <input id="slug" value={form.slug} onChange={set("slug")} required
-                   pattern="[a-z0-9-]+" placeholder="rancher" />
-            <div className="hint" style={{ marginTop: 4 }}>
+                   pattern="[a-z0-9-]+" placeholder="rancher" className="mono" />
+            <div className="hint">
               Becomes <span className="mono">/g/{form.slug || "slug"}/mcp</span>
             </div>
           </div>
@@ -199,8 +227,8 @@ function CreateGateway({ onCancel, onCreated }) {
         <div className="field">
           <label htmlFor="target_url">Upstream MCP URL</label>
           <input id="target_url" value={form.target_url} onChange={set("target_url")} required
-                 placeholder="http://rancher-mcp.apps.svc.cluster.local:8000/mcp" />
-          <div className="hint" style={{ marginTop: 4 }}>
+                 placeholder="http://rancher-mcp.apps.svc.cluster.local:8000/mcp" className="mono" />
+          <div className="hint">
             Streamable HTTP endpoint of the server you are proxying, including its path.
           </div>
         </div>
@@ -213,7 +241,7 @@ function CreateGateway({ onCancel, onCreated }) {
               <option value="none">Anyone (no auth)</option>
             </select>
           </div>
-          {form.auth_mode === "oauth" && (
+          {form.auth_mode === "oauth" ? (
             <div className="field">
               <label htmlFor="idp">Identity provider</label>
               <select id="idp" value={form.idp} onChange={set("idp")}>
@@ -224,16 +252,18 @@ function CreateGateway({ onCancel, onCreated }) {
                 <option value="oidc">Custom OIDC</option>
               </select>
             </div>
-          )}
+          ) : <div />}
         </div>
         <div className="field">
           <label htmlFor="description">Description</label>
           <input id="description" value={form.description} onChange={set("description")}
                  placeholder="What this server is for" />
         </div>
-        <button className="primary" disabled={busy}>
-          {busy ? "Creating…" : "Create gateway"}
-        </button>
+        <div className="form-actions">
+          <button className="primary" disabled={busy}>
+            {busy ? "Creating…" : "Create gateway"}
+          </button>
+        </div>
       </form>
     </Card>
   );

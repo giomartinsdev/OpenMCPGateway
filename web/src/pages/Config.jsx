@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Card, Notice, can } from "../ui.jsx";
+import { Bone, Card, Notice, can } from "../ui.jsx";
 
 const SAMPLE = `gateways:
   - slug: rancher
@@ -20,7 +20,7 @@ prune: false
 
 export function ConfigPage({ me }) {
   const canEdit = can(me, "config:write");
-  const [yaml, setYaml] = useState("");
+  const [yaml, setYaml] = useState(null);
   const [banner, setBanner] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -34,7 +34,7 @@ export function ConfigPage({ me }) {
     setBusy(true);
     setBanner(null);
     try {
-      const result = await action(yaml);
+      const result = await action(yaml ?? "");
       setBanner({ kind: "ok", text: JSON.stringify(result) });
       if (action === api.applyConfig) {
         const fresh = await api.exportConfig();
@@ -49,14 +49,14 @@ export function ConfigPage({ me }) {
 
   return (
     <>
-      <div className="topbar">
+      <div className="page-head">
         <div>
           <h1>Config as code</h1>
           <div className="sub">
             The same commands the UI issues, in a file you can commit and review.
           </div>
         </div>
-        <div className="row">
+        <div className="actions">
           <button onClick={() => setYaml(SAMPLE)} disabled={busy}>Load example</button>
           <button onClick={() => run(api.validateConfig)} disabled={busy}>Validate</button>
           {canEdit && (
@@ -72,13 +72,22 @@ export function ConfigPage({ me }) {
           "Validate parses and resolves placeholders without touching state. Apply runs the commands."}
       </Notice>
 
-      <Card>
-        <textarea
-          value={yaml}
-          onChange={(event) => setYaml(event.target.value)}
-          spellCheck={false}
-          style={{ minHeight: 420 }}
-        />
+      <Card title="gateways.yaml" aside={canEdit ? "applies on save" : "read-only"}>
+        {yaml === null ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {[46, 32, 62, 24, 38, 54, 30, 44].map((width, i) => (
+              <Bone key={i} height={11} width={`${width}%`} />
+            ))}
+          </div>
+        ) : (
+          <textarea
+            value={yaml}
+            onChange={(event) => setYaml(event.target.value)}
+            spellCheck={false}
+            style={{ minHeight: 420 }}
+            aria-label="Gateway configuration"
+          />
+        )}
       </Card>
 
       <Card title="How this stays honest">

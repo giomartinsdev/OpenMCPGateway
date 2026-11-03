@@ -31,15 +31,15 @@ export function Onboarding({ me, onReady }) {
   }
 
   return (
-    <div className="login-wrap">
-      <div className="login">
+    <div className="auth-wrap">
+      <div className="auth">
         <div className="logo">
           <div className="logo-mark" />
           <div className="logo-text">
             OpenMCP<span>Gateway</span>
           </div>
         </div>
-        <form className="card" onSubmit={submit}>
+        <form className="card auth-card" onSubmit={submit}>
           <h2 style={{ marginBottom: 4 }}>
             {mode === "create" ? "Create a tenant" : "Join a tenant"}
           </h2>
@@ -49,7 +49,9 @@ export function Onboarding({ me, onReady }) {
               ? "A tenant is where your gateways and members live. You will own it."
               : "Paste the join code the tenant's owner shared with you."}
           </p>
+
           <Notice kind="err">{error}</Notice>
+
           {mode === "create" ? (
             <div className="field">
               <label htmlFor="tenant-name">Tenant name</label>
@@ -74,32 +76,34 @@ export function Onboarding({ me, onReady }) {
                 autoComplete="off"
                 required
               />
-              <div className="hint" style={{ marginTop: 5 }}>
+              <div className="hint">
                 Eight characters. Ask an owner of the tenant for it.
               </div>
             </div>
           )}
+
           <button className="primary" style={{ width: "100%", marginTop: 4 }} disabled={busy}>
             {busy ? "Working…" : mode === "create" ? "Create tenant" : "Join"}
           </button>
+
+          <div className="login-foot">
+            {mode === "create" ? (
+              <>
+                Invited to an existing tenant?{" "}
+                <a href="#join" onClick={(e) => { e.preventDefault(); setMode("join"); }}>
+                  Join with a code
+                </a>
+              </>
+            ) : (
+              <>
+                Starting fresh?{" "}
+                <a href="#create" onClick={(e) => { e.preventDefault(); setMode("create"); }}>
+                  Create a tenant
+                </a>
+              </>
+            )}
+          </div>
         </form>
-        <div className="login-foot">
-          {mode === "create" ? (
-            <>
-              Invited to an existing tenant?{" "}
-              <a href="#join" onClick={(e) => { e.preventDefault(); setMode("join"); }}>
-                Join with a code
-              </a>
-            </>
-          ) : (
-            <>
-              Starting fresh?{" "}
-              <a href="#create" onClick={(e) => { e.preventDefault(); setMode("create"); }}>
-                Create a tenant
-              </a>
-            </>
-          )}
-        </div>
       </div>
     </div>
   );

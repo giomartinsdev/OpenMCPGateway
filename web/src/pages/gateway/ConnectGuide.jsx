@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../../api.js";
-import { Card, Empty, Notice } from "../../ui.jsx";
+import { Bone, Card, Empty, Notice } from "../../ui.jsx";
 
 function CodeBlock({ step }) {
   const [copied, setCopied] = useState(false);
@@ -70,7 +70,16 @@ export function ConnectGuide({ gateway }) {
       }
     >
       {error ? <Notice kind="err">{error}</Notice> : null}
-      {!guide && !error ? <div className="hint">Loading…</div> : null}
+      {!guide && !error ? (
+        <div style={{ display: "grid", gap: 18 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ display: "grid", gap: 8 }}>
+              <Bone height={12} width={i === 2 ? "28%" : "44%"} />
+              <Bone height={54} radius={10} />
+            </div>
+          ))}
+        </div>
+      ) : null}
       {guide && steps.length === 0 ? (
         <Empty>No steps for this auth mode.</Empty>
       ) : null}

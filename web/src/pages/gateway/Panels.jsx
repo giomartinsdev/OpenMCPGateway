@@ -1,9 +1,12 @@
 // The gateway detail page's pieces. Kept out of the page file so each one is a
 // single concern: auth, rate limit, the traffic tables, and the copy-paste guide.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "../../api.js";
-import { Badge, Card, Chart, Empty, outcomeKind, relative } from "../../ui.jsx";
+import {
+  Badge, Card, Chart, Empty, Skeleton, SAMPLE_REQUESTS, SAMPLE_STATS,
+  outcomeKind, relative,
+} from "../../ui.jsx";
 
 export const OUTCOME_LABEL = {
   allowed: "allowed",
@@ -97,17 +100,19 @@ export function AuthForm({ gateway, onSaved }) {
           </div>
         </>
       )}
-      <div className="field" style={{ marginTop: 4 }}>
+      <div className="field">
         <label htmlFor="auth-upstream">Upstream token</label>
         <input id="auth-upstream" type="password" value={form.upstream_token} className="mono"
                onChange={set("upstream_token")}
                placeholder="only if the MCP server requires its own bearer" />
-        <div className="hint" style={{ marginTop: 4 }}>
+        <div className="hint">
           Sent as <span className="mono">Authorization: Bearer …</span> on every
           upstream call, so callers never hold it. Leave blank to keep the current one.
         </div>
       </div>
-      <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      <div className="form-actions">
+        <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      </div>
     </form>
   );
 }
@@ -119,6 +124,7 @@ export function RateLimitForm({ gateway, onSaved }) {
   return (
     <form
       className="row"
+      style={{ alignItems: "flex-end" }}
       onSubmit={async (event) => {
         event.preventDefault();
         setBusy(true);
@@ -130,14 +136,12 @@ export function RateLimitForm({ gateway, onSaved }) {
         }
       }}
     >
-      <div style={{ maxWidth: 200 }}>
-        <label htmlFor="rate-limit">Requests per minute</label>
+      <div className="field inline" style={{ width: 180 }}>
+        <label htmlFor="rate-limit">Requests / minute</label>
         <input id="rate-limit" type="number" min="0" value={value}
                onChange={(e) => setValue(e.target.value)} />
       </div>
-      <button className="primary" disabled={busy} style={{ alignSelf: "flex-end" }}>
-        {busy ? "Saving…" : "Save"}
-      </button>
+      <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
       <p className="hint" style={{ margin: 0, flex: 1, minWidth: 240 }}>
         0 means no limit. Each subject gets its own budget, and only JSON-RPC
         requests count — handshakes and notifications are free.
@@ -147,71 +151,102 @@ export function RateLimitForm({ gateway, onSaved }) {
 }
 
 export function RecentRequests({ requests }) {
-  if (!requests?.length) return <Empty>No calls recorded yet.</Empty>;
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>When</th>
-          <th>Subject</th>
-          <th>Outcome</th>
-          <th className="num">Status</th>
-          <th className="num">Latency</th>
-          <th>IP</th>
-        </tr>
-      </thead>
-      <tbody>
-        {requests.map((request, index) => (
-          <tr key={`${request.occurred_at}-${index}`}>
-            <td className="hint">{relative(request.occurred_at)}</td>
-            <td className="mono" style={{ fontSize: 11.5 }}>{request.subject ?? "—"}</td>
-            <td>
-              <Badge kind={outcomeKind(request.outcome)}>
-                {OUTCOME_LABEL[request.outcome] ?? request.outcome}
-              </Badge>
-            </td>
-            <td className="num">{request.status}</td>
-            <td className="num">{request.duration_ms} ms</td>
-            <td className="mono" style={{ fontSize: 11.5, color: "var(--fg-4)" }}>
-              {request.ip || "—"}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <Skeleton
+      data={requests}
+      sample={SAMPLE_REQUESTS}
+      label="Loading recent requests"
+      empty={requests?.length === 0}
+      emptyMessage={<Empty title="No calls yet">Requests appear here as they arrive.</Empty>}
+    >
+      {(rows) => (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Subject</th>
+                <th>Outcome</th>
+                <th className="num">Status</th>
+                <th className="num">Latency</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((request, index) => (
+                <tr key={`${request.occurred_at}-${index}`}>
+                  <td className="hint nowrap">{relative(request.occurred_at)}</td>
+                  <td className="mono">{request.subject ?? "—"}</td>
+                  <td>
+                    <Badge kind={outcomeKind(request.outcome)}>
+                      {OUTCOME_LABEL[request.outcome] ?? request.outcome}
+                    </Badge>
+                  </td>
+                  <td className="num">{request.status}</td>
+                  <td className="num">{request.duration_ms} ms</td>
+                  <td className="mono hint">{request.ip || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Skeleton>
   );
 }
 
 export function Traffic({ stats }) {
   return (
     <Card title="Traffic">
-      <Chart series={stats.series} />
-      <div className="grid-2" style={{ marginTop: 14 }}>
+      <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading the chart">
+        {(data) => <Chart series={data.series} />}
+      </Skeleton>
+      <div className="grid-2" style={{ marginTop: 16 }}>
         <div>
-          <div className="metric-label" style={{ marginBottom: 8 }}>By outcome</div>
-          {Object.entries(stats.by_outcome ?? {}).length === 0 ? (
-            <div className="hint">Nothing yet.</div>
-          ) : (
-            Object.entries(stats.by_outcome).map(([outcome, count]) => (
-              <div key={outcome} className="spread" style={{ padding: "4px 0" }}>
-                <Badge kind={outcomeKind(outcome)}>{OUTCOME_LABEL[outcome] ?? outcome}</Badge>
-                <span className="mono">{count}</span>
-              </div>
-            ))
-          )}
+          <div className="eyebrow" style={{ marginBottom: 8 }}>By outcome</div>
+          <Skeleton
+            data={stats}
+            sample={SAMPLE_STATS}
+            label="Loading outcomes"
+            empty={stats && Object.keys(stats.by_outcome ?? {}).length === 0}
+            emptyMessage={<Empty>Nothing yet.</Empty>}
+          >
+            {(data) => (
+              <table>
+                <tbody>
+                  {Object.entries(data.by_outcome ?? {}).map(([outcome, count]) => (
+                    <tr key={outcome}>
+                      <td><Badge kind={outcomeKind(outcome)}>{OUTCOME_LABEL[outcome] ?? outcome}</Badge></td>
+                      <td className="num">{count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Skeleton>
         </div>
         <div>
-          <div className="metric-label" style={{ marginBottom: 8 }}>By caller IP</div>
-          {Object.entries(stats.by_ip ?? {}).length === 0 ? (
-            <div className="hint">Nothing yet.</div>
-          ) : (
-            Object.entries(stats.by_ip).slice(0, 6).map(([ip, count]) => (
-              <div key={ip} className="spread" style={{ padding: "4px 0" }}>
-                <span className="mono" style={{ fontSize: 11.5 }}>{ip || "unknown"}</span>
-                <span className="mono">{count}</span>
-              </div>
-            ))
-          )}
+          <div className="eyebrow" style={{ marginBottom: 8 }}>By caller IP</div>
+          <Skeleton
+            data={stats}
+            sample={SAMPLE_STATS}
+            label="Loading callers"
+            empty={stats && Object.keys(stats.by_ip ?? {}).length === 0}
+            emptyMessage={<Empty>Nothing yet.</Empty>}
+          >
+            {(data) => (
+              <table>
+                <tbody>
+                  {Object.entries(data.by_ip ?? {}).slice(0, 6).map(([ip, count]) => (
+                    <tr key={ip}>
+                      <td className="mono">{ip || "unknown"}</td>
+                      <td className="num">{count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Skeleton>
         </div>
       </div>
     </Card>

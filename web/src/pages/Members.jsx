@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Badge, Card, Empty, Endpoint, Notice, can, relative } from "../ui.jsx";
+import {
+  Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, SAMPLE_MEMBERS,
+  can, relative,
+} from "../ui.jsx";
 
-// People, not settings. The sign-in configuration lives in Settings; this is
-// who belongs to the tenant and what each of them may do.
+// People, not settings. Sign-in configuration is a property of the deployment, so
+// this screen is only who belongs to the tenant and what each of them may do.
 export function Members({ me }) {
   const canWrite = can(me, "members:write");
   const canAssign = can(me, "roles:write");
-  const [operators, setOperators] = useState([]);
+  const [operators, setOperators] = useState(null);
   const [roles, setRoles] = useState([]);
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
@@ -81,72 +84,81 @@ export function Members({ me }) {
 
   return (
     <>
-      <div className="topbar">
+      <div className="page-head">
         <div>
           <h1>Members</h1>
           <div className="sub">
-            Everyone in this tenant shares its gateways and traffic. What each of
-            them may change comes from their roles.
+            Everyone in this tenant shares its gateways and traffic. What each of them
+            may change comes from their roles.
           </div>
+        </div>
+        <div className="actions">
+          <Badge kind="info">{operators ? `${operators.length} people` : "loading"}</Badge>
         </div>
       </div>
 
       <Notice kind="err">{banner?.kind === "err" ? banner.text : ""}</Notice>
       <Notice kind="ok">{banner?.kind === "ok" ? banner.text : ""}</Notice>
 
-      {tenant && (
-        <Card title="Join code">
-          <p className="hint" style={{ marginTop: 0 }}>
-            Anyone with this code can join {tenant.name} as a viewer. Share it with
-            the people who should see this tenant's gateways.
-          </p>
-          <Endpoint value={tenant.join_code} />
-        </Card>
-      )}
+      <Card title="Join code">
+        <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
+          Anyone with this code can join {tenant?.name ?? "this tenant"} as a viewer. Share it
+          with the people who should see these gateways.
+        </p>
+        {tenant ? <Endpoint value={tenant.join_code} /> : <Bone height={38} radius={6} />}
+      </Card>
 
-      <Card title="Who belongs to this tenant">
-        {operators.length === 0 ? (
-          <Empty>No accounts yet.</Empty>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Roles</th>
-                <th>Joined</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {operators.map((operator) => (
-                <tr key={operator.operator_id}>
-                  <td className="mono" style={{ fontSize: 12 }}>{operator.email}</td>
-                  <td>
-                    <div className="row" style={{ gap: 5 }}>
-                      {operator.roles.map((role) => (
-                        <Badge key={role}>{role}</Badge>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="hint">{relative(operator.created_at)}</td>
-                  <td style={{ textAlign: "right" }}>
-                    {canAssign && (
-                      <button
-                        className="ghost sm"
-                        onClick={() => {
-                          setBanner(null);
-                          setEditing({ operator, roleIds: operator.role_ids });
-                        }}
-                      >
-                        Change roles
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <Card title="Who belongs to this tenant" aside={operators ? `${operators.length} people` : null}>
+        <Skeleton
+          data={operators}
+          sample={SAMPLE_MEMBERS}
+          label="Loading members"
+          empty={operators?.length === 0}
+          emptyMessage={<Empty title="No accounts yet">Add the first member below.</Empty>}
+        >
+          {(rows) => (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Roles</th>
+                    <th className="num">Joined</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((operator) => (
+                    <tr key={operator.operator_id}>
+                      <td className="mono strong">{operator.email}</td>
+                      <td>
+                        <div className="row" style={{ gap: 4 }}>
+                          {operator.roles.map((role) => (
+                            <Badge key={role} kind="mute">{role}</Badge>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="num hint">{relative(operator.created_at)}</td>
+                      <td className="actions">
+                        {canAssign && (
+                          <button
+                            className="ghost sm"
+                            onClick={() => {
+                              setBanner(null);
+                              setEditing({ operator, roleIds: operator.role_ids });
+                            }}
+                          >
+                            Change roles
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Skeleton>
       </Card>
 
       {editing && (
@@ -167,7 +179,7 @@ export function Members({ me }) {
                 </label>
               ))}
             </div>
-            <div className="row" style={{ marginTop: 14 }}>
+            <div className="form-actions">
               <button className="primary" disabled={busy}>
                 {busy ? "Saving…" : "Save roles"}
               </button>
@@ -219,13 +231,15 @@ export function Members({ me }) {
                 </label>
               ))}
             </div>
-            <button className="primary" disabled={busy} style={{ marginTop: 14 }}>
-              {busy ? "Adding…" : "Add member"}
-            </button>
-            <p className="hint" style={{ marginBottom: 0, marginTop: 10 }}>
-              No role selected means {defaultRole?.name ?? "viewer"}: reads the
-              gateways and traffic, changes nothing. A colleague can also join by
-              themselves, with the tenant's join code.
+            <div className="form-actions">
+              <button className="primary" disabled={busy}>
+                {busy ? "Adding…" : "Add member"}
+              </button>
+            </div>
+            <p className="hint" style={{ marginBottom: 0 }}>
+              No role selected means {defaultRole?.name ?? "viewer"}: reads the gateways and
+              traffic, changes nothing. A colleague can also join by themselves with the
+              tenant's join code.
             </p>
           </form>
         </Card>

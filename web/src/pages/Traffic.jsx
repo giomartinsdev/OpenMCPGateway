@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Badge, Card, Chart, Empty, Metric, Notice, outcomeKind, relative } from "../ui.jsx";
+import {
+  Badge, Card, Chart, Empty, Notice, Skeleton, SAMPLE_REQUESTS,
+  SAMPLE_STATS, Stat, outcomeKind, relative,
+} from "../ui.jsx";
 
 const WINDOWS = [
   [60, "1 hour"],
@@ -9,10 +12,17 @@ const WINDOWS = [
   [10080, "7 days"],
 ];
 
+const OUTCOME_LABEL = {
+  allowed: "allowed",
+  unauthenticated: "401 unauthenticated",
+  forbidden: "403 forbidden",
+  rate_limited: "429 rate limited",
+};
+
 export function Traffic() {
   const [minutes, setMinutes] = useState(60);
   const [stats, setStats] = useState(null);
-  const [requests, setRequests] = useState([]);
+  const [requests, setRequests] = useState(null);
   const [gateways, setGateways] = useState([]);
   const [error, setError] = useState("");
 
@@ -46,108 +56,143 @@ export function Traffic() {
 
   return (
     <>
-      <div className="topbar">
+      <div className="page-head">
         <div>
           <h1>Traffic</h1>
-          <div className="sub">Every request the gateway admitted or refused, across all routes.</div>
+          <div className="sub">
+            Every request the gateway admitted or refused, across all routes.
+          </div>
         </div>
-        <div className="row">
-          {WINDOWS.map(([value, label]) => (
-            <button
-              key={value}
-              className={minutes === value ? "primary sm" : "sm"}
-              onClick={() => setMinutes(value)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="actions">
+          <div className="seg">
+            {WINDOWS.map(([value, label]) => (
+              <button
+                key={value}
+                className={minutes === value ? "active" : ""}
+                onClick={() => setMinutes(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <Notice kind="err">{error}</Notice>
 
-      <div className="grid-3" style={{ marginBottom: 14 }}>
-        <Metric label="Requests" value={stats?.requests ?? 0} />
-        <Metric label="Avg latency" value={`${stats?.avg_duration_ms ?? 0} ms`}
-                hint={`peak ${stats?.max_duration_ms ?? 0} ms`} />
-        <Metric label="Rejected" value={rejected} hint="401 / 403 / 429" />
+      <div className="grid-3" style={{ marginBottom: 12 }}>
+        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading requests">
+          {(data) => <Stat label="Requests" value={data.requests} />}
+        </Skeleton>
+        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading latency">
+          {(data) => (
+            <Stat
+              label="Avg latency"
+              value={`${data.avg_duration_ms} ms`}
+              hint={`peak ${data.max_duration_ms} ms`}
+            />
+          )}
+        </Skeleton>
+        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading rejections">
+          {() => <Stat label="Rejected" value={rejected} hint="401 / 403 / 429" />}
+        </Skeleton>
       </div>
 
       <Card title="Volume">
-        <Chart series={stats?.series} />
+        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading the chart">
+          {(data) => <Chart series={data.series} />}
+        </Skeleton>
       </Card>
 
-      <div className="grid-2">
+      <div className="grid-2" style={{ marginTop: 12 }}>
         <Card title="By outcome">
-          {Object.entries(stats?.by_outcome ?? {}).length === 0 ? (
-            <Empty>No traffic in this window.</Empty>
-          ) : (
-            <table>
-              <tbody>
-                {Object.entries(stats.by_outcome).map(([outcome, count]) => (
-                  <tr key={outcome}>
-                    <td><Badge kind={outcomeKind(outcome)}>{outcome}</Badge></td>
-                    <td className="num">{count}</td>
-                    <td className="num hint">
-                      {Math.round((count / stats.requests) * 100)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <Skeleton
+            data={stats}
+            sample={SAMPLE_STATS}
+            label="Loading outcomes"
+            empty={stats && Object.keys(stats.by_outcome ?? {}).length === 0}
+            emptyMessage={<Empty title="No traffic">Nothing in this window.</Empty>}
+          >
+            {(data) => (
+              <table>
+                <tbody>
+                  {Object.entries(data.by_outcome ?? {}).map(([outcome, count]) => (
+                    <tr key={outcome}>
+                      <td><Badge kind={outcomeKind(outcome)}>{OUTCOME_LABEL[outcome] ?? outcome}</Badge></td>
+                      <td className="num">{count}</td>
+                      <td className="num hint">
+                        {data.requests ? Math.round((count / data.requests) * 100) : 0}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Skeleton>
         </Card>
         <Card title="Top callers">
-          {Object.entries(stats?.by_ip ?? {}).length === 0 ? (
-            <Empty>No callers in this window.</Empty>
-          ) : (
-            <table>
-              <tbody>
-                {Object.entries(stats.by_ip).map(([ip, count]) => (
-                  <tr key={ip}>
-                    <td className="mono" style={{ fontSize: 11.5 }}>{ip}</td>
-                    <td className="num">{count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <Skeleton
+            data={stats}
+            sample={SAMPLE_STATS}
+            label="Loading callers"
+            empty={stats && Object.keys(stats.by_ip ?? {}).length === 0}
+            emptyMessage={<Empty title="No callers">Nothing in this window.</Empty>}
+          >
+            {(data) => (
+              <table>
+                <tbody>
+                  {Object.entries(data.by_ip ?? {}).map(([ip, count]) => (
+                    <tr key={ip}>
+                      <td className="mono">{ip || "unknown"}</td>
+                      <td className="num">{count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Skeleton>
         </Card>
       </div>
 
-      <Card title="Recent requests">
-        {requests.length === 0 ? (
-          <Empty>Nothing recorded yet.</Empty>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Gateway</th>
-                <th>Subject</th>
-                <th>Outcome</th>
-                <th className="num">Status</th>
-                <th className="num">Latency</th>
-                <th>IP</th>
-              </tr>
-            </thead>
-            <tbody>
-              {requests.map((request, index) => (
-                <tr key={`${request.occurred_at}-${index}`}>
-                  <td className="hint">{relative(request.occurred_at)}</td>
-                  <td>{names[request.gateway_id] ?? request.gateway_id}</td>
-                  <td className="mono" style={{ fontSize: 11.5 }}>{request.subject ?? "—"}</td>
-                  <td><Badge kind={outcomeKind(request.outcome)}>{request.outcome}</Badge></td>
-                  <td className="num">{request.status}</td>
-                  <td className="num">{request.duration_ms} ms</td>
-                  <td className="mono" style={{ fontSize: 11.5, color: "var(--fg-4)" }}>
-                    {request.ip || "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <Card title="Recent requests" aside={requests ? `${requests.length} rows` : null}>
+        <Skeleton
+          data={requests}
+          sample={SAMPLE_REQUESTS}
+          label="Loading recent requests"
+          empty={requests?.length === 0}
+          emptyMessage={<Empty title="Nothing recorded yet">Requests appear here as they arrive.</Empty>}
+        >
+          {(rows) => (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Gateway</th>
+                    <th>Subject</th>
+                    <th>Outcome</th>
+                    <th className="num">Status</th>
+                    <th className="num">Latency</th>
+                    <th>IP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((request, index) => (
+                    <tr key={`${request.occurred_at}-${index}`}>
+                      <td className="hint nowrap">{relative(request.occurred_at)}</td>
+                      <td className="nowrap">{names[request.gateway_id] ?? request.gateway_id}</td>
+                      <td className="mono">{request.subject ?? "—"}</td>
+                      <td><Badge kind={outcomeKind(request.outcome)}>{request.outcome}</Badge></td>
+                      <td className="num">{request.status}</td>
+                      <td className="num">{request.duration_ms} ms</td>
+                      <td className="mono hint">{request.ip || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Skeleton>
       </Card>
     </>
   );

@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Badge, Card, Empty, Notice, can } from "../ui.jsx";
+import {
+  Badge, Card, Empty, Notice, Skeleton, SAMPLE_ROLES, can,
+} from "../ui.jsx";
 
 // Two roles cannot be edited: `owner` and `viewer` exist in code, so a
 // deployment that lost its log still has an owner. Everything else here is the
 // tenant's own.
 export function Roles({ me }) {
   const canWrite = can(me, "roles:write");
-  const [roles, setRoles] = useState([]);
+  const [roles, setRoles] = useState(null);
   const [catalog, setCatalog] = useState([]);
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
@@ -78,7 +80,7 @@ export function Roles({ me }) {
 
   return (
     <>
-      <div className="topbar">
+      <div className="page-head">
         <div>
           <h1>Roles</h1>
           <div className="sub">
@@ -87,7 +89,9 @@ export function Roles({ me }) {
           </div>
         </div>
         {canWrite && !editing && (
-          <button className="primary" onClick={startCreate}>New role</button>
+          <div className="actions">
+            <button className="primary" onClick={startCreate}>New role</button>
+          </div>
         )}
       </div>
 
@@ -97,7 +101,7 @@ export function Roles({ me }) {
       {editing && (
         <Card title={editing.id ? `Edit "${editing.name}"` : "New role"}>
           <form onSubmit={save}>
-            <div className="field">
+            <div className="field" style={{ maxWidth: 280 }}>
               <label htmlFor="role-name">Name</label>
               <input
                 id="role-name"
@@ -120,7 +124,7 @@ export function Roles({ me }) {
                 </label>
               ))}
             </div>
-            <div className="row" style={{ marginTop: 14 }}>
+            <div className="form-actions">
               <button className="primary" disabled={busy}>
                 {busy ? "Saving…" : "Save role"}
               </button>
@@ -130,60 +134,68 @@ export function Roles({ me }) {
         </Card>
       )}
 
-      <Card title="All roles">
-        {roles.length === 0 ? (
-          <Empty>No roles.</Empty>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Role</th>
-                <th>Permissions</th>
-                <th className="num">Members</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {roles.map((role) => (
-                <tr key={role.id}>
-                  <td>
-                    <div style={{ color: "var(--fg)" }}>{role.name}</div>
-                    <div className="hint mono">{role.id}</div>
-                  </td>
-                  <td>
-                    <div className="row" style={{ gap: 5 }}>
-                      {role.permissions.length === 0 ? (
-                        <span className="hint">none — can read nothing</span>
-                      ) : (
-                        role.permissions.map((permission) => (
-                          <span key={permission} className="badge mute mono">
-                            {permission}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </td>
-                  <td className="num">
-                    {role.builtin ? <Badge kind="purple">built-in</Badge> : role.holders}
-                  </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    {canWrite && !role.builtin && (
-                      <>
-                        <button className="ghost sm" onClick={() => startEdit(role)}>
-                          Edit
-                        </button>
-                        <button className="ghost sm" onClick={() => remove(role)}>
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <p className="hint" style={{ marginBottom: 0 }}>
+      <Card title="All roles" aside={roles ? `${roles.length} roles` : null}>
+        <Skeleton
+          data={roles}
+          sample={SAMPLE_ROLES}
+          label="Loading roles"
+          empty={roles?.length === 0}
+          emptyMessage={<Empty title="No roles">Define one to grant a narrow set of permissions.</Empty>}
+        >
+          {(rows) => (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Role</th>
+                    <th>Permissions</th>
+                    <th className="num">Holders</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((role) => (
+                    <tr key={role.id}>
+                      <td className="strong nowrap">
+                        {role.name}
+                        <div className="sub-line">{role.id}</div>
+                      </td>
+                      <td>
+                        <div className="row" style={{ gap: 4 }}>
+                          {role.permissions.length === 0 ? (
+                            <span className="hint">none — can read nothing</span>
+                          ) : (
+                            role.permissions.map((permission) => (
+                              <span key={permission} className="badge mute mono">
+                                {permission}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="num">
+                        {role.builtin ? <Badge kind="purple">built-in</Badge> : role.holders}
+                      </td>
+                      <td className="actions">
+                        {canWrite && !role.builtin && (
+                          <>
+                            <button className="ghost sm" onClick={() => startEdit(role)}>
+                              Edit
+                            </button>
+                            <button className="ghost sm danger" onClick={() => remove(role)}>
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Skeleton>
+        <p className="hint" style={{ marginBottom: 0, marginTop: 12 }}>
           A permission outside the catalog is refused when you save: a typo would
           otherwise be a role that grants nothing and says nothing.
         </p>
