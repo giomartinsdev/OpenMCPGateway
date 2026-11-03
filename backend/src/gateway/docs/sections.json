@@ -5,7 +5,8 @@
       "title": "What this is",
       "body": [
         "OpenMCPGateway sits in front of one or more MCP servers. Clients point at `https://<host>/g/<slug>/mcp`; the gateway authenticates the caller, applies an allowlist and a per-minute budget, forwards the request to the real server over the private network, and records what happened.",
-        "The upstream does not need to be reachable from the internet, and it does not need to know who the caller is: the gateway terminates identity and forwards its own credential when the upstream demands one (`upstream_token`)."
+        "The upstream does not need to be reachable from the internet, and it does not need to know who the caller is: the gateway terminates identity and forwards its own credential when the upstream demands one (`upstream_token`).",
+        "The panel answers the same questions in the same shape: the Traffic screen carries totals with the change against the previous window, a volume chart, and breakdowns by outcome, gateway and caller — and a row in any table opens a drawer with the rest of that row instead of navigating away from the list."
       ],
       "table": {
         "head": [
@@ -221,11 +222,11 @@
           ],
           [
             "GET /api/stats?minutes=60",
-            "Totals, averages, by-outcome, by-IP, series"
+            "Totals for the window and the equal window before it, by outcome, caller IP and gateway slug, the busiest minute, and the series"
           ],
           [
             "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
-            "A page of the request log"
+            "A page of the request log; every column with a filter box narrows it"
           ],
           [
             "GET /api/events?type=&aggregate=&actor=&since=&until=",

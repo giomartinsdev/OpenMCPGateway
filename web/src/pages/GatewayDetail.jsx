@@ -26,7 +26,7 @@ const SAMPLE = {
   principals: [{ subject: "someone@example.com", added_at: new Date().toISOString() }],
   api_keys: [{ label: "default", key_id: "key_0000", issued_at: new Date().toISOString() }],
   requests: [],
-  stats: { requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, series: [] },
+  stats: { requests: 0, previous_requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, by_gateway: {}, series: [], busiest: null },
 };
 
 export function GatewayDetail({ id, me }) {

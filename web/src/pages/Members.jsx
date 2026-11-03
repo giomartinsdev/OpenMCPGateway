@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
-  Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, SAMPLE_MEMBERS,
-  can, relative,
+  Badge, Bone, Card, Details, Drawer, Endpoint, NoMatches, Notice, Skeleton,
+  SAMPLE_MEMBERS, can, relative,
 } from "../ui.jsx";
 
 // People, not settings. Sign-in configuration is a property of the deployment, so
@@ -17,7 +17,9 @@ export function Members({ me }) {
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
   const [form, setForm] = useState({ email: "", password: "", roleIds: [] });
-  const [editing, setEditing] = useState(null); // {operator, roleIds}
+  // Which drawer is open: the new-member form, one member's details, or the
+  // roles of one member. One slot, because two drawers stacked is a maze.
+  const [drawer, setDrawer] = useState(null); // {kind: "new"} | {kind: "member", operator} | {kind: "roles", operator}
   const [busy, setBusy] = useState(false);
   const [tenant, setTenant] = useState(null);
 
@@ -53,6 +55,7 @@ export function Members({ me }) {
     try {
       await api.addOperator(form.email, form.password, form.roleIds);
       setForm({ email: "", password: "", roleIds: [] });
+      setDrawer(null);
       setBanner({
         kind: "ok",
         text: "Member added. They sign in with that password and the role you chose.",
@@ -70,8 +73,8 @@ export function Members({ me }) {
     setBusy(true);
     setBanner(null);
     try {
-      await api.assignRoles(editing.operator.operator_id, editing.roleIds);
-      setEditing(null);
+      await api.assignRoles(drawer.operator.operator_id, drawer.roleIds);
+      setDrawer(null);
       setBanner({
         kind: "ok",
         text: "Roles changed. The member's next request already uses them.",
@@ -104,6 +107,14 @@ export function Members({ me }) {
         </div>
         <div className="actions">
           <Badge kind="info">{operators ? `${operators.length} people` : "loading"}</Badge>
+          {canWrite && (
+            <button
+              className="primary"
+              onClick={() => { setBanner(null); setDrawer({ kind: "new" }); }}
+            >
+              Add member
+            </button>
+          )}
         </div>
       </div>
 
@@ -124,7 +135,22 @@ export function Members({ me }) {
           sample={SAMPLE_MEMBERS}
           label="Loading members"
           empty={operators?.length === 0}
-          emptyMessage={<Empty title="No accounts yet">Add the first member below.</Empty>}
+          emptyMessage={
+            <NoMatches
+              filters={filters}
+              onClear={() => setFilters({})}
+              title="No accounts yet"
+              action={
+                canWrite ? (
+                  <button className="sm" onClick={() => setDrawer({ kind: "new" })}>
+                    Add the first member
+                  </button>
+                ) : null
+              }
+            >
+              Add the first member.
+            </NoMatches>
+          }
         >
           {(rows) => (
             <div className="table-scroll">
@@ -162,7 +188,15 @@ export function Members({ me }) {
                 </thead>
                 <tbody>
                   {rows.map((operator) => (
-                    <tr key={operator.operator_id}>
+                    <tr
+                      key={operator.operator_id}
+                      className="clickable"
+                      tabIndex={0}
+                      onClick={() => setDrawer({ kind: "member", operator })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setDrawer({ kind: "member", operator });
+                      }}
+                    >
                       <td className="mono strong">{operator.email}</td>
                       <td>
                         <div className="row" style={{ gap: 4 }}>
@@ -177,9 +211,14 @@ export function Members({ me }) {
                         {canAssign && (
                           <button
                             className="ghost sm"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               setBanner(null);
-                              setEditing({ operator, roleIds: operator.role_ids });
+                              setDrawer({
+                                kind: "roles",
+                                operator,
+                                roleIds: operator.role_ids,
+                              });
                             }}
                           >
                             Change roles
@@ -196,36 +235,8 @@ export function Members({ me }) {
         <LoadMore next={next} busy={listBusy} onClick={more} />
       </Card>
 
-      {editing && (
-        <Card title={`Roles for ${editing.operator.email}`}>
-          <form onSubmit={saveRoles}>
-            <div className="permissions">
-              {roles.map((role) => (
-                <label key={role.id} className="permission">
-                  <input
-                    type="checkbox"
-                    checked={editing.roleIds.includes(role.id)}
-                    onChange={() =>
-                      setEditing({ ...editing, roleIds: toggle(editing.roleIds, role.id) })
-                    }
-                  />
-                  <span>{role.name}</span>
-                  <span className="hint mono">{role.permissions.length} perms</span>
-                </label>
-              ))}
-            </div>
-            <div className="form-actions">
-              <button className="primary" disabled={busy}>
-                {busy ? "Saving…" : "Save roles"}
-              </button>
-              <button type="button" onClick={() => setEditing(null)}>Cancel</button>
-            </div>
-          </form>
-        </Card>
-      )}
-
-      {canWrite && (
-        <Card title="Add a member">
+      {drawer?.kind === "new" && (
+        <Drawer title="Add a member" onClose={() => setDrawer(null)}>
           <form onSubmit={add}>
             <div className="field-row">
               <div className="field">
@@ -268,7 +279,7 @@ export function Members({ me }) {
             </div>
             <div className="form-actions">
               <button className="primary" disabled={busy}>
-                {busy ? "Adding…" : "Add member"}
+                {busy ? "Adding…" : "Save member"}
               </button>
             </div>
             <p className="hint" style={{ marginBottom: 0 }}>
@@ -277,7 +288,85 @@ export function Members({ me }) {
               tenant's join code.
             </p>
           </form>
-        </Card>
+        </Drawer>
+      )}
+
+      {drawer?.kind === "member" && (
+        <Drawer
+          title={drawer.operator.email}
+          sub={drawer.operator.operator_id}
+          onClose={() => setDrawer(null)}
+          actions={
+            canAssign ? (
+              <button
+                className="ghost sm"
+                onClick={() =>
+                  setDrawer({
+                    kind: "roles",
+                    operator: drawer.operator,
+                    roleIds: drawer.operator.role_ids,
+                  })
+                }
+              >
+                Change roles
+              </button>
+            ) : null
+          }
+        >
+          <Details
+            rows={[
+              ["Email", <span className="mono">{drawer.operator.email}</span>],
+              ["Joined", new Date(drawer.operator.created_at).toLocaleString()],
+              ["Seen", relative(drawer.operator.created_at)],
+              [
+                "Roles",
+                <span className="row" style={{ gap: 4 }}>
+                  {drawer.operator.roles.length === 0
+                    ? "none"
+                    : drawer.operator.roles.map((role) => (
+                        <Badge key={role} kind="mute">{role}</Badge>
+                      ))}
+                </span>,
+              ],
+              ["Operator id", <span className="mono">{drawer.operator.operator_id}</span>],
+            ]}
+          />
+          <p className="hint" style={{ marginBottom: 0 }}>
+            Permissions are read from this member's roles on every request, so a change
+            lands on their next click — no re-login.
+          </p>
+        </Drawer>
+      )}
+
+      {drawer?.kind === "roles" && (
+        <Drawer
+          title={`Roles for ${drawer.operator.email}`}
+          sub={drawer.operator.operator_id}
+          onClose={() => setDrawer(null)}
+        >
+          <form onSubmit={saveRoles}>
+            <div className="permissions">
+              {roles.map((role) => (
+                <label key={role.id} className="permission">
+                  <input
+                    type="checkbox"
+                    checked={drawer.roleIds.includes(role.id)}
+                    onChange={() =>
+                      setDrawer({ ...drawer, roleIds: toggle(drawer.roleIds, role.id) })
+                    }
+                  />
+                  <span>{role.name}</span>
+                  <span className="hint mono">{role.permissions.length} perms</span>
+                </label>
+              ))}
+            </div>
+            <div className="form-actions">
+              <button className="primary" disabled={busy}>
+                {busy ? "Saving…" : "Save roles"}
+              </button>
+            </div>
+          </form>
+        </Drawer>
       )}
     </>
   );

@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
-  Badge, Card, Empty, Endpoint, Notice, Skeleton, SAMPLE_GATEWAYS, SAMPLE_STATS,
-  Stat, can, relative,
+  Badge, Card, Details, Drawer, Endpoint, NoMatches, Notice, Skeleton,
+  SAMPLE_GATEWAYS, SAMPLE_STATS, Stat, can, relative,
 } from "../ui.jsx";
 import { navigate } from "../App.jsx";
 
@@ -41,6 +41,7 @@ export function Gateways({ me }) {
   const [creating, setCreating] = useState(false);
   const [filters, setFilters] = useState({});
   const [newConsole, setNewConsole] = useState(takeNewConsole);
+  const [selected, setSelected] = useState(null);
   const [sort, setSort] = useSort("created_at", SORTS);
   const { items: gateways, next, busy, more, error: listError } = usePagedList(
     async ({ limit, before, ...query }) => {
@@ -54,7 +55,7 @@ export function Gateways({ me }) {
     api.stats(null, 60).then(setStats, (err) => setError(err.message));
   }, []);
 
-  const open = (gateways ?? []).filter((g) => g.auth_mode === "none");
+  const unauthenticated = (gateways ?? []).filter((g) => g.auth_mode === "none");
   const rejected =
     (stats?.by_outcome?.unauthenticated ?? 0) +
     (stats?.by_outcome?.forbidden ?? 0) +
@@ -105,9 +106,9 @@ export function Gateways({ me }) {
         </Card>
       )}
 
-      {open.length > 0 && (
+      {unauthenticated.length > 0 && (
         <Notice kind="info">
-          {open.length === 1 ? "1 gateway is" : `${open.length} gateways are`} proxying with no
+          {unauthenticated.length === 1 ? "1 gateway is" : `${unauthenticated.length} gateways are`} proxying with no
           authentication. Fine on a private network; require a key or SSO before exposing them.
         </Notice>
       )}
@@ -147,12 +148,14 @@ export function Gateways({ me }) {
       </div>
 
       {creating && (
-        <CreateGateway
-          onCancel={() => setCreating(false)}
-          // Straight to the new gateway: its endpoint and key are the next
-          // thing anyone needs, and the list only repeats the name.
-          onCreated={(id) => { setCreating(false); navigate(`/gateways/${id}`); }}
-        />
+        <Drawer title="New gateway" onClose={() => setCreating(false)}>
+          <CreateGateway
+            onCancel={() => setCreating(false)}
+            // Straight to the new gateway: its endpoint and key are the next
+            // thing anyone needs, and the list only repeats the name.
+            onCreated={(id) => { setCreating(false); navigate(`/gateways/${id}`); }}
+          />
+        </Drawer>
       )}
 
       <Card title="All gateways" aside={gateways ? `${gateways.length} shown` : null}>
@@ -161,7 +164,22 @@ export function Gateways({ me }) {
           sample={SAMPLE_GATEWAYS}
           label="Loading the gateway list"
           empty={gateways?.length === 0}
-          emptyMessage={<Empty title="No gateways yet">Create one to expose an MCP server.</Empty>}
+          emptyMessage={
+            <NoMatches
+              filters={filters}
+              onClear={() => setFilters({})}
+              title="No gateways yet"
+              action={
+                canEdit ? (
+                  <button className="sm" onClick={() => setCreating(true)}>
+                    Create the first gateway
+                  </button>
+                ) : null
+              }
+            >
+              Create one to expose an MCP server.
+            </NoMatches>
+          }
         >
           {(rows) => (
             <div className="table-scroll">
@@ -189,7 +207,9 @@ export function Gateways({ me }) {
                     <tr
                       key={gateway.id}
                       className="clickable"
-                      onClick={() => navigate(`/gateways/${gateway.id}`)}
+                      tabIndex={0}
+                      onClick={() => setSelected(gateway)}
+                      onKeyDown={(e) => { if (e.key === "Enter") setSelected(gateway); }}
                     >
                       <td className="strong nowrap">
                         {gateway.name}
@@ -223,11 +243,56 @@ export function Gateways({ me }) {
         </Skeleton>
         <LoadMore next={next} busy={busy} onClick={more} />
       </Card>
+
+      {selected && (
+        <Drawer
+          title={selected.name}
+          sub={selected.slug}
+          onClose={() => setSelected(null)}
+          actions={
+            <button
+              className="ghost sm"
+              onClick={() => { setSelected(null); navigate(`/gateways/${selected.id}`); }}
+            >
+              Open full page
+            </button>
+          }
+        >
+          <div className="field">
+            <div className="hint">Endpoint</div>
+            <Endpoint value={selected.endpoint} />
+          </div>
+          <Details
+            rows={[
+              ["Name", selected.name],
+              ["Slug", <span className="mono">{selected.slug}</span>],
+              ["Upstream", <span className="mono">{selected.target_url}</span>],
+              [
+                "Auth",
+                <Badge kind={selected.auth_mode === "none" ? "warn" : "info"}>
+                  {AUTH_LABEL[selected.auth_mode] ?? selected.auth_mode}
+                  {selected.idp ? ` · ${selected.idp}` : ""}
+                </Badge>,
+              ],
+              ["Rate limit", selected.requests_per_minute ? `${selected.requests_per_minute}/min` : "none"],
+              ["Status", <Badge kind={selected.enabled ? "ok" : "mute"}>{selected.enabled ? "enabled" : "disabled"}</Badge>],
+              ["Description", selected.description || "—"],
+              ["Created", new Date(selected.created_at).toLocaleString()],
+              ["Updated", relative(selected.updated_at)],
+              ["Gateway id", <span className="mono">{selected.id}</span>],
+            ]}
+          />
+          <p className="hint" style={{ marginBottom: 0 }}>
+            Keys, the upstream credential and the connect guide live on the gateway's own
+            page.
+          </p>
+        </Drawer>
+      )}
     </>
   );
 }
 
-function CreateGateway({ onCancel, onCreated }) {
+function CreateGateway({ onCreated }) {
   const [form, setForm] = useState({
     slug: "",
     name: "",
@@ -259,72 +324,63 @@ function CreateGateway({ onCancel, onCreated }) {
   }
 
   return (
-    <Card
-      title="New gateway"
-      actions={
-        <button className="ghost sm" onClick={onCancel}>
-          Cancel
-        </button>
-      }
-    >
-      <form onSubmit={submit}>
-        <Notice kind="err">{error}</Notice>
-        <div className="field-row">
-          <div className="field">
-            <label htmlFor="name">Name</label>
-            <input id="name" value={form.name} onChange={set("name")} required
-                   placeholder="Rancher cluster" />
-          </div>
-          <div className="field">
-            <label htmlFor="slug">Slug</label>
-            <input id="slug" value={form.slug} onChange={set("slug")} required
-                   pattern="[a-z0-9-]+" placeholder="rancher" className="mono" />
-            <div className="hint">
-              Becomes <span className="mono">/g/{form.slug || "slug"}/mcp</span>
-            </div>
-          </div>
+    <form onSubmit={submit}>
+      <Notice kind="err">{error}</Notice>
+      <div className="field-row">
+        <div className="field">
+          <label htmlFor="name">Name</label>
+          <input id="name" value={form.name} onChange={set("name")} required
+                 placeholder="Rancher cluster" />
         </div>
         <div className="field">
-          <label htmlFor="target_url">Upstream MCP URL</label>
-          <input id="target_url" value={form.target_url} onChange={set("target_url")} required
-                 placeholder="http://rancher-mcp.apps.svc.cluster.local:8000/mcp" className="mono" />
+          <label htmlFor="slug">Slug</label>
+          <input id="slug" value={form.slug} onChange={set("slug")} required
+                 pattern="[a-z0-9-]+" placeholder="rancher" className="mono" />
           <div className="hint">
-            Streamable HTTP endpoint of the server you are proxying, including its path.
+            Becomes <span className="mono">/g/{form.slug || "slug"}/mcp</span>
           </div>
         </div>
-        <div className="field-row">
+      </div>
+      <div className="field">
+        <label htmlFor="target_url">Upstream MCP URL</label>
+        <input id="target_url" value={form.target_url} onChange={set("target_url")} required
+               placeholder="http://rancher-mcp.apps.svc.cluster.local:8000/mcp" className="mono" />
+        <div className="hint">
+          Streamable HTTP endpoint of the server you are proxying, including its path.
+        </div>
+      </div>
+      <div className="field-row">
+        <div className="field">
+          <label htmlFor="auth_mode">Who may call it</label>
+          <select id="auth_mode" value={form.auth_mode} onChange={set("auth_mode")}>
+            <option value="api_key">API key</option>
+            <option value="oauth">SSO (OAuth)</option>
+            <option value="none">Anyone (no auth)</option>
+          </select>
+        </div>
+        {form.auth_mode === "oauth" ? (
           <div className="field">
-            <label htmlFor="auth_mode">Who may call it</label>
-            <select id="auth_mode" value={form.auth_mode} onChange={set("auth_mode")}>
-              <option value="api_key">API key</option>
-              <option value="oauth">SSO (OAuth)</option>
-              <option value="none">Anyone (no auth)</option>
+            <label htmlFor="idp">Identity provider</label>
+            <select id="idp" value={form.idp} onChange={set("idp")}>
+              <option value="">Choose…</option>
+              <option value="github">GitHub</option>
+              <option value="google">Google</option>
+              <option value="azure">Microsoft</option>
+              <option value="oidc">Custom OIDC</option>
             </select>
           </div>
-          {form.auth_mode === "oauth" ? (
-            <div className="field">
-              <label htmlFor="idp">Identity provider</label>
-              <select id="idp" value={form.idp} onChange={set("idp")}>
-                <option value="">Choose…</option>
-                <option value="github">GitHub</option>
-                <option value="google">Google</option>
-                <option value="azure">Microsoft</option>
-                <option value="oidc">Custom OIDC</option>
-              </select>
-            </div>
-          ) : <div />}
-        </div>
-        <div className="field">
-          <label htmlFor="description">Description</label>
-          <input id="description" value={form.description} onChange={set("description")}
-                 placeholder="What this server is for" />
-        </div>
-        <div className="form-actions">
-          <button className="primary" disabled={busy}>
-            {busy ? "Creating…" : "Create gateway"}
-          </button>
-        </div>
-      </form>
-    </Card>
+        ) : <div />}
+      </div>
+      <div className="field">
+        <label htmlFor="description">Description</label>
+        <input id="description" value={form.description} onChange={set("description")}
+               placeholder="What this server is for" />
+      </div>
+      <div className="form-actions">
+        <button className="primary" disabled={busy}>
+          {busy ? "Creating…" : "Create gateway"}
+        </button>
+      </div>
+    </form>
   );
 }

@@ -121,12 +121,19 @@ class SeriesPoint(ReadRow):
 class TrafficStats(ReadRow):
     window_minutes: int
     requests: int
+    #: The same-length window immediately before this one, so a number can be
+    #: read as rising or falling instead of on its own.
+    previous_requests: int = 0
     avg_duration_ms: float
     max_duration_ms: int
     by_outcome: dict[str, int]
     by_ip: dict[str, int]
+    #: Keyed by gateway slug: the id is not what the panel prints.
     by_gateway: dict[str, int]
     series: list[SeriesPoint]
+    #: The minute with the most requests, and how many: a spike is easier to
+    #: spot in a sentence than in a bar chart.
+    busiest: SeriesPoint | None = None
 
 
 __all__ = [

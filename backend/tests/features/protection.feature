@@ -36,3 +36,26 @@ Feature: Rate limiting and traffic accounting
     When a caller with the issued key calls it 2 times
     Then the stats report at least 2 requests
     And the stats include a per-IP breakdown
+
+  Scenario: The breakdown names the gateway a reader recognises
+    # The stats table keys on the gateway id, but a dashboard that shows `gw_…`
+    # cannot be compared with the gateway list, which shows slugs.
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When a caller with the issued key calls it 2 times
+    Then the stats break the traffic down by gateway slug "demo"
+
+  Scenario: The stats name the busiest minute
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When a caller with the issued key calls it 2 times
+    Then the stats name the busiest minute, and it is one of the series points
+
+  Scenario: A window is compared against the one before it
+    # "12 rejected" says nothing on its own; "12 rejected, up from 3" is the
+    # sentence an operator is looking for. The previous window is the same
+    # length, immediately before this one.
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When a caller with the issued key calls it 2 times
+    Then the stats report no traffic in the previous window

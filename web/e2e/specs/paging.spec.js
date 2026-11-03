@@ -165,6 +165,103 @@ test("the id filter finds a row from a fragment of its id", async ({ page }) => 
   await expect(dataRows(page).first()).toContainText("Grafana dashboards");
 });
 
+test("a filter that matches nothing offers to clear itself", async ({ page }) => {
+  await signIn(page);
+  const rows = dataRows(page);
+  await expect(rows.first()).toBeVisible();
+
+  // The empty state is the only place the reader is told the filter — not the
+  // data — is why the table is blank. Without the button it is a dead end.
+  await page.getByRole("textbox", { name: "Filter by Name" }).fill("nothing-matches");
+  await expect(page.getByText("No rows match this filter")).toBeVisible();
+  await page.getByRole("button", { name: "Clear the filter" }).click();
+
+  await expect(rows.first()).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Filter by Name" })).toHaveValue("");
+});
+
+test("clicking a gateway row expands it in a drawer", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("row", { name: /Rancher cluster/ }).click();
+
+  const drawer = page.getByRole("dialog", { name: "Rancher cluster" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toContainText("/g/rancher/mcp");
+  await expect(drawer).toContainText("Gateway id");
+
+  // Escape closes it: a drawer with no keyboard exit traps anyone without a mouse.
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+});
+
+test("clicking a request expands it in a drawer with the whole row", async ({ page }) => {
+  await signIn(page);
+
+  // A gateway of this tenant that requires a key, so an anonymous probe is
+  // refused by the guard and recorded before any upstream is contacted. Its own
+  // gateway, not the seeded `console`: another spec may own that slug.
+  const refused = await page.evaluate(async () => {
+    const created = await fetch("/api/gateways", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug: "refusing",
+        name: "Refusing",
+        target_url: "http://127.0.0.1:9/mcp",
+        auth_mode: "api_key",
+      }),
+    });
+    if (!created.ok) throw new Error(await created.text());
+    const response = await fetch("/g/refusing/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    return response.status;
+  });
+  expect(refused).toBe(401);
+
+  await page.goto("/#/traffic");
+  // A hash change does not remount the route, so the list would still be the one
+  // that loaded before the probe. Recording is asynchronous: wait until the API
+  // can see the row rather than reloading at a guessed moment.
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const response = await fetch("/api/requests?gateway=refusing&status=401");
+        return (await response.json()).requests.length;
+      }),
+    )
+    .toBeGreaterThan(0);
+  await page.reload();
+
+  const row = dataRows(page).filter({ hasText: "401" }).first();
+  await expect(row).toBeVisible();
+  await row.click();
+
+  const drawer = page.getByRole("dialog", { name: /401 unauthenticated/ });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toContainText("refusing");
+  await expect(drawer).toContainText("Event id");
+  await expect(drawer).toContainText("before it reached the upstream server");
+  await expect(drawer.getByRole("button", { name: "Filter this gateway" })).toBeVisible();
+});
+
+test("clicking an audit event expands the payload in a drawer", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/#/audit");
+
+  const row = dataRows(page).filter({ hasText: "tenant.created" }).first();
+  await expect(row).toBeVisible();
+  await row.click();
+
+  const drawer = page.getByRole("dialog", { name: /tenant.created/ });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toContainText("Payload");
+  await expect(drawer.locator(".payload")).toContainText("{");
+});
+
 test("load more appends the next page instead of replacing the list", async ({
   page,
 }) => {
@@ -204,8 +301,8 @@ test("load more appends the next page instead of replacing the list", async ({
   await expect(rows).toHaveCount(50);
 
   await page.getByRole("button", { name: "Load more" }).click();
-  // 60 bulk + the 4 from the previous scenarios: one more page, appended.
-  await expect(rows).toHaveCount(64);
+  // 60 bulk + the 5 from the previous scenarios: one more page, appended.
+  await expect(rows).toHaveCount(65);
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
 });
 

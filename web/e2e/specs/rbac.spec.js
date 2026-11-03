@@ -87,9 +87,11 @@ test("a member added without a role gets the viewer role", async ({ page }) => {
   await signIn(page, OWNER);
   await page.goto("/#/members");
 
-  await page.getByLabel("Email", { exact: true }).fill(MEMBER.email);
-  await page.getByLabel("Initial password").fill(MEMBER.password);
   await page.getByRole("button", { name: "Add member" }).click();
+  const form = page.getByRole("dialog", { name: "Add a member" });
+  await form.getByLabel("Email", { exact: true }).fill(MEMBER.email);
+  await form.getByLabel("Initial password").fill(MEMBER.password);
+  await form.getByRole("button", { name: "Save member" }).click();
 
   const row = page.getByRole("row", { name: new RegExp(MEMBER.email) });
   await expect(row).toContainText("viewer");
@@ -153,7 +155,7 @@ test("granting a role takes effect on the member's next click, without signing i
     .getByRole("row", { name: new RegExp(MEMBER.email) })
     .getByRole("button", { name: "Change roles" })
     .click();
-  const editorCard = ownerPage.locator(".card", { hasText: `Roles for ${MEMBER.email}` });
+  const editorCard = ownerPage.getByRole("dialog", { name: `Roles for ${MEMBER.email}` });
   await editorCard.locator(".permission", { hasText: "Gateway editor" }).getByRole("checkbox").check();
   await editorCard.locator(".permission", { hasText: "viewer" }).getByRole("checkbox").uncheck();
   await editorCard.getByRole("button", { name: "Save roles" }).click();
@@ -180,15 +182,14 @@ test("granting a role takes effect on the member's next click, without signing i
     .getByRole("row", { name: new RegExp(MEMBER.email) })
     .getByRole("button", { name: "Change roles" })
     .click();
-  await ownerPage
-    .locator(".card", { hasText: `Roles for ${MEMBER.email}` })
+  const editorDrawer = ownerPage.getByRole("dialog", {
+    name: `Roles for ${MEMBER.email}`,
+  });
+  await editorDrawer
     .locator(".permission", { hasText: "Gateway editor" })
     .getByRole("checkbox")
     .uncheck();
-  await ownerPage
-    .locator(".card", { hasText: `Roles for ${MEMBER.email}` })
-    .getByRole("button", { name: "Save roles" })
-    .click();
+  await editorDrawer.getByRole("button", { name: "Save roles" }).click();
 
   await memberPage.reload();
   await expect(memberPage.getByRole("button", { name: "New gateway" })).toHaveCount(0);

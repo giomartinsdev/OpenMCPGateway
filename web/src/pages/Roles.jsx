@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
-  Badge, Card, Empty, Notice, Skeleton, SAMPLE_ROLES, can,
+  Badge, Card, Details, Drawer, NoMatches, Notice, Skeleton, SAMPLE_ROLES, can,
 } from "../ui.jsx";
 
 // Two roles cannot be edited: `owner` and `viewer` exist in code, so a
@@ -24,7 +24,8 @@ export function Roles({ me }) {
   );
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
-  const [editing, setEditing] = useState(null); // {id, name, permissions}
+  // One slot for both drawers: reading a role, and editing one.
+  const [drawer, setDrawer] = useState(null); // {kind: "role", role} | {kind: "edit", editing}
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -41,32 +42,40 @@ export function Roles({ me }) {
 
   function startCreate() {
     setBanner(null);
-    setEditing({ id: null, name: "", permissions: [] });
+    setDrawer({ kind: "edit", editing: { id: null, name: "", permissions: [] } });
   }
 
   function startEdit(role) {
     setBanner(null);
-    setEditing({ id: role.id, name: role.name, permissions: role.permissions });
+    setDrawer({
+      kind: "edit",
+      editing: { id: role.id, name: role.name, permissions: role.permissions },
+    });
   }
 
   function toggle(permission) {
+    const { editing } = drawer;
     const has = editing.permissions.includes(permission);
-    setEditing({
-      ...editing,
-      permissions: has
-        ? editing.permissions.filter((p) => p !== permission)
-        : [...editing.permissions, permission],
+    setDrawer({
+      ...drawer,
+      editing: {
+        ...editing,
+        permissions: has
+          ? editing.permissions.filter((p) => p !== permission)
+          : [...editing.permissions, permission],
+      },
     });
   }
 
   async function save(event) {
     event.preventDefault();
+    const { editing } = drawer;
     setBusy(true);
     setBanner(null);
     try {
       if (editing.id) await api.updateRole(editing.id, editing.name, editing.permissions);
       else await api.defineRole(editing.name, editing.permissions);
-      setEditing(null);
+      setDrawer(null);
       setBanner({ kind: "ok", text: "Saved. Members holding this role see it on their next click." });
       reload();
     } catch (err) {
@@ -80,6 +89,7 @@ export function Roles({ me }) {
     setBanner(null);
     try {
       await api.deleteRole(role.id);
+      setDrawer(null);
       setBanner({ kind: "ok", text: `Deleted "${role.name}".` });
       reload();
     } catch (err) {
@@ -99,7 +109,7 @@ export function Roles({ me }) {
             change lands on their next click — no re-login, no stale cookie.
           </div>
         </div>
-        {canWrite && !editing && (
+        {canWrite && (
           <div className="actions">
             <button className="primary" onClick={startCreate}>New role</button>
           </div>
@@ -109,49 +119,26 @@ export function Roles({ me }) {
       <Notice kind="err">{banner?.kind === "err" ? banner.text : ""}</Notice>
       <Notice kind="ok">{banner?.kind === "ok" ? banner.text : ""}</Notice>
 
-      {editing && (
-        <Card title={editing.id ? `Edit "${editing.name}"` : "New role"}>
-          <form onSubmit={save}>
-            <div className="field" style={{ maxWidth: 280 }}>
-              <label htmlFor="role-name">Name</label>
-              <input
-                id="role-name"
-                value={editing.name}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                placeholder="Auditor"
-                required
-              />
-            </div>
-            <label>Permissions</label>
-            <div className="permissions">
-              {catalog.map((permission) => (
-                <label key={permission} className="permission">
-                  <input
-                    type="checkbox"
-                    checked={editing.permissions.includes(permission)}
-                    onChange={() => toggle(permission)}
-                  />
-                  <span className="mono">{permission}</span>
-                </label>
-              ))}
-            </div>
-            <div className="form-actions">
-              <button className="primary" disabled={busy}>
-                {busy ? "Saving…" : "Save role"}
-              </button>
-              <button type="button" onClick={() => setEditing(null)}>Cancel</button>
-            </div>
-          </form>
-        </Card>
-      )}
-
       <Card title="All roles" aside={roles ? `${roles.length} roles` : null}>
         <Skeleton
           data={roles}
           sample={SAMPLE_ROLES}
           label="Loading roles"
           empty={roles?.length === 0}
-          emptyMessage={<Empty title="No roles">Define one to grant a narrow set of permissions.</Empty>}
+          emptyMessage={
+            <NoMatches
+              filters={filters}
+              onClear={() => setFilters({})}
+              title="No roles"
+              action={
+                canWrite ? (
+                  <button className="sm" onClick={startCreate}>Define the first role</button>
+                ) : null
+              }
+            >
+              Define one to grant a narrow set of permissions.
+            </NoMatches>
+          }
         >
           {(rows) => (
             <div className="table-scroll">
@@ -183,7 +170,15 @@ export function Roles({ me }) {
                 </thead>
                 <tbody>
                   {rows.map((role) => (
-                    <tr key={role.id}>
+                    <tr
+                      key={role.id}
+                      className="clickable"
+                      tabIndex={0}
+                      onClick={() => setDrawer({ kind: "role", role })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setDrawer({ kind: "role", role });
+                      }}
+                    >
                       <td className="strong nowrap">{role.name}</td>
                       <td>
                         <div className="row" style={{ gap: 4 }}>
@@ -205,10 +200,22 @@ export function Roles({ me }) {
                       <td className="actions">
                         {canWrite && !role.builtin && (
                           <>
-                            <button className="ghost sm" onClick={() => startEdit(role)}>
+                            <button
+                              className="ghost sm"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startEdit(role);
+                              }}
+                            >
                               Edit
                             </button>
-                            <button className="ghost sm danger" onClick={() => remove(role)}>
+                            <button
+                              className="ghost sm danger"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                remove(role);
+                              }}
+                            >
                               Delete
                             </button>
                           </>
@@ -227,6 +234,90 @@ export function Roles({ me }) {
           otherwise be a role that grants nothing and says nothing.
         </p>
       </Card>
+
+      {drawer?.kind === "role" && (
+        <Drawer
+          title={drawer.role.name}
+          sub={drawer.role.id}
+          onClose={() => setDrawer(null)}
+          actions={
+            canWrite && !drawer.role.builtin ? (
+              <button className="ghost sm" onClick={() => startEdit(drawer.role)}>
+                Edit
+              </button>
+            ) : null
+          }
+        >
+          <Details
+            rows={[
+              ["Role", drawer.role.name],
+              ["Holders", drawer.role.builtin ? "built-in, held by anyone it is assigned to" : drawer.role.holders],
+              ["Kind", drawer.role.builtin ? <Badge kind="purple">built-in</Badge> : "this tenant's own"],
+              ["Permissions", drawer.role.permissions.length || "none"],
+            ]}
+          />
+          <div className="eyebrow" style={{ marginBottom: 8 }}>What it grants</div>
+          {drawer.role.permissions.length === 0 ? (
+            <p className="hint">Nothing. A role with no permissions can read nothing.</p>
+          ) : (
+            <div className="permissions">
+              {drawer.role.permissions.map((permission) => (
+                <span key={permission} className="badge mute mono">{permission}</span>
+              ))}
+            </div>
+          )}
+          <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
+            {drawer.role.builtin
+              ? "Built-in roles are defined in code, so a deployment that lost its log still has an owner."
+              : "Editing this role changes what every holder may do on their next request."}
+          </p>
+        </Drawer>
+      )}
+
+      {drawer?.kind === "edit" && (
+        <Drawer
+          title={drawer.editing.id ? `Edit "${drawer.editing.name}"` : "New role"}
+          sub={drawer.editing.id}
+          onClose={() => setDrawer(null)}
+        >
+          <form onSubmit={save}>
+            <div className="field">
+              <label htmlFor="role-name">Name</label>
+              <input
+                id="role-name"
+                value={drawer.editing.name}
+                onChange={(e) =>
+                  setDrawer({
+                    ...drawer,
+                    editing: { ...drawer.editing, name: e.target.value },
+                  })
+                }
+                placeholder="Auditor"
+                required
+              />
+            </div>
+            <label>Permissions</label>
+            <div className="permissions">
+              {catalog.map((permission) => (
+                <label key={permission} className="permission">
+                  <input
+                    type="checkbox"
+                    checked={drawer.editing.permissions.includes(permission)}
+                    onChange={() => toggle(permission)}
+                  />
+                  <span className="mono">{permission}</span>
+                </label>
+              ))}
+            </div>
+            <div className="form-actions">
+              <button className="primary" disabled={busy}>
+                {busy ? "Saving…" : "Save role"}
+              </button>
+            </div>
+          </form>
+        </Drawer>
+      )}
     </>
   );
 }
+

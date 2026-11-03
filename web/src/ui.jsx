@@ -2,6 +2,7 @@
 // wrapper: the whole UI is tables, cards and chips, and a design system would
 // cost more than it saves.
 
+import { useEffect } from "react";
 import { Skeleton as SkulletSkeleton, SkeletonBox } from "skullet/react";
 
 /** Whether the signed-in operator may do something. Server still decides. */
@@ -85,12 +86,131 @@ export function Endpoint({ value }) {
   );
 }
 
-export function Empty({ title, children }) {
+export function Empty({ title, children, action }) {
   return (
     <div className="empty">
       {title ? <strong>{title}</strong> : null}
       {children}
+      {action ? <div className="empty-action">{action}</div> : null}
     </div>
+  );
+}
+
+/**
+ * A panel that slides in from the right, over the page.
+ *
+ * Rows are summaries: a request row can say "429 at 12ms" and still leave the
+ * question the row was opened to answer. Opening a drawer keeps the list behind
+ * it — the row is still there when it closes — which a detail page does not.
+ *
+ * Escape and the scrim both close it: a drawer with no keyboard exit is a trap
+ * for anyone not using a mouse.
+ */
+export function Drawer({ title, sub, onClose, actions, children }) {
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="drawer-wrap">
+      <div className="drawer-scrim" onClick={onClose} aria-hidden="true" />
+      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="drawer-head">
+          <div>
+            <h2>{title}</h2>
+            {sub ? <div className="hint mono">{sub}</div> : null}
+          </div>
+          <div className="row">
+            {actions}
+            <button className="ghost sm" onClick={onClose} aria-label="Close">
+              Close
+            </button>
+          </div>
+        </div>
+        <div className="drawer-body">{children}</div>
+      </aside>
+    </div>
+  );
+}
+
+/** Label/value rows. Everything a table cell was too narrow to say. */
+export function Details({ rows }) {
+  return (
+    <dl className="details">
+      {rows.filter(Boolean).map(([label, value]) => (
+        <div key={label} className="detail">
+          <dt>{label}</dt>
+          <dd>{value === null || value === undefined || value === "" ? "—" : value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * The empty state of a list that may be empty for two different reasons.
+ *
+ * "No events yet" is a lie when the list is empty because a filter is wrong, and
+ * the reader is left looking for a box to clear in a header row that no longer
+ * has any rows under it. When filters are on, say so and hand back a button.
+ */
+export function NoMatches({ filters, onClear, title, children, action }) {
+  const active = Object.values(filters ?? {}).filter((v) => v !== "" && v != null);
+  if (active.length > 0) {
+    return (
+      <Empty
+        title="No rows match this filter"
+        action={
+          <button className="sm" onClick={onClear}>
+            Clear {active.length === 1 ? "the filter" : "all filters"}
+          </button>
+        }
+      >
+        {active.map((value) => `“${value}”`).join(", ")} matched nothing.
+      </Empty>
+    );
+  }
+  return (
+    <Empty title={title} action={action}>
+      {children}
+    </Empty>
+  );
+}
+
+/** A ranked breakdown as horizontal bars.
+ *
+ * Wider than a table for the same information: the comparison between two rows
+ * is the reason the block exists, and a column of numbers makes the reader do
+ * the division in their head.
+ */
+export function Bars({ data, total }) {
+  const entries = Object.entries(data ?? {});
+  if (entries.length === 0) {
+    return <Empty title="No traffic">Nothing in this window.</Empty>;
+  }
+  const peak = Math.max(...entries.map(([, count]) => count), 1);
+  const sum = total ?? entries.reduce((carry, [, count]) => carry + count, 0);
+  return (
+    <ul className="bars">
+      {entries.map(([label, count]) => (
+        <li key={label}>
+          <div className="bar-label">
+            <span className="mono">{label || "unknown"}</span>
+            <span className="hint num">
+              {count}
+              {sum ? ` · ${Math.round((count / sum) * 100)}%` : ""}
+            </span>
+          </div>
+          <div className="bar-track">
+            <div style={{ width: `${(count / peak) * 100}%` }} />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -113,7 +233,17 @@ export function Chart({ series }) {
 /* Placeholder shapes, used as `sample` so a skeleton has the right height
    before any data exists. Kept next to the primitives they imitate. */
 
-export const SAMPLE_STATS = { requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, series: [] };
+export const SAMPLE_STATS = {
+  requests: 0,
+  previous_requests: 0,
+  avg_duration_ms: 0,
+  max_duration_ms: 0,
+  by_ip: {},
+  by_outcome: {},
+  by_gateway: {},
+  series: [],
+  busiest: null,
+};
 
 export const SAMPLE_GATEWAYS = [
   { id: "a", name: "Gateway name", slug: "slug", endpoint: "https://…/g/slug/mcp", auth_mode: "oauth", idp: "google", requests_per_minute: 120, enabled: true, updated_at: new Date().toISOString() },

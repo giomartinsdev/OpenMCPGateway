@@ -7,7 +7,7 @@ statement of "what the current state is".
 """
 
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -544,12 +544,17 @@ class ReadModels:
         self, gateway_id: str | None = None, minutes: int = 60,
         *, tenant_id: str | None = None,
     ) -> TrafficStats:
-        """Aggregate traffic: totals, per-outcome, per-IP, latency.
+        """Aggregate traffic: totals, breakdowns, latency, and the window before.
 
         Aggregated in Python rather than SQL because the window is at most a few
         thousand rows (one per gateway/outcome/ip/minute) and doing it here keeps
         the shape of the response easy to change.
+
+        Read over *twice* the window in one query and split at the boundary: the
+        previous period is what makes a number say "rising" instead of "twelve".
         """
+        boundary = datetime.now(UTC).replace(second=0, microsecond=0)
+        boundary -= timedelta(minutes=minutes)
         query = select(
             rm_request_stats.c.gateway_id,
             rm_request_stats.c.outcome,
@@ -558,7 +563,7 @@ class ReadModels:
             rm_request_stats.c.total_ms,
             rm_request_stats.c.max_ms,
             rm_request_stats.c.bucket,
-        ).where(rm_request_stats.c.bucket >= func.now() - _interval(minutes))
+        ).where(rm_request_stats.c.bucket >= boundary - timedelta(minutes=minutes))
         if gateway_id is not None:
             query = query.where(rm_request_stats.c.gateway_id == gateway_id)
         if tenant_id is not None:
@@ -569,6 +574,7 @@ class ReadModels:
             rows = (await session.execute(query)).mappings()
 
             total = 0
+            previous = 0
             total_ms = 0
             peak_ms = 0
             by_outcome: dict[str, int] = {}
@@ -577,6 +583,9 @@ class ReadModels:
             series: dict[str, int] = {}
             for row in rows:
                 count = int(row["count"])
+                if row["bucket"] < boundary:
+                    previous += count
+                    continue
                 total += count
                 total_ms += int(row["total_ms"])
                 peak_ms = max(peak_ms, int(row["max_ms"]))
@@ -588,18 +597,34 @@ class ReadModels:
                 bucket = row["bucket"].isoformat()
                 series[bucket] = series.get(bucket, 0) + count
 
+            slugs = {
+                row[0]: row[1]
+                for row in await session.execute(
+                    select(rm_gateways.c.id, rm_gateways.c.slug).where(
+                        rm_gateways.c.id.in_(by_gateway)
+                    )
+                )
+            }
+
+        points = [
+            SeriesPoint(bucket=bucket, count=count)
+            for bucket, count in sorted(series.items())
+        ]
+        busiest = max(points, key=lambda point: point.count) if points else None
         return TrafficStats(
             window_minutes=minutes,
             requests=total,
+            previous_requests=previous,
             avg_duration_ms=round(total_ms / total, 1) if total else 0,
             max_duration_ms=peak_ms,
             by_outcome=by_outcome,
             by_ip=dict(sorted(by_ip.items(), key=lambda kv: -kv[1])[:20]),
-            by_gateway=by_gateway,
-            series=[
-                SeriesPoint(bucket=bucket, count=count)
-                for bucket, count in sorted(series.items())
-            ],
+            by_gateway={
+                slugs.get(gateway, gateway): count
+                for gateway, count in sorted(by_gateway.items(), key=lambda kv: -kv[1])
+            },
+            series=points,
+            busiest=busiest,
         )
 
 
@@ -612,10 +637,6 @@ def _tenant_gateways(tenant_id: str) -> Any:
     """
     return select(rm_gateways.c.id).where(rm_gateways.c.tenant_id == tenant_id)
 
-
-def _interval(minutes: int) -> Any:
-    """`minutes` as a Postgres interval, without string-formatting SQL."""
-    return func.make_interval(0, 0, 0, 0, 0, minutes)
 
 
 def utcnow() -> datetime:

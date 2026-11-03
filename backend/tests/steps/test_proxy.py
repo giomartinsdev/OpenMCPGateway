@@ -412,6 +412,46 @@ def stats_by_ip(container, runner, gateway: dict) -> None:
     assert stats["by_ip"], stats
 
 
+@then(parsers.parse('the stats break the traffic down by gateway slug "{slug}"'))
+def stats_by_gateway(container, runner, gateway: dict, slug: str) -> None:
+    """The breakdown keys on what the panel shows.
+
+    A dashboard that answered `gw_7f2a…` could not be read against the gateway
+    list, which is the only place the reader ever sees those rows.
+    """
+
+    async def check() -> dict:
+        return await container.read_models.stats(gateway["id"], 60)
+
+    stats = runner.run(check())
+    assert slug in stats["by_gateway"], stats
+
+
+@then("the stats name the busiest minute, and it is one of the series points")
+def stats_busiest(container, runner, gateway: dict) -> None:
+    async def check() -> dict:
+        return await container.read_models.stats(gateway["id"], 60)
+
+    stats = runner.run(check())
+    assert stats["busiest"] is not None, stats
+    assert stats["busiest"]["bucket"] in {p["bucket"] for p in stats["series"]}, stats
+
+
+@then("the stats report no traffic in the previous window")
+def stats_previous(container, runner, gateway: dict) -> None:
+    """The comparison window is empty because the traffic was just recorded.
+
+    A count of zero here is the honest answer, not a missing field: "up from 3"
+    and "up from nothing" are different sentences.
+    """
+
+    async def check() -> dict:
+        return await container.read_models.stats(gateway["id"], 60)
+
+    stats = runner.run(check())
+    assert stats["previous_requests"] == 0, stats
+
+
 # -- helpers ---------------------------------------------------------------
 
 

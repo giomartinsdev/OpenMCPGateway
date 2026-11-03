@@ -190,6 +190,26 @@ Edit `k8s/secret.example.yaml` → `k8s/secret.yaml` first (git-ignored), and se
 host in `k8s/ingress.yaml`. The deployment expects a Postgres you already run; point
 `OMG_DATABASE_URL` at it.
 
+## The panel
+
+Every table is a cursor list with one filter box per column, a clear button on
+each box, and sortable headers. A filter that matches nothing says so and offers
+the button that clears it — an empty table plus a header row is a dead end.
+
+A row is a summary. Click any row in any table and it opens a drawer with the
+whole row: a request's subject, tool, IP, event id and gateway id; an audit
+event's payload; a member's roles and join date; a gateway's upstream and
+policy; a role's permissions. The list stays behind it, so closing the drawer
+returns to the same scroll position.
+
+The Traffic screen is the dashboard: totals with the change against the equal
+window before, latency, rejection rate, distinct callers, a volume chart with the
+busiest minute named, and breakdowns by outcome, gateway and caller. It refreshes
+every ten seconds without a reload.
+
+Creation is a drawer too — gateway, member and role all open the same way from
+the button in the page header, so the form never pushes the list down the page.
+
 ## Calling a gateway
 
 The gateway is a normal MCP server, so any client works:

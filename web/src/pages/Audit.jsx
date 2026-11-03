@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../api.js";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
-  Badge, Card, Empty, Notice, Skeleton, SAMPLE_EVENTS, relative,
+  Badge, Card, Details, Drawer, NoMatches, Notice, Skeleton, SAMPLE_EVENTS, relative,
 } from "../ui.jsx";
 
 // The filter fields are the table's own labels, in the table's own order, which
@@ -21,6 +21,7 @@ const SORTS = { occurred_at: "desc", actor: "asc", type: "asc" };
 export function Audit() {
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useSort("occurred_at", SORTS);
+  const [open, setOpen] = useState(null);
   const { items, next, error, busy, more } = usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.events({ limit, before, ...query });
@@ -51,7 +52,15 @@ export function Audit() {
           sample={SAMPLE_EVENTS}
           label="Loading the audit log"
           empty={items?.length === 0}
-          emptyMessage={<Empty title="No events yet">Every change lands here.</Empty>}
+          emptyMessage={
+            <NoMatches
+              filters={filters}
+              onClear={() => setFilters({})}
+              title="No events yet"
+            >
+              Every change lands here.
+            </NoMatches>
+          }
         >
           {(rows) => (
             <div className="table-scroll">
@@ -85,7 +94,13 @@ export function Audit() {
                 </thead>
                 <tbody>
                   {rows.map((event) => (
-                    <tr key={event.event_id}>
+                    <tr
+                      key={event.event_id}
+                      className="clickable"
+                      tabIndex={0}
+                      onClick={() => setOpen(event)}
+                      onKeyDown={(e) => { if (e.key === "Enter") setOpen(event); }}
+                    >
                       <td className="num hint">{event.global_seq}</td>
                       <td className="mono strong">{event.event_type}</td>
                       <td className="mono hint">{event.aggregate_id}</td>
@@ -101,6 +116,31 @@ export function Audit() {
         </Skeleton>
         <LoadMore next={next} busy={busy} onClick={more} />
       </Card>
+
+      {open && (
+        <Drawer
+          title={open.event_type}
+          sub={open.event_id}
+          onClose={() => setOpen(null)}
+        >
+          <Details
+            rows={[
+              ["Recorded", new Date(open.occurred_at).toLocaleString()],
+              ["Seen", relative(open.occurred_at)],
+              ["Sequence", `#${open.global_seq}`],
+              ["Stream", <span className="mono">{open.aggregate_id}</span>],
+              ["Stream seq", open.sequence],
+              ["Actor", open.actor || "system"],
+            ]}
+          />
+          <div className="eyebrow" style={{ marginBottom: 8 }}>Payload</div>
+          <pre className="payload">{JSON.stringify(open.payload, null, 2)}</pre>
+          <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
+            This is the event as it was appended. Hashes and secrets are redacted
+            before the row is served, so a missing field here was never readable.
+          </p>
+        </Drawer>
+      )}
     </>
   );
 }
