@@ -7,7 +7,8 @@ import {
 import { navigate } from "../App.jsx";
 import { ConnectGuide } from "./gateway/ConnectGuide.jsx";
 import { ToolsPanel } from "./gateway/ToolsPanel.jsx";
-import { AuthForm, RateLimitForm, Requests, Traffic } from "./gateway/Panels.jsx";
+import { AuthForm, QuotaForm, RateLimitForm, Requests, Traffic } from "./gateway/Panels.jsx";
+import { HistoryPanel, PlaygroundPanel, WebhooksPanel } from "./gateway/Operations.jsx";
 
 // Placeholder for the detail page: one object with the shape the page reads, so
 // the skeleton is the page's own layout rather than a grey rectangle.
@@ -79,6 +80,17 @@ function UpstreamHealth({ health, testing }) {
       </Badge>
       {!health.up && health.detail ? (
         <span className="hint mono">{health.detail}</span>
+      ) : null}
+      {/* A tool that quietly changed shape breaks a client that worked
+          yesterday, and nothing else on the page would say so. */}
+      {health.changed?.length ? (
+        <Badge kind="warn">
+          {health.changed.length === 1
+            ? t("1 tool changed since last check")
+            : t("{count} tools changed since last check", {
+                count: health.changed.length,
+              })}
+        </Badge>
       ) : null}
       <span className="hint">
         {t("checked {when}", { when: relative(health.checked_at) })}
@@ -228,6 +240,22 @@ export function GatewayDetail({ id, me }) {
                   </Badge>
                   <span className="hint">
                     {t("0 means no limit. Each subject gets its own budget, and only JSON-RPC requests count — handshakes and notifications are free.")}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="limit-row">
+              {canEdit ? (
+                <QuotaForm gateway={gateway} onSaved={load} />
+              ) : (
+                <div className="row">
+                  <Badge kind={gateway.monthly_quota ? "info" : "mute"}>
+                    {gateway.monthly_quota
+                      ? `${gateway.monthly_quota} ${t("calls / month")}`
+                      : t("No monthly quota")}
+                  </Badge>
+                  <span className="hint">
+                    {t("0 means no ceiling. The counter resets on the first day of the month, UTC, and a call over the quota is refused with 429 before it reaches the upstream.")}
                   </span>
                 </div>
               )}
@@ -460,6 +488,7 @@ export function GatewayDetail({ id, me }) {
                   <th className="num">{t("Issued")}</th>
                   <th>{t("Expires")}</th>
                   <th>{t("Seen")}</th>
+                  <th>{t("Last used")}</th>
                   <th />
                 </tr>
               </thead>
@@ -491,6 +520,12 @@ export function GatewayDetail({ id, me }) {
                         : key.recoverable
                           ? t("never")
                           : t("not available")}
+                    </td>
+                    {/* Read from the traffic log as far back as retention
+                        goes. "Never" here means "not since we started keeping
+                        the evidence", which is the only honest claim to make. */}
+                    <td className="hint">
+                      {key.last_used_at ? relative(key.last_used_at) : t("never")}
                     </td>
                     {canKeys && (
                       <td className="actions">
@@ -556,6 +591,30 @@ export function GatewayDetail({ id, me }) {
       {gateway ? <ConnectGuide gateway={gateway} /> : null}
 
       <Traffic stats={stats} />
+
+      <Card title={t("Playground")}>
+        {gateway ? (
+          <PlaygroundPanel gateway={gateway} onCalled={load} />
+        ) : (
+          <Bone height={120} radius={10} />
+        )}
+      </Card>
+
+      <Card title={t("Webhooks")}>
+        {gateway ? (
+          <WebhooksPanel gateway={gateway} />
+        ) : (
+          <Bone height={120} radius={10} />
+        )}
+      </Card>
+
+      <Card title={t("History")}>
+        {gateway ? (
+          <HistoryPanel gateway={gateway} onRestored={load} />
+        ) : (
+          <Bone height={120} radius={10} />
+        )}
+      </Card>
 
       <Card title={t("Recent requests")}>
         {gateway ? (

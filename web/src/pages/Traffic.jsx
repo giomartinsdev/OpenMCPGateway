@@ -129,7 +129,18 @@ export function Traffic() {
             <Stat
               label={t("Avg latency")}
               value={`${data.avg_duration_ms} ms`}
-              hint={t("peak {ms} ms", { ms: data.max_duration_ms })}
+              // The average hides the tail and the peak is one unlucky call.
+              // p95/p99 ride in the hint: a percentile is a second reading of
+              // the same number, not a fifth card on a four-card row.
+              hint={
+                data.p99_duration_ms
+                  ? t("p95 {p95} ms · p99 {p99} ms · peak {ms} ms", {
+                      p95: data.p95_duration_ms,
+                      p99: data.p99_duration_ms,
+                      ms: data.max_duration_ms,
+                    })
+                  : t("peak {ms} ms", { ms: data.max_duration_ms })
+              }
             />
           )}
         </Skeleton>
@@ -360,6 +371,9 @@ export function Traffic() {
               // and usually empty trains the reader to skip the section.
               // Same sentence the guard stored; translated on the way out.
               ...(open.reason ? [[t("Reason"), t(open.reason)]] : []),
+              ...(open.request_id
+                ? [[t("Request id"), <span className="mono">{open.request_id}</span>]]
+                : []),
               [t("Event id"), <span className="mono">{open.event_id}</span>],
               [t("Gateway id"), <span className="mono">{open.gateway_id}</span>],
             ]}

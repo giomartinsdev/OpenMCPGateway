@@ -205,7 +205,12 @@ export function Members({ me }) {
                         if (e.key === "Enter") setDrawer({ kind: "member", operator });
                       }}
                     >
-                      <td className="mono strong">{operator.email}</td>
+                      <td className="mono strong">
+                        {operator.email}
+                        {operator.disabled && (
+                          <Badge kind="err">{t("disabled")}</Badge>
+                        )}
+                      </td>
                       <td>
                         <div className="row" style={{ gap: 4 }}>
                           {operator.roles.map((role) => (
@@ -307,25 +312,71 @@ export function Members({ me }) {
           sub={drawer.operator.operator_id}
           onClose={() => setDrawer(null)}
           actions={
-            canAssign ? (
-              <button
-                className="ghost sm"
-                onClick={() =>
-                  setDrawer({
-                    kind: "roles",
-                    operator: drawer.operator,
-                    roleIds: drawer.operator.role_ids,
-                  })
-                }
-              >
-                {t("Change roles")}
-              </button>
+            canWrite ? (
+              <>
+                {canAssign && (
+                  <button
+                    className="ghost sm"
+                    onClick={() =>
+                      setDrawer({
+                        kind: "roles",
+                        operator: drawer.operator,
+                        roleIds: drawer.operator.role_ids,
+                      })
+                    }
+                  >
+                    {t("Change roles")}
+                  </button>
+                )}
+                {/* Offboarding, not deletion: the events this account wrote are
+                    the record of what it did with access, and rewriting history
+                    to tidy up a departure is the wrong trade. */}
+                {drawer.operator.operator_id !== me.operator_id && (
+                  <button
+                    className={drawer.operator.disabled ? "ghost sm" : "ghost sm danger"}
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setBanner(null);
+                      try {
+                        if (drawer.operator.disabled) {
+                          await api.enableOperator(drawer.operator.operator_id);
+                        } else {
+                          await api.disableOperator(drawer.operator.operator_id);
+                        }
+                        setDrawer(null);
+                        setBanner({
+                          kind: "ok",
+                          text: drawer.operator.disabled
+                            ? t("Account enabled. Their password still works.")
+                            : t("Account disabled. Live sessions stop on the next request."),
+                        });
+                        reload();
+                      } catch (err) {
+                        setBanner({ kind: "err", text: err.message });
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    {drawer.operator.disabled ? t("Enable") : t("Disable")}
+                  </button>
+                )}
+              </>
             ) : null
           }
         >
           <Details
             rows={[
               [t("Email"), <span className="mono">{drawer.operator.email}</span>],
+              [
+                t("Status"),
+                drawer.operator.disabled ? (
+                  <Badge kind="err">{t("disabled")}</Badge>
+                ) : (
+                  <Badge kind="ok">{t("active")}</Badge>
+                ),
+              ],
               [t("Joined"), new Date(drawer.operator.created_at).toLocaleString(locale)],
               [t("Seen"), relative(drawer.operator.created_at)],
               [

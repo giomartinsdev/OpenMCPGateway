@@ -89,6 +89,35 @@ async def requests_csv(
     )
 
 
+@router.get("/events.csv")
+async def events_csv(
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadAudit,
+    principal: PrincipalDep,
+    container: ContainerDep,
+) -> Response:
+    """The audit log as one CSV file, bounded by `limit`.
+
+    Same scope and filters as `/events`. `payload` is not exported: it holds
+    sealed secrets and key hashes, and an export is the file most likely to leave
+    the building.
+    """
+    del session
+    result = await listing.events(
+        container,
+        principal.caller,
+        window=page.window,
+        filters=filters(request, EVENT_FILTERS),
+        sort=page.sort,
+        order=page.order,
+    )
+    return Response(
+        content=export.render_events(result.items),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="events.csv"'},
+    )
+
 @router.get("/events")
 async def events(
     request: Request,

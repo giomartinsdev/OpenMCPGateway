@@ -143,12 +143,55 @@ async def _key_expiry_and_reason(connection: AsyncConnection) -> None:
     ):
         await connection.execute(text(statement))
 
+async def _correlation_quota_and_hooks(connection: AsyncConnection) -> None:
+    """Everything this release adds that is a column, in one readable step.
+
+    Three unrelated features share a version because they share a boot: a
+    request id on the traffic tail, a monthly counter beside the per-minute
+    limit, and the tables a webhook needs. Splitting them into three versions
+    would buy nothing — a pod either has all of them or is on the previous
+    release.
+    """
+    # Qualified, like migrations 4 and 5: this step also runs against a database
+    # that the baseline just built, where `search_path` may not include the
+    # read-model schema.
+    for statement in (
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_requests_tail "
+        "ADD COLUMN IF NOT EXISTS request_id TEXT NOT NULL DEFAULT ''",
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_gateways "
+        "ADD COLUMN IF NOT EXISTS monthly_quota INTEGER NOT NULL DEFAULT 0",
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_gateways "
+        "ADD COLUMN IF NOT EXISTS quota_month TEXT NOT NULL DEFAULT ''",
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_gateways "
+        "ADD COLUMN IF NOT EXISTS requests_this_month INTEGER NOT NULL DEFAULT 0",
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_operators "
+        "ADD COLUMN IF NOT EXISTS disabled BOOLEAN NOT NULL DEFAULT false",
+        # `create_all` makes these on a fresh database; on an existing one this
+        # is the only thing that does.
+        f"CREATE TABLE IF NOT EXISTS {READMODELS_SCHEMA}.rm_tool_fingerprints ("
+        "gateway_id TEXT NOT NULL, tool TEXT NOT NULL, fingerprint TEXT NOT NULL, "
+        "checked_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+        "PRIMARY KEY (gateway_id, tool))",
+        f"CREATE TABLE IF NOT EXISTS {READMODELS_SCHEMA}.rm_webhooks ("
+        "id TEXT PRIMARY KEY, gateway_id TEXT NOT NULL, url TEXT NOT NULL, "
+        "secret TEXT NOT NULL, outcomes JSONB NOT NULL DEFAULT '[]'::jsonb, "
+        "enabled BOOLEAN NOT NULL DEFAULT true, "
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+        f"CREATE TABLE IF NOT EXISTS {READMODELS_SCHEMA}.rm_webhook_deliveries ("
+        "id TEXT PRIMARY KEY, webhook_id TEXT NOT NULL, event TEXT NOT NULL, "
+        "status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, "
+        "status_code INTEGER, error TEXT NOT NULL DEFAULT '', "
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+    ):
+        await connection.execute(text(statement))
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline", _baseline),
     Migration(2, "tenancy", _tenancy),
     Migration(3, "key_reveal_and_tools", _key_reveal_and_tools),
     Migration(4, "readmodels_schema", _readmodels_schema),
     Migration(5, "key_expiry_and_reason", _key_expiry_and_reason),
+    Migration(6, "correlation_quota_and_hooks", _correlation_quota_and_hooks),
 )
 
 

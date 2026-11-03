@@ -100,6 +100,11 @@ async def current_principal(session: SessionDep,
                             container: ContainerDep) -> Principal:
     tenant_id = await container.read_models.operator_tenant(session.operator_id)
     role_ids = await container.read_models.operator_roles(session.operator_id)
+    if await container.read_models.operator_disabled(session.operator_id):
+        # Offboarding. A signed cookie is a claim about the past, so revoking an
+        # account has to be re-read here — otherwise a disabled member keeps a
+        # working session until the twelve hours run out.
+        raise HTTPException(status_code=401, detail="account is disabled")
     if role_ids is None:
         # An account with no projected row (written before roles existed): the
         # session's own flag is what it was granted with.

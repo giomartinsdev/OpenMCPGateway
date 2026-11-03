@@ -183,7 +183,8 @@
         "Cada lista também aceita seus próprios campos de filtro como parâmetros de query, uma caixa por coluna no painel. Colunas de texto casam um fragmento (`?name=anch` encontra `rancher`), `status` e `enabled` casam exatamente, e toda lista carrega uma caixa `id` para a linha que você copiou pela metade. Um campo desconhecido é 422 nomeando os campos que existem — um filtro silenciosamente ignorado é pior que um erro.",
         "A ordenação é `?sort=<column>&order=asc|desc`. As colunas ordenáveis são um conjunto fechado por lista: gateways por `created_at`, `updated_at`, `name` ou `slug`; traffic por `occurred_at`, `duration_ms`, `status` ou `subject`; o log de auditoria por `occurred_at`, `actor` ou `type`; membros por `email` e `created_at`; funções por `name` e `created_at`. Uma chave desconhecida é 422 que lista as válidas.",
         "Um cursor significa *depois desta linha, nesta ordem*, então fica vinculado à ordenação sob a qual foi emitido. Mude `sort` ou `order` e comece da primeira página: reutilizar o cursor antigo é 422, não uma lista silenciosamente furada.",
-        "Dois endpoints não cabem na forma CRUD e vale conhecê-los: `POST /api/gateways/<id>/keys/<key_id>/reveal` devolve a plaintext selada uma vez e `409` depois disso, e `GET /api/gateways/<id>/upstream-tools` pergunta ao upstream o que ele serve para a lista ser marcada em vez de digitada. `PUT /api/gateways/<id>/tools` substitui a lista. `GET /api/requests.csv` responde aos mesmos filtros de `/requests`, em arquivo; `POST /api/config/plan` diz o que um apply mudaria sem mudar nada, e `POST /api/gateways/<id>/test` sonda o upstream com um handshake MCP de verdade."
+        "Dois endpoints não cabem na forma CRUD e vale conhecê-los: `POST /api/gateways/<id>/keys/<key_id>/reveal` devolve a plaintext selada uma vez e `409` depois disso, e `GET /api/gateways/<id>/upstream-tools` pergunta ao upstream o que ele serve para a lista ser marcada em vez de digitada. `PUT /api/gateways/<id>/tools` substitui a lista. `GET /api/requests.csv` responde aos mesmos filtros de `/requests`, em arquivo; `POST /api/config/plan` diz o que um apply mudaria sem mudar nada, e `POST /api/gateways/<id>/test` sonda o upstream com um handshake MCP de verdade.",
+        "Cinco endpoints respondem a perguntas que a forma CRUD não responde: `GET /api/gateways/<id>/history` é o fluxo de eventos daquele gateway, do mais antigo ao mais novo, com valores secretos ocultados; `POST /api/gateways/<id>/restore` reaplica a configuração de uma versão e anexa um fato `gateway.restored` — credenciais e chaves não são restauradas, porque uma chave revogada tem de continuar revogada; `POST /api/gateways/<id>/call` executa uma ferramenta com a credencial de upstream do próprio gateway e registra a chamada com o operador como subject; `GET /api/events.csv` é o log de auditoria como arquivo, com os mesmos filtros e o mesmo escopo de tenant; e `/api/gateways/<id>/webhooks` registra uma URL que recebe toda observação que o guard grava, assinada com um HMAC-SHA256 do corpo."
       ],
       "table": {
         "head": [
@@ -266,6 +267,34 @@
           [
             "POST /api/gateways/{id}/test",
             "Sonda o upstream agora: handshake real, número de ferramentas, motivo"
+          ],
+          [
+            "GET /api/gateways/{id}/history",
+            "O fluxo de eventos daquele gateway, do mais antigo, com segredos ocultados"
+          ],
+          [
+            "POST /api/gateways/{id}/restore",
+            "Volta a configuração para uma versão; chaves não ressuscitam"
+          ],
+          [
+            "PUT /api/gateways/{id}/quota",
+            "Teto mensal de chamadas (0 = nenhum), separado do limite por minuto"
+          ],
+          [
+            "POST /api/gateways/{id}/call",
+            "Executa uma ferramenta pelo painel; registrada no log de tráfego"
+          ],
+          [
+            "GET|POST /api/gateways/{id}/webhooks",
+            "Hooks que recebem observações, assinados com HMAC-SHA256"
+          ],
+          [
+            "GET /api/events.csv",
+            "O log de auditoria como um arquivo CSV, mesmos filtros e escopo de tenant"
+          ],
+          [
+            "POST /api/operators/{id}/disable",
+            "Encerra login e sessões abertas; `/enable` devolve o acesso"
           ]
         ]
       }
@@ -330,7 +359,8 @@
         "O estado do proxy OAuth (registros de clientes, tokens de upstream, mapeamentos de `jti`) vive no mesmo Postgres, cifrado em repouso, então um rollout não desconecta todos os clientes conectados. Essa parte já é segura para réplicas, e com `OMG_REDIS_URL` setado o limiter também é.",
         "O estado é event-sourced. Toda mudança é um evento append-only e os read models são projeções dele, o que torna o log de auditoria confiável e permite que duas réplicas compartilhem um banco sem uma história de coerência de cache.",
         "O schema é versionado em código (`infrastructure/db/migrations.py`): uma lista numerada de passos, registrada em `schema_migrations`. O boot aplica o que esta build ainda não aplicou, então uma atualização é um rollout, não uma sessão manual de `psql`. Os read models moram no próprio schema, `readmodels` — toda tabela com prefixo `rm_` — enquanto `events`, as tabelas de unicidade e o histórico ficam em `public`. A divisão é o ponto: uma projeção é reconstruível a partir do log, então `DROP SCHEMA readmodels CASCADE` seguido de um boot é um reset seguro que o boot seguinte percebe e refaz. Nada de que o log depende está lá. `OMG_RETENTION_DAYS` poda o log de requisições no boot. Além do corte, eventos `request.observed`, `rm_requests_tail` e `rm_request_stats` são apagados; eventos de auditoria nunca, porque o log de quem mudou o quê não é o log de quem chamou. `0`, o padrão, guarda tudo.",
-        "`GET /metrics` serve o formato texto do Prometheus: `omg_proxy_requests_total` por gateway, desfecho e classe de status; `omg_proxy_request_duration_ms_sum` para dividir pela contagem e obter uma média; e gauges para gateways no ar, gateways pendentes, observações descartadas e qual backend de rate limit está em uso. É sem autenticação e na mesma porta, então restrinja no ingress se a implantação estiver exposta à internet. Os contadores são em processo: com várias réplicas cada pod é uma série e `sum by (gateway)` é a consulta correta."
+        "`GET /metrics` serve o formato texto do Prometheus: `omg_proxy_requests_total` por gateway, desfecho e classe de status; `omg_proxy_request_duration_ms_sum` para dividir pela contagem e obter uma média; e gauges para gateways no ar, gateways pendentes, observações descartadas e qual backend de rate limit está em uso. É sem autenticação e na mesma porta, então restrinja no ingress se a implantação estiver exposta à internet. Os contadores são em processo: com várias réplicas cada pod é uma série e `sum by (gateway)` é a consulta correta.",
+        "Webhooks são entregues fora do caminho da requisição: três tentativas com backoff curto, e uma entrega malsucedida vira uma linha `failed` em vez de retentar para sempre. `GET /api/gateways/<id>/webhooks/<hook_id>/deliveries` é onde \"o hook está silencioso\" ganha resposta — nenhum evento correspondente, ou todo POST falhando. A cota mensal e o limite por minuto são portões diferentes: o limitador cobra uma rajada e vive no Redis quando `OMG_REDIS_URL` está definido; a cota é um lock de linha no Postgres, reservado antes de a chamada sair, então duas chamadas seguidas não leem a mesma contagem. Ambos recusam com 429, e o `reason` da linha diz qual. Toda resposta carrega `X-Request-Id` — o do chamador, se veio um sensato, senão um que o guard gerou — e a linha de tráfego guarda esse id, então um chamado de suporte vira uma consulta."
       ],
       "table": {
         "head": [

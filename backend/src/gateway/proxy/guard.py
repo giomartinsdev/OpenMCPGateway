@@ -6,7 +6,9 @@ bearer auth underneath — defence in depth, not the only check.
 """
 
 import json
+import secrets
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from starlette.datastructures import Headers
@@ -27,13 +29,17 @@ class GuardMiddleware:
 
     def __init__(self, app: ASGIApp, *, config: dict[str, Any],
                  auth: GatewayAuth, limiter: RateLimiter,
-                 recorder: RequestRecorder, metrics: Metrics, base_url: str) -> None:
+                 recorder: RequestRecorder, metrics: Metrics, base_url: str,
+                 read_models: Any = None) -> None:
         self.app = app
         self.config = config
         self.auth = auth
         self.limiter = limiter
         self.recorder = recorder
         self.metrics = metrics
+        #: Only touched when the gateway has a monthly quota; a gateway without
+        #: one never reads it.
+        self.read_models = read_models
         self.base_url = base_url.rstrip("/")
         self.prefix = f"/g/{config['slug']}"
         self.inner_path = "/mcp"
@@ -53,6 +59,10 @@ class GuardMiddleware:
         #: explanation. `outcome` says "forbidden"; this says which gate.
         reason = ""
         tool: str | None = None
+        #: Minted at the edge when the caller sent none, so two anonymous calls
+        #: never share a row. Length-capped: a header is attacker-controlled and
+        #: ends up in a database column and a log line.
+        request_id = _request_id(headers)
 
         try:
             identity = await self.auth.resolve(_bearer(headers))
@@ -97,21 +107,18 @@ class GuardMiddleware:
                 # carry an id), not HTTP POSTs: one MCP call is a handshake plus
                 # a call on the wire, and charging for the transport would make
                 # a limit of N mean fewer than N calls to the user.
-                elif _is_jsonrpc_request(body) and not await self.limiter.allow(
-                    self.config["id"],
-                    identity.subject,
-                    int(self.config.get("requests_per_minute") or 0),
-                ):
-                    outcome, status = "rate_limited", 429
-                    reason = "rate limit exceeded"
+                elif _is_jsonrpc_request(body) and (
+                    refusal := await self._refusal(identity.subject)
+                ) is not None:
+                    outcome, status, reason = refusal
                     response = JSONResponse(
-                        {"error": "rate_limited", "message": "too many requests"},
-                        status_code=429,
-                        headers={"Retry-After": "60"},
+                        {"error": outcome, "message": reason},
+                        status_code=status,
+                        headers={"Retry-After": "60"} if status == 429 else None,
                     )
                 else:
                     status = await _run_capturing_status(
-                        self.app, self._rewrite(scope), receive, send
+                        self.app, self._rewrite(scope), receive, send, request_id
                     )
         except Exception:
             outcome = "error"
@@ -145,9 +152,15 @@ class GuardMiddleware:
                 tool=tool,
                 method=scope.get("method", "POST"),
                 reason=reason,
+                request_id=request_id,
+                gateway_slug=self.config["slug"],
             )
 
         if response is not None:
+            # Refusals are the tickets support gets, so the id goes on the error
+            # too — minting it only on the success path would make it useless
+            # exactly when it is needed.
+            response.headers["X-Request-Id"] = request_id
             await response(scope, receive, send)
 
     def _rewrite(self, scope: Scope) -> Scope:
@@ -162,6 +175,35 @@ class GuardMiddleware:
         rewritten["root_path"] = scope.get("root_path", "") + self.prefix
         rewritten["path"] = self.inner_path
         return rewritten
+
+    async def _refusal(self, subject: str) -> tuple[str, int, str] | None:
+        """Why this call may not proceed, or None when it may.
+
+        The per-minute limiter charges the burst; the monthly quota answers "is
+        this integration over its bill". Both are decided before the call
+        reaches the upstream, so a refusal costs no upstream work. The quota is
+        read only for gateways that set one — a gateway without a ceiling must
+        not pay a query per request.
+        """
+        if not await self.limiter.allow(
+            self.config["id"],
+            subject,
+            int(self.config.get("requests_per_minute") or 0),
+        ):
+            return "rate_limited", 429, "rate limit exceeded"
+        # Reserved atomically before the call goes out: a counter incremented by
+        # the async recorder would let two calls in a row read the same count and
+        # both pass.
+        quota = int(self.config.get("monthly_quota") or 0)
+        if (
+            quota > 0
+            and self.read_models is not None
+            and not await self.read_models.consume_quota(
+                self.config["id"], month=_this_month(), quota=quota
+            )
+        ):
+            return "rate_limited", 429, "monthly quota exhausted"
+        return None
 
     def _authorized(self, subject: str) -> bool:
         allowed: list[str] = self.config.get("allowed_subjects") or []
@@ -290,19 +332,52 @@ def _message_has_id(payload: Any) -> bool:
     return isinstance(payload, dict) and payload.get("id") is not None
 
 
-async def _run_capturing_status(    app: ASGIApp, scope: Scope, receive: Receive, send: Send
+async def _run_capturing_status(
+    app: ASGIApp, scope: Scope, receive: Receive, send: Send,
+    request_id: str = "",
 ) -> int:
-    """Run the downstream app and report the status it actually sent."""
+    """Run the downstream app, report the status it sent, stamp the request id.
+
+    The header is added by wrapping `send` rather than by wrapping the response:
+    the proxy streams SSE, and rebuilding a streamed response to add one header
+    would mean buffering it.
+    """
     captured = 0
 
     async def wrapped(message: Any) -> None:
         nonlocal captured
         if message["type"] == "http.response.start":
             captured = message["status"]
+            if request_id:
+                headers = list(message.get("headers") or [])
+                headers.append((b"x-request-id", request_id.encode()))
+                message = {**message, "headers": headers}
         await send(message)
 
     await app(scope, receive, wrapped)
     return captured or 200
+
+
+def _this_month() -> str:
+    """`YYYY-MM` in UTC, the same spelling the projection writes."""
+    return datetime.now(UTC).strftime("%Y-%m")
+
+
+_REQUEST_ID_HEADER = "x-request-id"
+
+def _request_id(headers: Headers) -> str:
+    """The caller's id, or one we mint. Bounded either way.
+
+    Echoing an arbitrary header back verbatim is how a log line grows to a
+    megabyte, so a value that is too long or is not a safe token is replaced
+    rather than refused: a bad header must not fail a working MCP call.
+    """
+    supplied = (headers.get(_REQUEST_ID_HEADER) or "").strip()
+    if supplied and len(supplied) <= 128 and all(
+        char.isalnum() or char in "-_.:" for char in supplied
+    ):
+        return supplied
+    return f"req_{secrets.token_hex(8)}"
 
 
 def _bearer(headers: Headers) -> str | None:

@@ -9,6 +9,7 @@ rather than propagating errors upward.
 import asyncio
 import contextlib
 from collections import defaultdict
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -33,6 +34,11 @@ class Observation(BaseModel):
     method: str = "POST"
     #: Why a refused call was refused. Empty for an allowed one.
     reason: str = ""
+    #: The id the caller sent, or the one the guard minted for them.
+    request_id: str = ""
+    #: The public name, for the webhook payload: a receiver subscribing to
+    #: `gateway_down` knows slugs, not ids.
+    gateway_slug: str = ""
 
 
 class RequestRecorder:
@@ -50,6 +56,10 @@ class RequestRecorder:
         self._queue: asyncio.Queue[Observation] = asyncio.Queue(maxsize=max_queue)
         self._task: asyncio.Task[None] | None = None
         self._dropped = 0
+        #: Set by the container when webhooks are configured. Called for every
+        #: observation, before the write: a hook that waits for a database round
+        #: trip is a hook that is late.
+        self.on_observation: Any = None
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._drain(), name="request-recorder")
@@ -98,11 +108,15 @@ class RequestRecorder:
                 self._queue.task_done()
 
     async def _write(self, observation: Observation) -> None:
+        if self.on_observation is not None:
+            self.on_observation(observation)
         # Observations are their own tiny aggregate: they need no version check
         # and must never contend with gateway streams.
         event = RequestObserved(
             aggregate_id=f"traffic_{observation.gateway_id}",
-            **observation.model_dump(),
+            # `gateway_slug` is a presentation field for the webhook payload; the
+            # event names the gateway by id, like every other event does.
+            **observation.model_dump(exclude={"gateway_slug"}),
         )
         await self._store.append_unversioned([event], actor="proxy")
         await self._projections.apply(0, event)

@@ -234,6 +234,7 @@ class GatewayRouter(BaseModel):
         guarded = GuardMiddleware(
             mcp_app, config=config, auth=auth, limiter=self.limiter,
             recorder=self.recorder, metrics=self.metrics, base_url=self.base_url,
+            read_models=self.read_models,
         )
 
         routes: list[Any] = []
@@ -389,6 +390,9 @@ def _signature(gateway: dict[str, Any], credentials: dict[str, str]) -> str:
         # Only whether it exists — the value must not land in a log line.
         "upstream" if credentials.get("upstream_token") else "",
         repr(gateway.get("requests_per_minute")),
+        # In the signature so a quota change reaches the live guard: the quota
+        # itself is a config value, while the month's count is read per request.
+        repr(gateway.get("monthly_quota")),
         ",".join(sorted(gateway.get("allowed_subjects") or [])),
         ",".join(gateway.get("tools") or []),
     ]

@@ -25,9 +25,13 @@ from gateway.domain.events import (
     Event,
     GatewayAuthConfigured,
     GatewayCreated,
+    GatewayQuotaSet,
     GatewayRateLimitSet,
+    GatewayRestored,
     GatewayToolsConfigured,
     GatewayUpdated,
+    OperatorDisabled,
+    OperatorEnabled,
     OperatorJoinedTenant,
     OperatorRegistered,
     OperatorRolesAssigned,
@@ -36,6 +40,8 @@ from gateway.domain.events import (
     RequestObserved,
     RoleDefined,
     TenantCreated,
+    WebhookDeleted,
+    WebhookRegistered,
 )
 from gateway.infrastructure.db.tables import (
     rm_api_keys,
@@ -46,6 +52,7 @@ from gateway.infrastructure.db.tables import (
     rm_requests_tail,
     rm_roles,
     rm_tenants,
+    rm_webhooks,
 )
 
 Handler = Callable[[AsyncSession, Event], Awaitable[None]]
@@ -124,6 +131,50 @@ async def on_rate_limit(session: AsyncSession, event: Event) -> None:
         )
     )
 
+
+async def on_quota_set(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, GatewayQuotaSet)
+    await session.execute(
+        update(rm_gateways)
+        .where(rm_gateways.c.id == event.aggregate_id)
+        .values(monthly_quota=event.monthly_quota, updated_at=func.now())
+    )
+
+async def on_restored(session: AsyncSession, event: Event) -> None:
+    """Write the restored fields, and nothing about keys or credentials.
+
+    The event deliberately does not carry them; this handler must not invent
+    them either, or a rollback would quietly undo a revocation.
+    """
+    assert isinstance(event, GatewayRestored)
+    await session.execute(
+        update(rm_gateways)
+        .where(rm_gateways.c.id == event.aggregate_id)
+        .values(
+            name=event.name,
+            target_url=event.target_url,
+            description=event.description,
+            requests_per_minute=event.requests_per_minute,
+            tools=list(event.tools),
+            updated_at=func.now(),
+        )
+    )
+
+async def on_operator_disabled(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, OperatorDisabled)
+    await session.execute(
+        update(rm_operators)
+        .where(rm_operators.c.id == event.aggregate_id)
+        .values(disabled=True)
+    )
+
+async def on_operator_enabled(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, OperatorEnabled)
+    await session.execute(
+        update(rm_operators)
+        .where(rm_operators.c.id == event.aggregate_id)
+        .values(disabled=False)
+    )
 
 async def on_disabled(session: AsyncSession, event: Event) -> None:
     await session.execute(
@@ -256,6 +307,7 @@ async def on_request(session: AsyncSession, event: Event) -> None:
             tool=event.tool,
             method=event.method,
             reason=event.reason,
+            request_id=event.request_id,
             occurred_at=event.occurred_at,
         )
         .on_conflict_do_nothing(index_elements=[rm_requests_tail.c.event_id])
@@ -370,3 +422,31 @@ async def on_role_deleted(session: AsyncSession, event: Event) -> None:
         .values(deleted=True, updated_at=func.now())
     )
 
+
+async def on_webhook_registered(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, WebhookRegistered)
+    statement = pg_insert(rm_webhooks).values(
+        id=event.webhook_id,
+        gateway_id=event.aggregate_id,
+        url=event.url,
+        secret=event.secret,
+        outcomes=list(event.outcomes),
+        enabled=True,
+        created_at=event.occurred_at,
+    )
+    await session.execute(
+        statement.on_conflict_do_update(
+            index_elements=[rm_webhooks.c.id],
+            set_={"url": statement.excluded.url, "enabled": True},
+        )
+    )
+
+async def on_webhook_deleted(session: AsyncSession, event: Event) -> None:
+    """Keep the row, switch it off: a delivery history that outlives its hook is
+    the only evidence of what the hook was told."""
+    assert isinstance(event, WebhookDeleted)
+    await session.execute(
+        update(rm_webhooks)
+        .where(rm_webhooks.c.id == event.webhook_id)
+        .values(enabled=False)
+    )

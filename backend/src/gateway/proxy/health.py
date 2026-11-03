@@ -12,11 +12,14 @@ changed.
 """
 
 import asyncio
+import hashlib
+import json
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 
 if TYPE_CHECKING:
     from gateway.application.container import Container
@@ -29,6 +32,12 @@ class Health(BaseModel):
     up: bool
     detail: str = ""
     tools: int = 0
+    #: Tool names whose description or `inputSchema` differs from the last probe.
+    #: A tool that disappeared is visible in the catalog; one that quietly changed
+    #: shape is not, and that is the one that breaks a client that worked
+    #: yesterday. Empty on the first probe: a baseline reported as drift would
+    #: make the badge red on every fresh deployment.
+    changed: list[str] = []
     checked_at: datetime
 
 class Prober:
@@ -88,12 +97,82 @@ async def _probe(container: Container, gateway: dict[str, Any]) -> Health:
             tools = await client.list_tools()
     except Exception as exc:
         return Health(up=False, detail=_reason(exc), checked_at=datetime.now(UTC))
+    changed = await _record_fingerprints(container, gateway["id"], tools)
     return Health(
         up=True,
         detail=f"{len(tools)} tools in {int((time.perf_counter() - started) * 1000)} ms",
         tools=len(tools),
+        changed=changed,
         checked_at=datetime.now(UTC),
     )
+
+
+async def _record_fingerprints(
+    container: Container, gateway_id: str, tools: Any
+) -> list[str]:
+    """Compare the upstream catalog to the last one we saw, and remember this one.
+
+    The fingerprint covers the parts a caller depends on — name, description and
+    the input schema — because those are what a generated client compiles
+    against. Comparing the whole tool object would flag `title` changes nobody
+    parses; comparing nothing would miss the rename of a parameter.
+
+    Stored in a read model, not in this process: a pod that restarts has not
+    "just seen" the upstream, and would report every tool as new.
+    """
+    from sqlalchemy import delete as sql_delete
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from gateway.infrastructure.db.tables import rm_tool_fingerprints
+
+    current: dict[str, str] = {}
+    for tool in tools:
+        raw = {
+            "name": getattr(tool, "name", ""),
+            "description": getattr(tool, "description", "") or "",
+            "inputSchema": getattr(tool, "inputSchema", None),
+        }
+        current[raw["name"]] = hashlib.sha256(
+            json.dumps(raw, sort_keys=True, default=str).encode()
+        ).hexdigest()
+
+    async with container.database.session() as session, session.begin():
+        rows = (
+            await session.execute(
+                select(
+                    rm_tool_fingerprints.c.tool, rm_tool_fingerprints.c.fingerprint
+                ).where(rm_tool_fingerprints.c.gateway_id == gateway_id)
+            )
+        ).all()
+        known = {row[0]: row[1] for row in rows}
+        changed = [
+            name for name, digest in current.items()
+            if name in known and known[name] != digest
+        ]
+        # Forget tools the upstream no longer serves, so a name that comes back
+        # later is compared against the catalog it returns with, not a stale row.
+        gone = set(known) - set(current)
+        if gone:
+            await session.execute(
+                sql_delete(rm_tool_fingerprints).where(
+                    (rm_tool_fingerprints.c.gateway_id == gateway_id)
+                    & rm_tool_fingerprints.c.tool.in_(gone)
+                )
+            )
+        for name, digest in current.items():
+            statement = pg_insert(rm_tool_fingerprints).values(
+                gateway_id=gateway_id, tool=name, fingerprint=digest
+            )
+            await session.execute(
+                statement.on_conflict_do_update(
+                    index_elements=[
+                        rm_tool_fingerprints.c.gateway_id,
+                        rm_tool_fingerprints.c.tool,
+                    ],
+                    set_={"fingerprint": statement.excluded.fingerprint},
+                )
+            )
+    return sorted(changed)
 
 def _reason(exc: Exception) -> str:
     """One readable line. A repr of an exception is a stack trace in a badge."""

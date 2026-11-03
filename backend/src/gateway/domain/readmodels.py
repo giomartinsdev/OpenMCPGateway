@@ -84,7 +84,34 @@ class ApiKeyRow(ReadRow):
     revealed_by: str | None = None
     #: None means never. The panel warns on a date close to today.
     expires_at: datetime | None = None
+    #: "Can this key be revoked?" is a question about evidence. Without a
+    #: last-used date the only safe answer is no, so keys outlive the person
+    #: who made them. None means "not since the log was pruned".
+    last_used_at: datetime | None = None
     recoverable: bool = False
+
+class WebhookRow(ReadRow):
+    id: str
+    gateway_id: str
+    url: str
+    #: Never the secret: this row is served by a list endpoint. The secret is
+    #: sealed in the database and handed back only once, at creation.
+    outcomes: tuple[str, ...] = ()
+    enabled: bool = True
+    created_at: datetime | None = None
+
+class WebhookDeliveryRow(ReadRow):
+    id: str
+    webhook_id: str
+    event: str
+    #: `delivered` or `failed`, after the retries. "The hook is silent" has two
+    #: causes — no matching event, or every POST failing — and only a stored
+    #: attempt tells them apart.
+    status: str
+    attempts: int = 0
+    status_code: int | None = None
+    error: str = ""
+    created_at: datetime | None = None
 
 class TenantRow(ReadRow):
     id: str
@@ -107,6 +134,9 @@ class OperatorRow(ReadRow):
     tenant_id: str | None = None
     is_admin: bool = False
     role_ids: tuple[str, ...] = ()
+    #: Offboarding: a disabled account cannot sign in and its live sessions stop
+    #: working on the next request.
+    disabled: bool = False
     created_at: datetime | None = None
 
 
@@ -119,6 +149,9 @@ class RequestRow(ReadRow):
     ip: str | None = None
     tool: str | None = None
     method: str
+    #: The id the caller chose (or the guard minted), so a support ticket can be
+    #: joined to a row. Empty on rows written before the column existed.
+    request_id: str = ""
     occurred_at: datetime
 
 
@@ -135,6 +168,12 @@ class TrafficStats(ReadRow):
     previous_requests: int = 0
     avg_duration_ms: float
     max_duration_ms: int
+    #: p50/p95/p99 over the retained rows in the window. `avg` hides a tail and
+    #: `max` is one unlucky call; a bucket that keeps count/sum/max cannot be
+    #: un-aggregated, so these are read from the tail rather than invented.
+    p50_duration_ms: float = 0
+    p95_duration_ms: float = 0
+    p99_duration_ms: float = 0
     by_outcome: dict[str, int]
     by_ip: dict[str, int]
     #: Keyed by gateway slug: the id is not what the panel prints.
@@ -162,4 +201,6 @@ __all__ = [
     "SeriesPoint",
     "TenantRow",
     "TrafficStats",
+    "WebhookDeliveryRow",
+    "WebhookRow",
 ]

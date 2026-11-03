@@ -27,6 +27,7 @@ from gateway.proxy.health import Prober
 from gateway.proxy.providers import close_client_storage, configure_client_storage
 from gateway.proxy.router import GatewayRouter, LifespanTask
 from gateway.proxy.runtime import build_limiter
+from gateway.proxy.webhooks import Notifier
 
 
 class Container(BaseModel):
@@ -48,6 +49,8 @@ class Container(BaseModel):
     retention: Any = None
     #: Last upstream health per gateway. In-process: liveness is not an event.
     prober: Any = None
+    #: Pushes observations to registered webhooks, off the request path.
+    notifier: Any = None
     router: GatewayRouter = Field(default=None)  # type: ignore[assignment]
     #: The read-only console MCP, and the verifier in front of it. Built here so
     #: a test can call a tool without standing up an HTTP transport, and so there
@@ -96,6 +99,16 @@ class Container(BaseModel):
         )
         container.retention = Retention(database)
         container.prober = Prober()
+        container.notifier = Notifier(
+            database,
+            read_models,
+            sealing_secret=settings.session_secret.get_secret_value(),
+        )
+        await container.notifier.start()
+        # The hook rides the recorder's own queue rather than a second one: the
+        # observation already exists there, and a second ordering of the same
+        # fact would let a delivery arrive before the row it describes.
+        recorder.on_observation = container.notifier.enqueue
         container.router = GatewayRouter(
             read_models=read_models,
             limiter=container.limiter,
@@ -149,6 +162,8 @@ class Container(BaseModel):
 
     async def close(self) -> None:
         await self.recorder.stop()
+        if self.notifier is not None:
+            await self.notifier.stop()
         await self.limiter.close()
         await self.router.shutdown()
         if self.console_lifespan is not None:

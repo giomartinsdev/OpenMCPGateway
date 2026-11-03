@@ -4,6 +4,8 @@ from collections.abc import Iterable, Sequence
 
 from gateway.domain.events import (
     Event,
+    OperatorDisabled,
+    OperatorEnabled,
     OperatorJoinedTenant,
     OperatorRegistered,
     OperatorRolesAssigned,
@@ -21,6 +23,9 @@ class Operator(_Aggregate):
     #: `None` until the account creates or joins a tenant. An account in that
     #: state can sign in and see the onboarding choice, and nothing else.
     tenant_id: str | None = None
+    #: Offboarding. Read on every request, because a signed cookie outlives the
+    #: row change that was supposed to stop it.
+    disabled: bool = False
     exists: bool = False
 
     @property
@@ -56,7 +61,25 @@ class Operator(_Aggregate):
             elif isinstance(event, OperatorJoinedTenant):
                 state.tenant_id = event.tenant_id
                 state.role_ids = tuple(event.role_ids)
+            elif isinstance(event, OperatorDisabled):
+                state.disabled = True
+            elif isinstance(event, OperatorEnabled):
+                state.disabled = False
         return state
+
+    def decide_disable(self) -> list[Event]:
+        if not self.exists:
+            raise DomainError("operator does not exist")
+        if self.disabled:
+            raise DomainError("account is already disabled")
+        return [OperatorDisabled(aggregate_id=self.id)]
+
+    def decide_enable(self) -> list[Event]:
+        if not self.exists:
+            raise DomainError("operator does not exist")
+        if not self.disabled:
+            raise DomainError("account is already enabled")
+        return [OperatorEnabled(aggregate_id=self.id)]
 
     def decide_assign_roles(self, role_ids: Sequence[str]) -> list[Event]:
         if not self.exists:

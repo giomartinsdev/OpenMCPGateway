@@ -224,6 +224,74 @@ class GatewayToolsConfigured(Event):
 
     tools: tuple[str, ...] = ()
 
+class GatewayQuotaSet(Event):
+    """A monthly call ceiling, separate from the per-minute rate limit.
+
+    A rate limit bounds a burst; an integration that calls politely all month is
+    invisible to it. Zero means no ceiling, the same convention as the limit,
+    because two spellings of "unlimited" in one panel is a support call.
+    """
+
+    EVENT = "gateway.quota_set"
+
+    monthly_quota: int = 0
+
+class GatewayRestored(Event):
+    """A gateway was rolled back to the configuration of an earlier version.
+
+    One event carrying the whole restored configuration rather than a replay of
+    the commands that produced it: the point of a rollback is that the log says
+    "someone rolled this back to version 7", not that it happens to look like a
+    rename followed by a rate-limit change. Credentials and keys are not part of
+    it — a revoked key must stay revoked, and a restore is not a resurrection.
+    """
+
+    EVENT = "gateway.restored"
+
+    restored_from: int
+    name: str
+    target_url: str
+    description: str = ""
+    requests_per_minute: int = 0
+    tools: tuple[str, ...] = ()
+
+class OperatorDisabled(Event):
+    """An account may no longer sign in, and its live sessions stop working.
+
+    A signed cookie is a claim about the past, so a revocation has to be a fact
+    the server re-reads — not a row deleted from under a still-valid token.
+    """
+
+    EVENT = "operator.disabled"
+
+class OperatorEnabled(Event):
+    EVENT = "operator.enabled"
+
+# --------------------------------------------------------------------------
+# Webhooks — the observation pushed, instead of polled
+# --------------------------------------------------------------------------
+
+class WebhookRegistered(Event):
+    """A URL to POST observations to, and what it subscribed to.
+
+    `secret` is sealed with the deployment secret: the receiver needs it to
+    verify the signature, and the database does not need it in the clear.
+    """
+
+    EVENT = "webhook.registered"
+
+    webhook_id: str
+    url: str
+    secret: str
+    #: Empty means every outcome. A hook that asked for failures only must not
+    #: receive a success, or the filter is decoration.
+    outcomes: tuple[str, ...] = ()
+
+class WebhookDeleted(Event):
+    EVENT = "webhook.deleted"
+
+    webhook_id: str
+
 
 class SignInConfigured(Event):
     """Retired: sign-in is deployment configuration now.
@@ -256,6 +324,7 @@ WRITE_EVENTS: tuple[type[Event], ...] = (
     GatewayDisabled,
     GatewayEnabled,
     GatewayDeleted,
+    GatewayRestored,
     GatewayToolsConfigured,
     PrincipalAllowed,
     PrincipalRevoked,
@@ -263,6 +332,11 @@ WRITE_EVENTS: tuple[type[Event], ...] = (
     ApiKeyRevealed,
     ApiKeyRevoked,
     SignInConfigured,
+    GatewayQuotaSet,
+    OperatorDisabled,
+    OperatorEnabled,
+    WebhookRegistered,
+    WebhookDeleted,
 )
 
 __all__ = [
@@ -276,9 +350,13 @@ __all__ = [
     "GatewayDeleted",
     "GatewayDisabled",
     "GatewayEnabled",
+    "GatewayQuotaSet",
     "GatewayRateLimitSet",
+    "GatewayRestored",
     "GatewayToolsConfigured",
     "GatewayUpdated",
+    "OperatorDisabled",
+    "OperatorEnabled",
     "OperatorJoinedTenant",
     "OperatorLoggedIn",
     "OperatorRegistered",
@@ -288,4 +366,6 @@ __all__ = [
     "RoleDefined",
     "RoleDeleted",
     "TenantCreated",
+    "WebhookDeleted",
+    "WebhookRegistered",
 ]

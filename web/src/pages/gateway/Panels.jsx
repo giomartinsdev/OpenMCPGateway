@@ -171,6 +171,47 @@ export function RateLimitForm({ gateway, onSaved }) {
 }
 
 /**
+ * The month's ceiling, next to the minute's.
+ *
+ * Two forms rather than one with two fields: they answer different questions —
+ * "is this integration polite" and "is this integration over its bill" — and a
+ * combined form would save one click at the cost of one clear sentence each.
+ */
+export function QuotaForm({ gateway, onSaved }) {
+  const t = useT();
+  const [value, setValue] = useState(gateway.monthly_quota ?? 0);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <form
+      className="limit-form"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setBusy(true);
+        try {
+          await api.setQuota(gateway.id, Number(value) || 0);
+          onSaved();
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="field inline">
+        <label htmlFor="monthly-quota">{t("Calls / month")}</label>
+        <input id="monthly-quota" type="number" min="0" value={value}
+               onChange={(event) => setValue(event.target.value)} />
+      </div>
+      <button className="primary sm" disabled={busy}>
+        {busy ? t("Saving…") : t("Save quota")}
+      </button>
+      <p className="hint">
+        {t("0 means no ceiling. The counter resets on the first day of the month, UTC, and a call over the quota is refused with 429 before it reaches the upstream.")}
+      </p>
+    </form>
+  );
+}
+
+/**
  * This gateway's slice of the request log, with the same affordances as the
  * global one: a cursor, a filter under every column, sortable headers, and a
  * drawer for the row that needs more than a line.
@@ -313,6 +354,11 @@ export function Requests({ gateway }) {
               // readable from `psql` too. Translating it here keeps that choice
               // from making the panel English-only.
               ...(open.reason ? [[t("Reason"), t(open.reason)]] : []),
+              // Blank on rows written before the header existed, so it is shown
+              // only when there is something to correlate with.
+              ...(open.request_id
+                ? [[t("Request id"), <span className="mono">{open.request_id}</span>]]
+                : []),
               [t("Event id"), <span className="mono">{open.event_id}</span>],
             ]}
           />

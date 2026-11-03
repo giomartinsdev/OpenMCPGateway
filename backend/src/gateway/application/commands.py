@@ -160,6 +160,12 @@ class CommandHandler:
         if not operator.exists or not verify_password(operator.password_hash, password):
             log.warning("operator.login_failed", email=email, reason="bad_password")
             return None
+        if operator.disabled:
+            # Checked after the password so a disabled account answers the same
+            # 401 as a wrong password: offboarding should not confirm to an
+            # outsider that the address exists.
+            log.warning("operator.login_failed", email=email, reason="disabled")
+            return None
         await self._commit(
             operator_id,
             [OperatorLoggedIn(aggregate_id=operator_id, ip=ip, actor=email)],
@@ -503,8 +509,82 @@ class CommandHandler:
         events = gateway.decide_revoke_key(key_id=key_id)
         return await self._commit(gateway_id, events, gateway.version, actor=actor)
 
+    async def set_monthly_quota(
+        self, gateway_id: str, *, monthly_quota: int, actor: str = "system"
+    ) -> list[Event]:
+        gateway = await self._load_gateway(gateway_id)
+        events = gateway.decide_set_quota(monthly_quota=monthly_quota)
+        return await self._commit(gateway_id, events, gateway.version, actor=actor)
+
+    # -- history ----------------------------------------------------------
+
+    async def restore_gateway(
+        self, gateway_id: str, *, version: int, actor: str = "system"
+    ) -> list[Event]:
+        """Roll the configuration back to an earlier version.
+
+        The aggregate at `version` is folded from the same stream and handed to
+        `decide_restore`, which validates the comparison. Folded here rather than
+        in the domain because the domain has no store, and a `Gateway` cannot
+        reconstruct itself from a number.
+        """
+        stream = await self._store.load_stream(gateway_id)
+        current = Gateway.from_events(gateway_id, stream)
+        previous = Gateway.from_events(
+            gateway_id, [event for event in stream if event.sequence <= version]
+        )
+        events = current.decide_restore(version=version, previous=previous)
+        return await self._commit(gateway_id, events, current.version, actor=actor)
+
+    # -- webhooks ---------------------------------------------------------
+
+    async def register_webhook(
+        self, gateway_id: str, *, url: str, secret: str,
+        outcomes: Sequence[str] = (), actor: str = "system",
+    ) -> tuple[str, str]:
+        """Returns (webhook_id, sealed secret). The plaintext is the caller's."""
+        gateway = await self._load_gateway(gateway_id)
+        webhook_id = f"wh_{secrets.token_hex(6)}"
+        events = gateway.decide_register_webhook(
+            webhook_id=webhook_id,
+            url=url.strip(),
+            secret=self._seal(secret),
+            outcomes=outcomes,
+        )
+        await self._commit(gateway_id, events, gateway.version, actor=actor)
+        return webhook_id, secret
+
+    async def delete_webhook(
+        self, gateway_id: str, *, webhook_id: str, actor: str = "system"
+    ) -> list[Event]:
+        gateway = await self._load_gateway(gateway_id)
+        events = gateway.decide_delete_webhook(webhook_id=webhook_id)
+        return await self._commit(gateway_id, events, gateway.version, actor=actor)
+
+    # -- operators --------------------------------------------------------
+
+    async def disable_operator(
+        self, operator_id: str, *, actor: str = "system"
+    ) -> list[Event]:
+        stream = await self._store.load_stream(operator_id)
+        operator = Operator.from_events(operator_id, stream)
+        events = operator.decide_disable()
+        return await self._commit(operator_id, events, operator_version(stream), actor=actor)
+
+    async def enable_operator(
+        self, operator_id: str, *, actor: str = "system"
+    ) -> list[Event]:
+        stream = await self._store.load_stream(operator_id)
+        operator = Operator.from_events(operator_id, stream)
+        events = operator.decide_enable()
+        return await self._commit(operator_id, events, operator_version(stream), actor=actor)
+
 
 __all__ = ["CommandHandler"]
+
+def operator_version(events: Sequence[Event]) -> int:
+    """The `sequence` to append after. Zero for a stream that does not exist."""
+    return events[-1].sequence if events else 0
 
 
 def _key_expiry(events: Sequence[Event], key_id: str) -> datetime | None:

@@ -87,6 +87,67 @@ class BackendServer:
             self.task = None
 
 
+#: The MCP handshake, as a dict: every proxy helper below starts from it.
+INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "test", "version": "0"},
+    },
+}
+
+def call_mcp(
+    base_url: str,
+    slug: str,
+    key: str | None = None,
+    tool: str | None = None,
+    *,
+    arguments: dict[str, Any] | None = None,
+    request_id: str | None = None,
+) -> httpx.Response:
+    """A full MCP exchange, so "200" means the proxy actually worked.
+
+    MCP needs initialize, then `notifications/initialized`, then the call; a bare
+    POST answers "Missing session ID" and would prove nothing about auth. Returns
+    the *initialize* response, because that is the one whose headers carry the
+    request id and whose status carries the refusal.
+    """
+    headers = {"Accept": "application/json, text/event-stream"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    if request_id:
+        headers["X-Request-Id"] = request_id
+    with httpx.Client(timeout=20) as client:
+        started = client.post(
+            f"{base_url}/g/{slug}/mcp", json=INITIALIZE, headers=headers
+        )
+        session = started.headers.get("mcp-session-id", "")
+        if session:
+            client.post(
+                f"{base_url}/g/{slug}/mcp",
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+                headers={**headers, "mcp-session-id": session},
+            )
+            payload = (
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": tool, "arguments": arguments or {}},
+                }
+                if tool
+                else {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+            )
+            client.post(
+                f"{base_url}/g/{slug}/mcp",
+                json=payload,
+                headers={**headers, "mcp-session-id": session},
+            )
+        return started
+
 class SecureCookieClient(httpx.Client):
     """An httpx client that keeps `Secure` cookies over plain http.
 

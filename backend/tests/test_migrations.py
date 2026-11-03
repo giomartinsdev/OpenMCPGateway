@@ -72,6 +72,9 @@ def test_every_read_model_lives_in_its_own_schema(runner, postgres) -> None:
         "rm_requests_tail",
         "rm_roles",
         "rm_tenants",
+        "rm_tool_fingerprints",
+        "rm_webhook_deliveries",
+        "rm_webhooks",
     ], placed
     # The log and the uniqueness tables stay behind, and so does anything a
     # library creates for itself (`oauth_state`, from the OAuth proxy's store).

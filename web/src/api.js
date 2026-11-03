@@ -78,6 +78,9 @@ export const api = {
   setAuth: (id, payload) => call("PUT", `/gateways/${id}/auth`, payload),
   setRateLimit: (id, requests_per_minute) =>
     call("PUT", `/gateways/${id}/rate-limit`, { requests_per_minute }),
+  // A calendar-month ceiling, separate from the per-minute burst limit. 0 = none.
+  setQuota: (id, monthly_quota) =>
+    call("PUT", `/gateways/${id}/quota`, { monthly_quota }),
   enable: (id) => call("POST", `/gateways/${id}/enable`),
   disable: (id) => call("POST", `/gateways/${id}/disable`),
 
@@ -111,6 +114,28 @@ export const api = {
   setGatewayTools: (id, tools) =>
     call("PUT", `/gateways/${id}/tools`, { tools }),
 
+  // The gateway's own stream, oldest first, with secrets redacted server-side.
+  history: (id) => call("GET", `/gateways/${id}/history`),
+  snapshot: (id, version) => call("GET", `/gateways/${id}/history/${version}`),
+  // One fact, not a replay: the log says "rolled back to version N".
+  restore: (id, version) => call("POST", `/gateways/${id}/restore`, { version }),
+  // Runs one tool with the gateway's own upstream credential. Recorded in the
+  // traffic log like any other call, with the operator as the subject.
+  callTool: (id, tool, args) =>
+    call("POST", `/gateways/${id}/call`, { tool, arguments: args }),
+
+  webhooks: (id) => call("GET", `/gateways/${id}/webhooks`),
+  addWebhook: (id, payload) => call("POST", `/gateways/${id}/webhooks`, payload),
+  removeWebhook: (id, webhookId) =>
+    call("DELETE", `/gateways/${id}/webhooks/${webhookId}`),
+  webhookDeliveries: (id, webhookId) =>
+    call("GET", `/gateways/${id}/webhooks/${webhookId}/deliveries`),
+
+  disableOperator: (operatorId) =>
+    call("POST", `/operators/${operatorId}/disable`),
+  enableOperator: (operatorId) =>
+    call("POST", `/operators/${operatorId}/enable`),
+
   stats: (gatewayId, minutes = 60) =>
     call("GET", `/stats?minutes=${minutes}${gatewayId ? `&gateway_id=${gatewayId}` : ""}`),
   // Cursor lists: `before` is the cursor the previous page answered with, and
@@ -120,6 +145,9 @@ export const api = {
   // CSV, not JSON, so the browser is pointed at it and saves it.
   requestsCsvUrl: (params) => `/api/requests.csv?${query(params)}`,
   events: (params) => call("GET", `/events?${query(params)}`),
+  // Same log, one file. Built here rather than through `call`: the response is
+  // CSV, not JSON, so the browser is pointed at it and saves it.
+  eventsCsvUrl: (params) => `/api/events.csv?${query(params)}`,
   // The manual is served per language; an unknown code gets English.
   docs: (lang) => call("GET", `/docs${lang ? `?lang=${lang}` : ""}`),
   // A read-only token for the console MCP; the plaintext is returned once.

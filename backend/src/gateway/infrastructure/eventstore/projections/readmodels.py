@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 
 from gateway.domain.events import OperatorRegistered
 from gateway.domain.filters import (
@@ -32,6 +32,8 @@ from gateway.domain.readmodels import (
     SeriesPoint,
     TenantRow,
     TrafficStats,
+    WebhookDeliveryRow,
+    WebhookRow,
 )
 from gateway.infrastructure.db.database import Database
 from gateway.infrastructure.db.query import paged, predicates
@@ -45,6 +47,8 @@ from gateway.infrastructure.db.tables import (
     rm_requests_tail,
     rm_roles,
     rm_tenants,
+    rm_webhook_deliveries,
+    rm_webhooks,
 )
 
 # --------------------------------------------------------------------------
@@ -65,6 +69,7 @@ def _operator(row: dict[str, Any]) -> OperatorRow:
         is_admin=row["is_admin"],
         role_ids=tuple(row["role_ids"] or ())
         or ((OWNER_ROLE,) if row["is_admin"] else DEFAULT_ROLE_IDS),
+        disabled=bool(row.get("disabled", False)),
         created_at=row["created_at"],
     )
 
@@ -225,6 +230,20 @@ class ReadModels:
             return [PrincipalRow.model_validate(dict(row)) for row in rows]
 
     async def api_keys(self, gateway_id: str) -> list[ApiKeyRow]:
+        # Last use is read from the traffic log rather than written onto the key
+        # row: a column updated per call is a write on the hot path for a number
+        # only the panel reads, and the tail already holds the answer. It goes
+        # back as far as retention does, which is the honest meaning of "last
+        # used since we started keeping the evidence".
+        last_used = (
+            select(
+                rm_requests_tail.c.subject,
+                func.max(rm_requests_tail.c.occurred_at).label("last_used_at"),
+            )
+            .where(rm_requests_tail.c.gateway_id == gateway_id)
+            .group_by(rm_requests_tail.c.subject)
+            .subquery()
+        )
         async with self._db.session() as session:
             rows = (
                 await session.execute(
@@ -237,6 +256,12 @@ class ReadModels:
                         rm_api_keys.c.revealed_by,
                         rm_api_keys.c.expires_at,
                         (rm_api_keys.c.sealed != "").label("recoverable"),
+                        last_used.c.last_used_at,
+                    )
+                    .select_from(
+                        rm_api_keys.outerjoin(
+                            last_used, last_used.c.subject == rm_api_keys.c.subject
+                        )
                     )
                     .where(
                         (rm_api_keys.c.gateway_id == gateway_id)
@@ -246,6 +271,99 @@ class ReadModels:
                 )
             ).mappings()
             return [ApiKeyRow.model_validate(dict(row)) for row in rows]
+
+    async def consume_quota(self, gateway_id: str, *, month: str,
+                            quota: int) -> bool:
+        """Reserve one call against the month's ceiling. True when it may go ahead.
+
+        One atomic statement, not "read, compare, then let the recorder count":
+        the recorder writes off the request path, so two calls in a row would
+        both read the same count and both pass. Here the increment and the check
+        are the same row lock.
+
+        It also rolls the month over, which is the only reason a counter that is
+        never read would still be correct on the first of the month.
+        """
+        async with self._db.session() as session, session.begin():
+            result = await session.execute(
+                update(rm_gateways)
+                .where(
+                    (rm_gateways.c.id == gateway_id)
+                    & (
+                        (rm_gateways.c.quota_month != month)
+                        | (rm_gateways.c.requests_this_month < quota)
+                    )
+                )
+                .values(
+                    requests_this_month=case(
+                        (rm_gateways.c.quota_month == month,
+                         rm_gateways.c.requests_this_month + 1),
+                        else_=1,
+                    ),
+                    quota_month=month,
+                )
+            )
+            return (result.rowcount or 0) > 0
+
+    async def webhooks(self, gateway_id: str) -> list[WebhookRow]:
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        rm_webhooks.c.id,
+                        rm_webhooks.c.gateway_id,
+                        rm_webhooks.c.url,
+                        rm_webhooks.c.outcomes,
+                        rm_webhooks.c.enabled,
+                        rm_webhooks.c.created_at,
+                    )
+                    .where(rm_webhooks.c.gateway_id == gateway_id)
+                    .order_by(rm_webhooks.c.created_at)
+                )
+            ).mappings()
+            return [WebhookRow.model_validate(dict(row)) for row in rows]
+
+    async def webhook_targets(
+        self, gateway_id: str, outcome: str
+    ) -> list[tuple[str, str, str]]:
+        """Enabled hooks that asked for this outcome, as (id, url, sealed secret).
+
+        Filtered in SQL: a hook subscribed to `forbidden` must not be woken by an
+        allowed call, and doing that in Python would mean reading every hook per
+        request.
+        """
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(rm_webhooks.c.id, rm_webhooks.c.url, rm_webhooks.c.secret)
+                    .where(
+                        (rm_webhooks.c.gateway_id == gateway_id)
+                        & rm_webhooks.c.enabled.is_(True)
+                        & (
+                            (func.jsonb_array_length(rm_webhooks.c.outcomes) == 0)
+                            | rm_webhooks.c.outcomes.contains(
+                                func.jsonb_build_array(outcome)
+                            )
+                        )
+                    )
+                    .order_by(rm_webhooks.c.created_at)
+                )
+            ).all()
+        return [(row[0], row[1], row[2]) for row in rows]
+
+    async def webhook_deliveries(
+        self, webhook_id: str, limit: int = 20
+    ) -> list[WebhookDeliveryRow]:
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(
+                    select(rm_webhook_deliveries)
+                    .where(rm_webhook_deliveries.c.webhook_id == webhook_id)
+                    .order_by(rm_webhook_deliveries.c.created_at.desc())
+                    .limit(limit)
+                )
+            ).mappings()
+            return [WebhookDeliveryRow.model_validate(dict(row)) for row in rows]
 
     async def sealed_key(self, gateway_id: str, key_id: str) -> str | None:
         """The sealed plaintext, still encrypted. The router opens it, not here."""
@@ -318,6 +436,7 @@ class ReadModels:
             rm_requests_tail.c.tool,
             rm_requests_tail.c.method,
             rm_requests_tail.c.reason,
+            rm_requests_tail.c.request_id,
             rm_requests_tail.c.occurred_at,
         )
         if gateway_id is not None:
@@ -355,6 +474,7 @@ class ReadModels:
             rm_operators.c.tenant_id,
             rm_operators.c.role_ids,
             rm_operators.c.is_admin,
+            rm_operators.c.disabled,
             rm_operators.c.created_at,
         ).where(rm_operators.c.tenant_id == tenant_id)
         for predicate in predicates(rm_operators, clauses):
@@ -465,6 +585,7 @@ class ReadModels:
                         rm_operators.c.tenant_id,
                         rm_operators.c.role_ids,
                         rm_operators.c.is_admin,
+                        rm_operators.c.disabled,
                         rm_operators.c.created_at,
                     )
                     .where(rm_operators.c.tenant_id == tenant_id)
@@ -558,6 +679,35 @@ class ReadModels:
                 )
             ).first()
         return row[0] if row else None
+
+    async def operator_state(self, operator_id: str) -> tuple[str, ...] | None:
+        """Roles plus the disabled flag, in one read.
+
+        One query because the two are consulted together on every request: roles
+        decide what the caller may do, `disabled` decides whether they may be here
+        at all.
+        """
+        async with self._db.session() as session:
+            row = (
+                await session.execute(
+                    select(
+                        rm_operators.c.role_ids,
+                        rm_operators.c.is_admin,
+                        rm_operators.c.disabled,
+                    ).where(rm_operators.c.id == operator_id)
+                )
+            ).first()
+        if row is None or row[2]:
+            return None
+        role_ids, is_admin, _disabled = row
+        return tuple(role_ids or ()) or ((OWNER_ROLE,) if is_admin else DEFAULT_ROLE_IDS)
+
+    async def operator_disabled(self, operator_id: str) -> bool:
+        async with self._db.session() as session:
+            value = await session.scalar(
+                select(rm_operators.c.disabled).where(rm_operators.c.id == operator_id)
+            )
+        return bool(value)
 
     async def operator_roles(self, operator_id: str) -> tuple[str, ...] | None:
         async with self._db.session() as session:
@@ -669,6 +819,36 @@ class ReadModels:
                 row[0]: int(row[1]) for row in await session.execute(tool_query)
             }
 
+            # Percentiles come from the retained rows, not from
+            # `rm_request_stats`: a bucket that keeps count/sum/max cannot be
+            # un-aggregated, and inventing a distribution from three numbers
+            # would be a percentile-shaped lie. `percentile_cont` sorts in the
+            # database, so the window is scanned once and only three floats
+            # cross the wire. ponytail: the tail is pruned by retention, so a
+            # 7-day percentile covers however much of it still exists.
+            percentile_query = select(
+                func.percentile_cont(0.5).within_group(
+                    rm_requests_tail.c.duration_ms
+                ),
+                func.percentile_cont(0.95).within_group(
+                    rm_requests_tail.c.duration_ms
+                ),
+                func.percentile_cont(0.99).within_group(
+                    rm_requests_tail.c.duration_ms
+                ),
+            ).where(rm_requests_tail.c.occurred_at >= boundary)
+            if gateway_id is not None:
+                percentile_query = percentile_query.where(
+                    rm_requests_tail.c.gateway_id == gateway_id
+                )
+            if tenant_id is not None:
+                percentile_query = percentile_query.where(
+                    rm_requests_tail.c.gateway_id.in_(_tenant_gateways(tenant_id))
+                )
+            p50, p95, p99 = (
+                await session.execute(percentile_query)
+            ).one()
+
         points = [
             SeriesPoint(bucket=bucket, count=count)
             for bucket, count in sorted(series.items())
@@ -680,6 +860,9 @@ class ReadModels:
             previous_requests=previous,
             avg_duration_ms=round(total_ms / total, 1) if total else 0,
             max_duration_ms=peak_ms,
+            p50_duration_ms=round(float(p50), 2) if p50 is not None else 0,
+            p95_duration_ms=round(float(p95), 2) if p95 is not None else 0,
+            p99_duration_ms=round(float(p99), 2) if p99 is not None else 0,
             by_outcome=by_outcome,
             by_ip=dict(sorted(by_ip.items(), key=lambda kv: -kv[1])[:20]),
             by_gateway={

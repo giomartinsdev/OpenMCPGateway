@@ -32,6 +32,10 @@ class RequestObserved(Event):
     #: Why this was refused, in a sentence a reader can act on. Empty for an
     #: allowed call: the normal case has nothing to explain.
     reason: str = ""
+    #: The id the caller sent (or the guard minted). Chosen at the edge, so it
+    #: exists before the row does — which is what makes "which call was that" a
+    #: question support can ask and this log can answer.
+    request_id: str = ""
 
 
 READ_EVENTS: tuple[type[Event], ...] = (RequestObserved,)

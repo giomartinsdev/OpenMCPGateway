@@ -24,12 +24,16 @@ from gateway.domain.events import (
     GatewayDeleted,
     GatewayDisabled,
     GatewayEnabled,
+    GatewayQuotaSet,
     GatewayRateLimitSet,
+    GatewayRestored,
     GatewayToolsConfigured,
     GatewayUpdated,
     IdentityProvider,
     PrincipalAllowed,
     PrincipalRevoked,
+    WebhookDeleted,
+    WebhookRegistered,
 )
 from gateway.domain.model.base import SLUG_RE, DomainError, _Aggregate
 
@@ -52,12 +56,16 @@ class Gateway(_Aggregate):
     required_scopes: tuple[str, ...] = ()
     upstream_token: str | None = None
     requests_per_minute: int = 0  # 0 = unlimited
+    #: Calls this gateway may serve per calendar month. 0 = unlimited.
+    monthly_quota: int = 0
     enabled: bool = True
     allowed_subjects: set[str] = Field(default_factory=set)
     api_key_ids: dict[str, str] = Field(default_factory=dict)  # key_id -> key_hash
     #: Tools the upstream may expose through this gateway. Empty means every
     #: one of them, which is what every gateway did before this existed.
     tools: tuple[str, ...] = ()
+    #: Hook id -> URL. The secret is in the event, sealed in the read model.
+    webhooks: dict[str, str] = Field(default_factory=dict)
     deleted: bool = False
     version: int = 0
 
@@ -96,6 +104,17 @@ class Gateway(_Aggregate):
                 self.upstream_token = event.upstream_token
             case GatewayRateLimitSet():
                 self.requests_per_minute = event.requests_per_minute
+            case GatewayQuotaSet():
+                self.monthly_quota = event.monthly_quota
+            case GatewayRestored():
+                # The whole configuration, not a diff: a rollback is one fact.
+                # Credentials and keys are deliberately absent from the event, so
+                # a restore cannot resurrect a revoked key.
+                self.name = event.name
+                self.target_url = event.target_url
+                self.description = event.description
+                self.requests_per_minute = event.requests_per_minute
+                self.tools = tuple(event.tools)
             case GatewayDisabled():
                 self.enabled = False
             case GatewayEnabled():
@@ -110,6 +129,10 @@ class Gateway(_Aggregate):
                 self.api_key_ids[event.key_id] = event.key_hash
             case ApiKeyRevoked():
                 self.api_key_ids.pop(event.key_id, None)
+            case WebhookRegistered():
+                self.webhooks[event.webhook_id] = event.url
+            case WebhookDeleted():
+                self.webhooks.pop(event.webhook_id, None)
             case GatewayDeleted():
                 self.deleted = True
                 self.enabled = False
@@ -257,6 +280,43 @@ class Gateway(_Aggregate):
             )
         ]
 
+    def decide_set_quota(self, *, monthly_quota: int) -> list[Event]:
+        self._ensure_live()
+        if monthly_quota < 0:
+            raise DomainError("monthly_quota cannot be negative")
+        return [GatewayQuotaSet(aggregate_id=self.id, monthly_quota=monthly_quota)]
+
+    def decide_restore(self, *, version: int, previous: Gateway) -> list[Event]:
+        """Roll the configuration back to what `previous` held.
+
+        Credentials, keys and the enable flag are not restored: a revoked key
+        must stay revoked, a rotated secret is not recoverable from the event
+        payload, and "restore the disabled state" reads as an outage request.
+        The caller names the version it asked for so the audit line is explicit.
+        """
+        self._ensure_live()
+        if previous.version != version:
+            raise DomainError(f"no such version: {version}")
+        target = previous
+        if (target.name, target.target_url, target.description,
+                target.requests_per_minute, tuple(target.tools)) == (
+                self.name, self.target_url, self.description,
+                self.requests_per_minute, tuple(self.tools)):
+            # A no-op restore that writes an event fills the log with "nothing
+            # happened", which costs a reader attention every time they audit.
+            raise DomainError("nothing to restore: already at that configuration")
+        return [
+            GatewayRestored(
+                aggregate_id=self.id,
+                restored_from=version,
+                name=target.name,
+                target_url=target.target_url,
+                description=target.description,
+                requests_per_minute=target.requests_per_minute,
+                tools=tuple(target.tools),
+            )
+        ]
+
     def decide_allow(self, *, subject: str, note: str = "") -> list[Event]:
         self._ensure_live()
         subject = subject.strip()
@@ -304,6 +364,42 @@ class Gateway(_Aggregate):
             if len(name) > 128:
                 raise DomainError("a tool name must be 128 characters or fewer")
         return [GatewayToolsConfigured(aggregate_id=self.id, tools=cleaned)]
+
+    def decide_register_webhook(
+        self, *, webhook_id: str, url: str, secret: str,
+        outcomes: Sequence[str] = (),
+    ) -> list[Event]:
+        """A hook needs a URL a POST can reach and a secret a receiver can check.
+
+        `file://` is refused here rather than at delivery: a hook that fails on
+        every attempt because its scheme was never deliverable is a hook that
+        looks broken instead of misconfigured.
+        """
+        self._ensure_live()
+        if not url.startswith(("http://", "https://")):
+            raise DomainError("webhook url must be an http(s) URL")
+        if not secret.strip():
+            raise DomainError(
+                "webhook secret is required: an unsigned POST cannot be trusted"
+            )
+        if webhook_id in self.webhooks:
+            raise DomainError("webhook already exists")
+        cleaned = tuple(dict.fromkeys(o.strip() for o in outcomes if o.strip()))
+        return [
+            WebhookRegistered(
+                aggregate_id=self.id,
+                webhook_id=webhook_id,
+                url=url,
+                secret=secret,
+                outcomes=cleaned,
+            )
+        ]
+
+    def decide_delete_webhook(self, *, webhook_id: str) -> list[Event]:
+        self._ensure_live()
+        if webhook_id not in self.webhooks:
+            raise DomainError("no such webhook")
+        return [WebhookDeleted(aggregate_id=self.id, webhook_id=webhook_id)]
 
     def decide_issue_key(
         self,

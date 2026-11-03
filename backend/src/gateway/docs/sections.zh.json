@@ -183,7 +183,8 @@
         "每个列表还接受自己的过滤字段作为查询参数，对应面板中每列一个输入框。文本列匹配片段（`?name=anch` 可找到 `rancher`），`status` 和 `enabled` 精确匹配，每个列表都带有一个 `id` 输入框，用于你只复制了一半的那一行。未知字段会返回 422 并列出存在的字段——被静默忽略的过滤比报错更糟。",
         "排序是 `?sort=<column>&order=asc|desc`。可排序列对每个列表是封闭集合：网关按 `created_at`、`updated_at`、`name` 或 `slug`；流量按 `occurred_at`、`duration_ms`、`status` 或 `subject`；审计日志按 `occurred_at`、`actor` 或 `type`；成员按 `email` 和 `created_at`；角色按 `name` 和 `created_at`。未知的键会返回 422 并列出合法的键。",
         "游标意味着*在此行之后，按此顺序*，因此它绑定于签发它的排序。更改 `sort` 或 `order` 后请从第一页开始：复用旧游标会得到 422，而不是一个静默有洞的列表。",
-        "有两个端点不合 CRUD 的形状，值得了解：`POST /api/gateways/<id>/keys/<key_id>/reveal` 返回一次封存的明文，之后是 `409`；`GET /api/gateways/<id>/upstream-tools` 向上游询问它提供什么，好让清单被勾选而不是手打。`PUT /api/gateways/<id>/tools` 替换清单。 `GET /api/requests.csv` 以文件形式响应与 `/requests` 相同的筛选条件；`POST /api/config/plan` 说明 apply 会改什么而不改动任何东西；`POST /api/gateways/<id>/test` 用真实的 MCP handshake 探测上游。"
+        "有两个端点不合 CRUD 的形状，值得了解：`POST /api/gateways/<id>/keys/<key_id>/reveal` 返回一次封存的明文，之后是 `409`；`GET /api/gateways/<id>/upstream-tools` 向上游询问它提供什么，好让清单被勾选而不是手打。`PUT /api/gateways/<id>/tools` 替换清单。 `GET /api/requests.csv` 以文件形式响应与 `/requests` 相同的筛选条件；`POST /api/config/plan` 说明 apply 会改什么而不改动任何东西；`POST /api/gateways/<id>/test` 用真实的 MCP handshake 探测上游。",
+        "有五个端点回答 CRUD 形状无法回答的问题：`GET /api/gateways/<id>/history` 是该网关自己的事件流，从旧到新，敏感值已脱敏；`POST /api/gateways/<id>/restore` 重新应用某个版本的配置，并追加一条 `gateway.restored` 事实——凭据和密钥不会被恢复，因为已撤销的密钥必须保持撤销；`POST /api/gateways/<id>/call` 使用网关自身的上游凭据执行一个工具，并以操作员作为 subject 记录这次调用；`GET /api/events.csv` 是以文件形式导出的审计日志，过滤条件和租户范围相同；`/api/gateways/<id>/webhooks` 注册一个 URL，接收 guard 记录的每一条观测，并用请求体的 HMAC-SHA256 签名。"
       ],
       "table": {
         "head": [
@@ -266,6 +267,34 @@
           [
             "POST /api/gateways/{id}/test",
             "立即探测上游：真实 handshake、工具数量、原因"
+          ],
+          [
+            "GET /api/gateways/{id}/history",
+            "该网关自身的事件流，从旧到新，敏感值已脱敏"
+          ],
+          [
+            "POST /api/gateways/{id}/restore",
+            "把配置回滚到某个版本；密钥不会复活"
+          ],
+          [
+            "PUT /api/gateways/{id}/quota",
+            "每月调用上限（0 = 不限），与每分钟限制分开"
+          ],
+          [
+            "POST /api/gateways/{id}/call",
+            "从面板执行一个工具；记录到流量日志"
+          ],
+          [
+            "GET|POST /api/gateways/{id}/webhooks",
+            "接收观测的 Hook，使用 HMAC-SHA256 签名"
+          ],
+          [
+            "GET /api/events.csv",
+            "以单个 CSV 文件导出的审计日志，过滤条件和租户范围相同"
+          ],
+          [
+            "POST /api/operators/{id}/disable",
+            "停止登录和现有会话；`/enable` 恢复访问"
           ]
         ]
       }
@@ -330,7 +359,8 @@
         "OAuth 代理状态（客户端注册、上游令牌、`jti` 映射）存放在同一个 Postgres 里，静态加密，因此滚动发布不会把所有已连接的客户端踢下线。这部分本就是副本安全的；设置了 `OMG_REDIS_URL` 后限流器也是。",
         "状态是事件溯源的。每次变更都是一个仅追加的事件，读模型是其投影，这正是审计日志可信的原因，也让两个副本共享一个数据库而无需缓存一致性方案。",
         "schema 在代码中版本化（`infrastructure/db/migrations.py`）：一个编号的步骤列表，记录在 `schema_migrations` 中。启动时应用此构建尚未应用的所有内容，因此升级是一次滚动发布，而不是手动 `psql` 会话。读模型住在自己的 schema `readmodels` 里——所有以 `rm_` 为前缀的表——而 `events`、唯一性表和版本历史留在 `public`。这个划分正是重点：投影可以从日志重建，因此 `DROP SCHEMA readmodels CASCADE` 再加一次启动是安全的重置，下一次启动会发现并修好它。日志依赖的任何东西都不在那里。 `OMG_RETENTION_DAYS` 在启动时清理请求日志。超过截止时间后，`request.observed` 事件、`rm_requests_tail` 和 `rm_request_stats` 会被删除；审计事件永不删除，因为“谁改了什么”的日志不是“谁调用了什么”的日志。默认值 `0` 表示全部保留。",
-        "`GET /metrics` 输出 Prometheus 文本格式：按网关、结果和状态类别统计的 `omg_proxy_requests_total`；除以计数得到均值的 `omg_proxy_request_duration_ms_sum`；以及在线网关、待定网关、被丢弃的观测和当前限流后端的 gauge。它不鉴权且在同一端口上，因此如果部署面向公网，请在 ingress 上限制它。计数器在进程内：多副本时每个 pod 是一条序列，`sum by (gateway)` 才是正确的查询。"
+        "`GET /metrics` 输出 Prometheus 文本格式：按网关、结果和状态类别统计的 `omg_proxy_requests_total`；除以计数得到均值的 `omg_proxy_request_duration_ms_sum`；以及在线网关、待定网关、被丢弃的观测和当前限流后端的 gauge。它不鉴权且在同一端口上，因此如果部署面向公网，请在 ingress 上限制它。计数器在进程内：多副本时每个 pod 是一条序列，`sum by (gateway)` 才是正确的查询。",
+        "Webhook 在请求路径之外投递：三次尝试、短暂退避，投递失败会写成一行 `failed`，而不是无限重试。`GET /api/gateways/<id>/webhooks/<hook_id>/deliveries` 回答\"这个 hook 为什么没声了\"——没有匹配的事件，还是每次 POST 都失败。月度配额和每分钟限制是两道不同的门：限流器计的是突发量，配置 `OMG_REDIS_URL` 时存在 Redis；配额是 Postgres 里的一次行锁，在调用发出前预留，所以连续两次调用不可能读到同一个计数。两者都用 429 拒绝，行里的 `reason` 说明是哪一道。每个响应都带 `X-Request-Id`——调用方给了合规的就用它，否则用 guard 生成的——流量行会存下它，于是一个工单就是一条查询。"
       ],
       "table": {
         "head": [

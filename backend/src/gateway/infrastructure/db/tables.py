@@ -131,6 +131,10 @@ rm_operators = Table(
     Column("tenant_id", Text),
     Column("role_ids", JSONB, nullable=False, default=list),
     Column("is_admin", Boolean, nullable=False, default=False, server_default=false()),
+    #: Offboarding. A signed cookie is a claim about the past, so "stop this
+    #: person now" cannot be answered by deleting a row: the token is still
+    #: valid until it expires. This flag is read on every request instead.
+    Column("disabled", Boolean, nullable=False, default=False, server_default=false()),
     Column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),
@@ -162,6 +166,13 @@ rm_gateways = Table(
     Column("config_url", Text),
     Column("required_scopes", JSONB, nullable=False, default=list),
     Column("requests_per_minute", Integer, nullable=False, default=0),
+    #: Monthly ceiling, 0 = unlimited. A per-minute limit bounds a burst, not a
+    #: bill; an integration that calls politely all month is invisible to it.
+    Column("monthly_quota", Integer, nullable=False, default=0),
+    #: Which calendar month `requests_this_month` counts. `YYYY-MM` in UTC, so a
+    #: counter that was never rolled over cannot silently outlive its month.
+    Column("quota_month", Text, nullable=False, default=""),
+    Column("requests_this_month", Integer, nullable=False, default=0),
     #: Upstream tools this gateway exposes. Empty means all of them.
     Column("tools", JSONB, nullable=False, default=list),
     Column("enabled", Boolean, nullable=False, default=True, server_default=true()),
@@ -242,11 +253,76 @@ rm_requests_tail = Table(
     Column("tool", Text),
     Column("method", Text, nullable=False),
     Column("reason", Text, nullable=False, default="", server_default=""),
+    #: The id the caller chose (or the guard minted) for this call. Chosen at the
+    #: edge so it exists before the row does, which is what makes "which call was
+    #: that" a question support can ask.
+    Column("request_id", Text, nullable=False, default="", server_default=""),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
     schema=READMODELS_SCHEMA,
 )
 
+#: What the upstream served for one tool, last time it was probed.
+#:
+#: A tool that disappeared is visible from the catalog. A tool whose description
+#: or `inputSchema` changed is not — and that is the one that breaks a client that
+#: worked yesterday. The fingerprint is a hash of the parts a caller depends on.
+rm_tool_fingerprints = Table(
+    "rm_tool_fingerprints",
+    metadata,
+    Column("gateway_id", Text, primary_key=True),
+    Column("tool", Text, primary_key=True),
+    Column("fingerprint", Text, nullable=False),
+    Column(
+        "checked_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    ),
+    schema=READMODELS_SCHEMA,
+)
+
+#: A URL to POST observations to. One row per hook, owned by a gateway.
+rm_webhooks = Table(
+    "rm_webhooks",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("gateway_id", Text, nullable=False),
+    Column("url", Text, nullable=False),
+    #: Sealed with the deployment secret, like an API key's plaintext: the hook
+    #: needs it to sign, and the panel must be able to show it once without the
+    #: database holding it in the clear.
+    Column("secret", Text, nullable=False),
+    #: Empty means every outcome. A hook that asked for failures only must not
+    #: receive a success, or the filter is decoration.
+    Column("outcomes", JSONB, nullable=False, default=list),
+    Column("enabled", Boolean, nullable=False, default=True, server_default=true()),
+    Column(
+        "created_at", DateTime(timezone=True), nullable=False,
+        server_default=func.now(),
+    ),
+    schema=READMODELS_SCHEMA,
+)
+
+#: One row per delivery attempt, because "the hook is silent" has two causes: no
+#: matching event, or every POST failing. Only a stored attempt tells them apart.
+rm_webhook_deliveries = Table(
+    "rm_webhook_deliveries",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("webhook_id", Text, nullable=False),
+    Column("event", Text, nullable=False),
+    Column("status", Text, nullable=False),  # delivered | failed
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("status_code", Integer),
+    Column("error", Text, nullable=False, default=""),
+    Column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    ),
+    schema=READMODELS_SCHEMA,
+)
+
 # Indexes that only make sense on an expression are declared after the tables.
+
 # Partial: a deleted gateway keeps its slug for the audit trail but must not
 # block a new gateway from reusing the name.
 Index(
@@ -275,4 +351,7 @@ __all__ = [
     "rm_requests_tail",
     "rm_roles",
     "rm_tenants",
+    "rm_tool_fingerprints",
+    "rm_webhook_deliveries",
+    "rm_webhooks",
 ]

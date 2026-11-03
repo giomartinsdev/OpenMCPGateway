@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from gateway.application.services import listing
 from gateway.application.services.roles import RoleCatalog
@@ -92,5 +92,35 @@ async def assign_roles(operator_id: str, payload: RoleAssignRequest,
     )
     return {"status": "assigned", "role_ids": list(role_ids)}
 
+
+@router.post("/operators/{operator_id}/disable")
+async def disable_operator(operator_id: str, principal: PrincipalDep,
+                           container: ContainerDep) -> dict[str, Any]:
+    """Stop an account signing in, and stop its live sessions on the next request.
+
+    Not a delete: the events it wrote are the record of what it did while it had
+    access, and rewriting history to make an offboarding look tidier is exactly
+    the wrong trade. An account cannot disable itself, which is the one case
+    where the operator would lock themselves out with no way back in.
+    """
+    permits(principal, "members:write")
+    if operator_id == principal.session.operator_id:
+        raise HTTPException(
+            status_code=409, detail="an account cannot disable itself"
+        )
+    await container.commands.disable_operator(
+        operator_id, actor=principal.session.email
+    )
+    return {"status": "disabled"}
+
+@router.post("/operators/{operator_id}/enable")
+async def enable_operator(operator_id: str, principal: PrincipalDep,
+                          container: ContainerDep) -> dict[str, Any]:
+    """Restore access. The password was never touched, so there is nothing to reset."""
+    permits(principal, "members:write")
+    await container.commands.enable_operator(
+        operator_id, actor=principal.session.email
+    )
+    return {"status": "enabled"}
 
 __all__ = ["router"]

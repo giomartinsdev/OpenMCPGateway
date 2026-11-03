@@ -43,6 +43,12 @@ export function Audit() {
           </div>
         </div>
         <div className="actions">
+          {/* A plain link, not a fetch: the response is a file, and the browser
+              saving it is the whole feature. Filters travel with it, so the
+              export is the table the operator is looking at. */}
+          <a className="btn ghost sm" href={api.eventsCsvUrl(filters)} download>
+            {t("Export CSV")}
+          </a>
           <Badge kind="info">
             {items ? t("{count} events", { count: items.length }) : t("loading")}
           </Badge>

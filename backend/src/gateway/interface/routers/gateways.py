@@ -4,8 +4,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 
-from gateway.application.services import connect, gateways, listing
+from gateway.application.services import connect, gateways, inspect, listing
 from gateway.domain.filters import GATEWAY_FILTERS
 from gateway.interface.dependencies import (
     CanReadGateways,
@@ -19,11 +20,15 @@ from gateway.interface.listing import PageQuery, filters
 from gateway.interface.schemas import (
     ApiKeyRequest,
     AuthConfigRequest,
+    CallToolRequest,
     GatewayCreateRequest,
     GatewayToolsRequest,
     GatewayUpdateRequest,
     PrincipalRequest,
+    QuotaRequest,
     RateLimitRequest,
+    RestoreRequest,
+    WebhookRequest,
 )
 
 router = APIRouter()
@@ -186,6 +191,80 @@ async def set_rate_limit(gateway_id: str, payload: RateLimitRequest,
     )
     return {"status": "configured"}
 
+
+@router.put("/gateways/{gateway_id}/quota")
+async def set_quota(gateway_id: str, payload: QuotaRequest,
+                    session: CanWriteGateways, principal: PrincipalDep,
+                    container: ContainerDep) -> dict[str, int]:
+    """A calendar-month ceiling, separate from the per-minute rate limit.
+
+    No router refresh: the quota is read from the read model per request, and
+    the guard's cached config only carries the ceiling's *value*, which the
+    signature already includes.
+    """
+    await gateways.owned(container, principal.caller, gateway_id)
+    await container.commands.set_monthly_quota(
+        gateway_id, monthly_quota=payload.monthly_quota, actor=session.email
+    )
+    await container.refresh_router()
+    return {"monthly_quota": payload.monthly_quota}
+
+# -- history ---------------------------------------------------------------
+
+@router.get("/gateways/{gateway_id}/history")
+async def gateway_history(gateway_id: str, session: CanReadGateways,
+                          principal: PrincipalDep,
+                          container: ContainerDep) -> dict[str, Any]:
+    """This gateway's own stream, oldest first. Secrets are redacted."""
+    del session
+    gateway = await gateways.owned(container, principal.caller, gateway_id)
+    return {"history": await inspect.history(container, gateway)}
+
+@router.get("/gateways/{gateway_id}/history/{version}")
+async def gateway_snapshot(gateway_id: str, version: int,
+                           session: CanReadGateways, principal: PrincipalDep,
+                           container: ContainerDep) -> dict[str, Any]:
+    """The configuration that version left behind, for a preview before restore."""
+    del session
+    gateway = await gateways.owned(container, principal.caller, gateway_id)
+    return await inspect.configuration_at(container, gateway, version)
+
+@router.post("/gateways/{gateway_id}/restore")
+async def restore_gateway(gateway_id: str, payload: RestoreRequest,
+                          session: CanWriteGateways, principal: PrincipalDep,
+                          container: ContainerDep) -> dict[str, Any]:
+    """Roll the configuration back. Credentials and keys are not restored."""
+    gateway = await gateways.owned(container, principal.caller, gateway_id)
+    await container.commands.restore_gateway(
+        gateway["id"], version=payload.version, actor=session.email
+    )
+    await container.refresh_router()
+    return {"status": "restored", "version": payload.version}
+
+# -- playground ------------------------------------------------------------
+
+@router.post("/gateways/{gateway_id}/call")
+async def call_tool(gateway_id: str, payload: CallToolRequest,
+                    session: CanWriteGateways, principal: PrincipalDep,
+                    container: ContainerDep) -> Response:
+    """Run one tool from the panel, through the gateway's own credential.
+
+    Write permission: it executes a side effect on a server the operator only
+    indirectly owns. The call is recorded in the traffic log with the operator as
+    the subject, so a playground invocation is never a mystery row.
+    """
+    gateway = await gateways.owned(container, principal.caller, gateway_id)
+    # A copy with the key list, because the row is a frozen read model: the
+    # playground asks "does this gateway have a key", and mutating the row to
+    # carry the answer would be the caller editing a projection.
+    config = {**gateway, "api_keys": await container.read_models.api_keys(gateway["id"])}
+    result = await inspect.call_tool(
+        container, config, tool=payload.tool, arguments=payload.arguments,
+        actor=session.email,
+    )
+    # The HTTP status is the outcome's, not always 200: a panel that renders a
+    # 403 body from a 200 response teaches the operator to ignore status codes.
+    return JSONResponse(content=result, status_code=int(result["status"]))
 
 @router.post("/gateways/{gateway_id}/disable")
 async def disable_gateway(gateway_id: str, session: CanWriteGateways,
@@ -350,5 +429,49 @@ async def revoke_key(gateway_id: str, key_id: str,
     await container.refresh_router()
     return {"status": "revoked"}
 
+
+# -- webhooks --------------------------------------------------------------
+
+@router.get("/gateways/{gateway_id}/webhooks")
+async def list_webhooks(gateway_id: str, session: CanReadGateways,
+                        principal: PrincipalDep,
+                        container: ContainerDep) -> dict[str, Any]:
+    del session
+    await gateways.owned(container, principal.caller, gateway_id)
+    rows = await container.read_models.webhooks(gateway_id)
+    return {"webhooks": [row.model_dump(mode="json") for row in rows]}
+
+@router.post("/gateways/{gateway_id}/webhooks", status_code=201)
+async def register_webhook(gateway_id: str, payload: WebhookRequest,
+                           session: CanWriteGateways, principal: PrincipalDep,
+                           container: ContainerDep) -> dict[str, Any]:
+    """Register a hook. The secret is the caller's; the server keeps it sealed."""
+    await gateways.owned(container, principal.caller, gateway_id)
+    webhook_id, _secret = await container.commands.register_webhook(
+        gateway_id, url=payload.url, secret=payload.secret,
+        outcomes=tuple(payload.outcomes), actor=session.email,
+    )
+    return {"id": webhook_id, "url": payload.url,
+            "outcomes": payload.outcomes, "enabled": True}
+
+@router.delete("/gateways/{gateway_id}/webhooks/{webhook_id}")
+async def delete_webhook(gateway_id: str, webhook_id: str,
+                         session: CanWriteGateways, principal: PrincipalDep,
+                         container: ContainerDep) -> dict[str, str]:
+    await gateways.owned(container, principal.caller, gateway_id)
+    await container.commands.delete_webhook(
+        gateway_id, webhook_id=webhook_id, actor=session.email
+    )
+    return {"status": "deleted"}
+
+@router.get("/gateways/{gateway_id}/webhooks/{webhook_id}/deliveries")
+async def webhook_deliveries(gateway_id: str, webhook_id: str,
+                             session: CanReadGateways, principal: PrincipalDep,
+                             container: ContainerDep) -> dict[str, Any]:
+    """"The hook is silent" has two causes; this is how to tell them apart."""
+    del session
+    await gateways.owned(container, principal.caller, gateway_id)
+    rows = await container.read_models.webhook_deliveries(webhook_id)
+    return {"deliveries": [row.model_dump(mode="json") for row in rows]}
 
 __all__ = ["router"]

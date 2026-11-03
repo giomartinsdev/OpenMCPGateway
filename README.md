@@ -221,19 +221,47 @@ a drawer exactly like the Traffic screen.
 `/healthz` answers the first; the badge next to the endpoint answers the second,
 and **Test upstream** asks it now: a real MCP handshake against the target, cached
 for 30 seconds, with the tool count when it worked and the reason when it did not.
-A dead upstream used to look like a quiet, healthy gateway.
+A dead upstream used to look like a quiet, healthy gateway. The same probe
+fingerprints each tool's description and input schema: a tool that quietly changed
+shape breaks a client that worked yesterday, and the badge names it instead of
+leaving the operator to diff two sessions by hand.
 
 The Traffic screen is the dashboard: totals with the change against the equal
-window before, latency, rejection rate, distinct callers, a volume chart with the
-busiest minute named, and breakdowns by outcome, gateway, caller and tool. It
-refreshes every ten seconds without a reload. **Export CSV** saves the same rows
-through the same filters as one file.
+window before, latency with its p95 and p99 beside the average, rejection rate,
+distinct callers, a volume chart with the busiest minute named, and breakdowns by
+outcome, gateway, caller and tool. It refreshes every ten seconds without a
+reload. **Export CSV** saves the same rows through the same filters as one file;
+the audit log exports the same way. The percentiles are read from the retained
+rows rather than derived from count/sum/max, because a mean cannot be
+un-aggregated and a percentile-shaped guess would be worse than none.
 
 A refused request says why. The guard stores the reason as an English sentence
 (`subject not in allowlist`, `tool not in allowlist`, `rate limit exceeded`,
-`missing or invalid credential`, `upstream error`) so the log reads from `psql`
-too, and the drawer translates it on the way out. The outcome column says
-"forbidden"; the reason says which gate did it.
+`missing or invalid credential`, `upstream error`, `monthly quota exhausted`) so
+the log reads from `psql` too, and the drawer translates it on the way out. The
+outcome column says "forbidden"; the reason says which gate did it.
+
+Every answer carries `X-Request-Id` — the caller's when it sent a sane one,
+otherwise one the guard minted — and the traffic row stores it, so "which call
+was that" is one query. A gateway's page also carries its own history: every
+version in the stream, a preview of what an older one held, and a rollback that
+appends one `gateway.restored` fact rather than replaying the commands it undid.
+Keys and credentials are not restored: a revoked key must stay revoked.
+
+The page's second half is for looking rather than deciding. **Playground** runs
+one tool with the gateway's own upstream credential and records the call under
+the operator's account, so a manual invocation is never a mystery row.
+**Webhooks** registers a URL that receives every observation the guard records,
+signed with an HMAC-SHA256 of the body; the deliveries table is where "the hook is
+silent" turns into either "no matching event" or "every POST failed".
+
+The month has its own ceiling next to the minute's. The limiter charges a burst
+and shares its counters through Redis; the quota is one row lock in Postgres,
+reserved before the call goes out, so two calls in a row cannot read the same
+count. Both refuse with 429, and the row's reason says which one. A member can
+also be disabled rather than deleted: sign-in stops, live sessions stop on the
+next request, and the events they already wrote stay in the log — an offboarding
+is not a reason to rewrite history.
 
 Creation is a drawer too — gateway, member and role all open the same way from
 the button in the page header, so the form never pushes the list down the page.
