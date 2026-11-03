@@ -29,6 +29,7 @@ from gateway.interface import errors
 from gateway.interface.api import router as api_router
 from gateway.interface.middleware import log_requests
 from gateway.log import log
+from gateway.proxy import branding
 
 # default: backend/src/gateway/interface/app.py → repo root, where `web/dist` is
 # built. OMG_WEB_DIST overrides it for an image layout that differs.
@@ -50,6 +51,12 @@ def _version() -> str:
 
 
 def create_admin_app(settings: Settings) -> FastAPI:
+    # FastMCP's consent and error pages are rendered by module-level functions it
+    # imports by name, so there is no constructor argument to pass a template
+    # through. Rebinding them here — once per process, at the composition root —
+    # keeps that detail out of every call site.
+    branding.install()
+
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("app.starting", base_url=settings.base_url)
