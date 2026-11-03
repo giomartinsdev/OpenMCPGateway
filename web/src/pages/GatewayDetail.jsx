@@ -6,6 +6,7 @@ import {
 } from "../ui.jsx";
 import { navigate } from "../App.jsx";
 import { ConnectGuide } from "./gateway/ConnectGuide.jsx";
+import { ToolsPanel } from "./gateway/ToolsPanel.jsx";
 import {
   AuthForm, RateLimitForm, RecentRequests, Traffic,
 } from "./gateway/Panels.jsx";
@@ -26,9 +27,24 @@ const SAMPLE = {
   client_id: "…apps.googleusercontent.com",
   principals: [{ subject: "someone@example.com", added_at: new Date().toISOString() }],
   api_keys: [{ label: "default", key_id: "key_0000", issued_at: new Date().toISOString() }],
+  tools: [],
   requests: [],
   stats: { requests: 0, previous_requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, by_gateway: {}, series: [], busiest: null },
 };
+
+/** The eye: one click, one plaintext, one time. */
+function EyeIcon() {
+  return (
+    <svg
+      width="15" height="15" viewBox="0 0 16 16" fill="none"
+      stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M1.4 8s2.4-4.4 6.6-4.4S14.6 8 14.6 8s-2.4 4.4-6.6 4.4S1.4 8 1.4 8Z" />
+      <circle cx="8" cy="8" r="2" />
+    </svg>
+  );
+}
 
 export function GatewayDetail({ id, me }) {
   const t = useT();
@@ -42,6 +58,9 @@ export function GatewayDetail({ id, me }) {
   const [banner, setBanner] = useState(null); // {kind, text}
   // Holds a plaintext only between the response and the operator's clipboard.
   const [newKey, setNewKey] = useState("");
+  // Which key's plaintext is on screen, and why one cannot be shown. The eye is
+  // per row: a revealed key is a fact about that key, not about the page.
+  const [shownKey, setShownKey] = useState("");
 
   async function load() {
     try {
@@ -203,6 +222,14 @@ export function GatewayDetail({ id, me }) {
         )}
       </Card>
 
+      <Card title={t("Tools")}>
+        {gateway ? (
+          <ToolsPanel gateway={gateway} me={me} onSaved={load} />
+        ) : (
+          <Bone height={120} radius={10} />
+        )}
+      </Card>
+
       <div className="grid-2" style={{ marginTop: 12 }}>
         <Card
           title={t("Allowed subjects")}
@@ -270,14 +297,34 @@ export function GatewayDetail({ id, me }) {
             </button>
           )}
         >
-          {/* The plaintext exists once, in the response that minted it. It is
-              shown here — next to the button that produced it — because a banner
-              at the top of a long page is a secret people scroll past. */}
+          {/* Two moments produce a plaintext: minting one, and using the eye on a
+              key that was never read. Both land here, next to the table they
+              belong to, because a banner at the top of a long page is a secret
+              people scroll past. */}
+          {shownKey && (
+            <div className="secret" style={{ marginBottom: 12 }}>
+              <div className="spread" style={{ marginBottom: 6 }}>
+                <strong>{t("Last chance: this key cannot be shown again.")}</strong>
+                <button className="ghost sm" onClick={() => setShownKey("")}>
+                  {t("dismiss")}
+                </button>
+              </div>
+              <div className="row">
+                <span className="mono" style={{ wordBreak: "break-all" }}>{shownKey}</span>
+                <button
+                  className="ghost copy"
+                  onClick={() => navigator.clipboard?.writeText(shownKey)}
+                >
+                  {t("copy")}
+                </button>
+              </div>
+            </div>
+          )}
           {newKey && (
             <div className="secret" style={{ marginBottom: 12 }}>
               <div className="spread" style={{ marginBottom: 6 }}>
                 <strong>
-                  {t("Copy this key now — it is not stored and cannot be shown again.")}
+                  {t("Copy this key now. You can read it once more from this page, then it is gone.")}
                 </strong>
                 <button className="ghost sm" onClick={() => setNewKey(null)}>
                   {t("dismiss")}
@@ -309,6 +356,7 @@ export function GatewayDetail({ id, me }) {
                   <th>{t("Label")}</th>
                   <th>{t("Key id")}</th>
                   <th className="num">{t("Issued")}</th>
+                  <th>{t("Seen")}</th>
                   <th />
                 </tr>
               </thead>
@@ -321,8 +369,34 @@ export function GatewayDetail({ id, me }) {
                         used to invite. */}
                     <td className="mono hint">{key.key_id}</td>
                     <td className="num hint">{relative(key.issued_at)}</td>
+                    <td className="hint">
+                      {key.revealed_at
+                        ? t("seen {when} by {who}", {
+                            when: relative(key.revealed_at),
+                            who: key.revealed_by ?? "—",
+                          })
+                        : key.recoverable
+                          ? t("never")
+                          : t("not available")}
+                    </td>
                     {canKeys && (
                       <td className="actions">
+                        <button
+                          className="ghost icon"
+                          title={t("Show the key once")}
+                          aria-label={t("Show the key once")}
+                          disabled={!key.recoverable || !gateway || shownKey !== ""}
+                          onClick={() => {
+                            api.revealKey(id, key.key_id)
+                              .then((revealed) => {
+                                setShownKey(revealed.api_key);
+                                load();
+                              })
+                              .catch((e) => setError(e.message));
+                          }}
+                        >
+                          <EyeIcon />
+                        </button>
                         <button
                           className="ghost sm"
                           disabled={!gateway}

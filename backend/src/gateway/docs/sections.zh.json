@@ -55,7 +55,9 @@
       "body": [
         "网关是一个 slug、一个上游 URL 和一套策略。slug 是全局的：`/g/<slug>/mcp` 是人们粘贴到客户端里的字符串，因此两个租户不能同时拥有 `rancher`。",
         "系统为你创建一个网关：`console`，指向本部署自己的只读 MCP。slug 是全局的，因为 `/g/<slug>/mcp` 是公开 URL，所以在有多个租户的部署上，第一个租户占用 `console`，其余租户使用 `console-<tenant id>`——用 id 而非计数器，这样地址仍然表明它是谁的网关。",
-        "`target_url` 是上游的 streamable-HTTP 端点，包含其路径（`http://rancher-mcp.support.svc.cluster.local:8000/mcp`）。必须是 `http://` 或 `https://`。"
+        "`target_url` 是上游的 streamable-HTTP 端点，包含其路径（`http://rancher-mcp.support.svc.cluster.local:8000/mcp`）。必须是 `http://` 或 `https://`。",
+        "网关还决定它暴露*哪些*工具。清单是一组上游工具名；为空表示上游提供的全部工具，这也是每个网关的初始状态。清单之外的工具会从 `tools/list` 消失，对它的 `tools/call` 会返回 `403` 并点名该工具，因此配置里还留着旧名字的客户端得到的是一句话，而不是静默成功或去猜拼写错在哪。",
+        "面板直接向上游读取目录来填充这份清单 - 不走网关，因为网关会用自己正在施加的过滤器来回答。上游已不再提供的已配置名字仍然可见并带标记，因为下次保存时静默删掉它会抹去操作者做过的决定。"
       ],
       "table": {
         "head": [
@@ -99,7 +101,7 @@
       "title": "认证方式",
       "body": [
         "**`none`** - 无认证。在私有网络上没问题；只要有任何此类网关启用，面板就会警告。",
-        "**`api_key`** - 调用方发送 `Authorization: Bearer omg_...`。密钥以 SHA-256 哈希存储，只在签发它们的响应中以明文显示一次。",
+        "**`api_key`** - 调用方发送 `Authorization: Bearer omg_...`。密钥以 SHA-256 哈希保存（鉴权比较的就是它），旁边是一份用部署密钥加密的明文封存副本。签发它的响应会返回明文，网关页面会给从未被读取过的密钥显示一个眼睛图标：点击会解密封存副本、把密钥显示一次，然后抹掉它。此后只剩哈希，想再拿到可读的密钥只能轮换。",
         "**`oauth`** - 网关自身就是 OAuth 资源服务器。没有令牌的客户端会得到 `401` 和 `WWW-Authenticate: Bearer resource_metadata=...`；它发现元数据文档、自行注册并打开浏览器。操作员批准一次，此后该主体即被加入允许列表。",
         "OAuth 模式下客户端不需要把令牌签入 dotfile——这正是重点。API 密钥模式则需如此，这也是密钥按网关划分、可单独吊销的原因。",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
@@ -180,7 +182,8 @@
         "每个列表都是游标分页：`?limit=50&before=<cursor>`，返回 `{items, next}`。`next` 在最后一页为 null，`limit` 会被钳制到 200 而不是被拒绝。",
         "每个列表还接受自己的过滤字段作为查询参数，对应面板中每列一个输入框。文本列匹配片段（`?name=anch` 可找到 `rancher`），`status` 和 `enabled` 精确匹配，每个列表都带有一个 `id` 输入框，用于你只复制了一半的那一行。未知字段会返回 422 并列出存在的字段——被静默忽略的过滤比报错更糟。",
         "排序是 `?sort=<column>&order=asc|desc`。可排序列对每个列表是封闭集合：网关按 `created_at`、`updated_at`、`name` 或 `slug`；流量按 `occurred_at`、`duration_ms`、`status` 或 `subject`；审计日志按 `occurred_at`、`actor` 或 `type`；成员按 `email` 和 `created_at`；角色按 `name` 和 `created_at`。未知的键会返回 422 并列出合法的键。",
-        "游标意味着*在此行之后，按此顺序*，因此它绑定于签发它的排序。更改 `sort` 或 `order` 后请从第一页开始：复用旧游标会得到 422，而不是一个静默有洞的列表。"
+        "游标意味着*在此行之后，按此顺序*，因此它绑定于签发它的排序。更改 `sort` 或 `order` 后请从第一页开始：复用旧游标会得到 422，而不是一个静默有洞的列表。",
+        "有两个端点不合 CRUD 的形状，值得了解：`POST /api/gateways/<id>/keys/<key_id>/reveal` 返回一次封存的明文，之后是 `409`；`GET /api/gateways/<id>/upstream-tools` 向上游询问它提供什么，好让清单被勾选而不是手打。`PUT /api/gateways/<id>/tools` 替换清单。"
       ],
       "table": {
         "head": [
@@ -311,10 +314,11 @@
       "body": [
         "日志在 stdout 上每行一个 JSON 对象，为 Loki / Grafana 构建。可用于构建仪表盘的有用字段：`event`、`gateway`、`subject`、`outcome`、`status`、`duration_ms`。用 `OMG_LOG_LEVEL` 设置级别。",
         "```json\n{\"ts\":\"2026-11-02T11:04:14.538Z\",\"level\":\"info\",\"logger\":\"gateway\",\"msg\":\"proxy.request\",\"event\":\"proxy.request\",\"gateway\":\"rancher\",\"subject\":\"api-key:key_ab12\",\"outcome\":\"allowed\",\"status\":200,\"duration_ms\":18,\"ip\":\"203.0.113.7\"}\n```",
-        "速率限制在进程内：有 N 个副本时有效限制是 N 倍。对当前设计的单副本部署是正确的。",
-        "OAuth 代理状态（客户端注册、上游令牌、`jti` 映射）位于同一个 Postgres 中，静态加密，因此滚动发布不会让每个已连接的客户端退出登录。这部分已经是副本安全的；只有限流器不是。",
+        "限流是按（网关、调用方）的滑动窗口。设置 `OMG_REDIS_URL` 后，计数器放在 Redis 里、由所有副本共享，因此 `replicas: 2` 意味着配置的限额而不是它的两倍。不设置时限流器在进程内：单副本时正确，N 个副本时限额是 N 倍。Redis 挂掉时放行并记录 - 丢一个计数窗口好过一次故障。",
+        "OAuth 代理状态（客户端注册、上游令牌、`jti` 映射）存放在同一个 Postgres 里，静态加密，因此滚动发布不会把所有已连接的客户端踢下线。这部分本就是副本安全的；设置了 `OMG_REDIS_URL` 后限流器也是。",
         "状态是事件溯源的。每次变更都是一个仅追加的事件，读模型是其投影，这正是审计日志可信的原因，也让两个副本共享一个数据库而无需缓存一致性方案。",
-        "schema 在代码中版本化（`infrastructure/db/migrations.py`）：一个编号的步骤列表，记录在 `schema_migrations` 中。启动时应用此构建尚未应用的所有内容，因此升级是一次滚动发布，而不是手动 `psql` 会话。以 `rm_` 为前缀的表是读模型——事件日志的投影，可从中重建——而 `events` 就是日志本身。"
+        "schema 在代码中版本化（`infrastructure/db/migrations.py`）：一个编号的步骤列表，记录在 `schema_migrations` 中。启动时应用此构建尚未应用的所有内容，因此升级是一次滚动发布，而不是手动 `psql` 会话。以 `rm_` 为前缀的表是读模型——事件日志的投影，可从中重建——而 `events` 就是日志本身。",
+        "`GET /metrics` 输出 Prometheus 文本格式：按网关、结果和状态类别统计的 `omg_proxy_requests_total`；除以计数得到均值的 `omg_proxy_request_duration_ms_sum`；以及在线网关、待定网关、被丢弃的观测和当前限流后端的 gauge。它不鉴权且在同一端口上，因此如果部署面向公网，请在 ingress 上限制它。计数器在进程内：多副本时每个 pod 是一条序列，`sum by (gateway)` 才是正确的查询。"
       ],
       "table": {
         "head": [

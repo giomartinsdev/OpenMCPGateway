@@ -21,10 +21,10 @@ from gateway.infrastructure.db.database import Database
 from gateway.infrastructure.eventstore.postgres import PostgresEventStore
 from gateway.infrastructure.eventstore.projections import ProjectionRunner, ReadModels
 from gateway.log import log
-from gateway.observability import RequestRecorder
+from gateway.observability import Metrics, RequestRecorder
 from gateway.proxy.providers import close_client_storage, configure_client_storage
-from gateway.proxy.router import GatewayRouter
-from gateway.proxy.runtime import RateLimiter
+from gateway.proxy.router import GatewayRouter, LifespanTask
+from gateway.proxy.runtime import build_limiter
 
 
 class Container(BaseModel):
@@ -39,13 +39,20 @@ class Container(BaseModel):
     read_models: ReadModels
     commands: CommandHandler
     recorder: RequestRecorder
-    limiter: RateLimiter
+    metrics: Metrics = Field(default_factory=Metrics)
+    limiter: Any
     router: GatewayRouter = Field(default=None)  # type: ignore[assignment]
     #: The read-only console MCP, and the verifier in front of it. Built here so
     #: a test can call a tool without standing up an HTTP transport, and so there
     #: is exactly one of each per process.
     console: Any = None
     console_verifier: Any = None
+    #: The console's ASGI app, built once. `http_app()` returns a *new* object on
+    #: each call, and the one whose lifespan was entered is the one that can serve;
+    #: building a second in the dispatcher gave every request "Task group is not
+    #: initialized", which made the seeded `console` gateway a 500 upstream.
+    console_app: Any = None
+    console_lifespan: Any = None
 
     @classmethod
     async def create(cls, settings: Settings) -> Container:
@@ -72,13 +79,18 @@ class Container(BaseModel):
             store=store,
             projections=projections,
             read_models=read_models,
-            commands=CommandHandler(store, projections),
+            commands=CommandHandler(
+                store,
+                projections,
+                sealing_secret=settings.session_secret.get_secret_value(),
+            ),
             recorder=recorder,
-            limiter=RateLimiter(),
+            limiter=build_limiter(settings.redis_url),
         )
         container.router = GatewayRouter(
             read_models=read_models,
             limiter=container.limiter,
+            metrics=container.metrics,
             recorder=recorder,
             base_url=settings.base_url,
             store=store,
@@ -89,6 +101,20 @@ class Container(BaseModel):
             container, settings.session_secret.get_secret_value()
         )
         container.console_verifier = container.console.auth
+        # Built once, with its lifespan entered: FastMCP's streamable-HTTP app
+        # refuses every request until the session manager's task group is up, and
+        # `http_app()` hands back a new object each call, so the dispatcher must
+        # serve *this* one. See `Container.console_app`.
+        console_app = container.console.http_app(path="/mcp", stateless_http=True)
+        console_lifespan = (
+            LifespanTask(lambda: console_app.lifespan(console_app))
+            if console_app.lifespan
+            else None
+        )
+        if console_lifespan is not None:
+            await console_lifespan.astart()
+        container.console_app = console_app
+        container.console_lifespan = console_lifespan
         await container.router.refresh()
         await bootstrap_admin(container)
         await adopt_legacy_tenants(container)
@@ -103,7 +129,10 @@ class Container(BaseModel):
 
     async def close(self) -> None:
         await self.recorder.stop()
+        await self.limiter.close()
         await self.router.shutdown()
+        if self.console_lifespan is not None:
+            await self.console_lifespan.astop()
         await close_client_storage()
         await self.database.close()
 
@@ -119,8 +148,15 @@ async def replay_projections(
     nothing; it exists so a wiped read model (or a second instance starting
     later) is rebuilt from the log rather than serving stale/empty data.
     """
-    del read_models
     checkpoint = await store.checkpoint(projections.name)
+    # A checkpoint is a promise that everything before it was applied. Wiping
+    # `rm_*` breaks that promise while leaving the number in place, and then a
+    # restart silently replays nothing — the read model stays empty and the only
+    # symptom is a panel that looks like a fresh install. An empty read model
+    # next to a non-zero checkpoint is exactly that state, so start from zero.
+    if checkpoint and await read_models.is_empty():
+        log.warning("projection.replay_from_zero", checkpoint=checkpoint)
+        checkpoint = 0
     replayed = 0
     async for global_seq, event in store.read_all(since=checkpoint):
         await projections.apply(global_seq, event)

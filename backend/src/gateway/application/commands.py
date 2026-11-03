@@ -30,14 +30,29 @@ from gateway.domain.model import (
 from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
 from gateway.infrastructure.eventstore.postgres import ConcurrencyError
 from gateway.infrastructure.eventstore.projections import ProjectionRunner
-from gateway.infrastructure.security import generate_api_key, hash_password
+from gateway.infrastructure.security import (
+    generate_api_key,
+    hash_password,
+    open_sealed,
+    seal,
+)
 from gateway.log import log
 
 
 class CommandHandler:
-    def __init__(self, store: EventStore, projections: ProjectionRunner) -> None:
+    def __init__(
+        self,
+        store: EventStore,
+        projections: ProjectionRunner,
+        *,
+        sealing_secret: str = "",
+    ) -> None:
         self._store = store
         self._projections = projections
+        #: Derived from the deployment's session secret. Empty in tests that do
+        #: not care about reveal, which is why sealing is skipped rather than
+        #: raising: a key that cannot be revealed still works for auth.
+        self._sealing_secret = sealing_secret
 
     # -- internal ---------------------------------------------------------
 
@@ -70,6 +85,10 @@ class CommandHandler:
             actor=actor,
         )
         return appended
+
+    def _seal(self, plaintext: str) -> str:
+        """Sealed copy, or empty when this deployment has no sealing secret."""
+        return seal(plaintext, secret=self._sealing_secret) if self._sealing_secret else ""
 
     async def _load_gateway(self, gateway_id: str) -> Gateway:
         events = await self._store.load_stream(gateway_id)
@@ -397,7 +416,7 @@ class CommandHandler:
     async def issue_api_key(
         self, gateway_id: str, *, label: str, actor: str = "system"
     ) -> tuple[str, str]:
-        """Returns (plaintext, key_id). Plaintext is not recoverable later."""
+        """Returns (plaintext, key_id). The plaintext is sealed for one reveal."""
         gateway = await self._load_gateway(gateway_id)
         plaintext, key_hash = generate_api_key()
         key_id = f"key_{secrets.token_hex(6)}"
@@ -408,6 +427,7 @@ class CommandHandler:
             # A distinct subject per key, so one noisy key cannot exhaust another
             # key's budget on the same gateway.
             subject=f"api-key:{key_id}",
+            sealed=self._seal(plaintext),
         )
         await self._commit(gateway_id, events, gateway.version, actor=actor)
         return plaintext, key_id
@@ -431,11 +451,43 @@ class CommandHandler:
                 label=label,
                 key_hash=key_hash,
                 subject=f"api-key:{new_id}",
+                sealed=self._seal(plaintext),
             ),
             *gateway.decide_revoke_key(key_id=key_id),
         ]
         await self._commit(gateway_id, events, gateway.version, actor=actor)
         return plaintext, new_id
+
+    async def reveal_api_key(
+        self,
+        gateway_id: str,
+        *,
+        key_id: str,
+        sealed: str,
+        actor: str = "system",
+    ) -> str | None:
+        """Open a sealed plaintext and immediately make it unreadable again.
+
+        The caller reads the sealed column (the handler has no query side), this
+        opens it, and the appended `ApiKeyRevealed` wipes the column in the
+        projection. One trip, on purpose: the eye icon exists so the operator who
+        issued a key can retrieve it once, not so the panel becomes a secret
+        store.
+        """
+        plaintext = open_sealed(sealed, secret=self._sealing_secret)
+        if plaintext is None:
+            return None
+        gateway = await self._load_gateway(gateway_id)
+        events = gateway.decide_reveal_key(key_id=key_id)
+        await self._commit(gateway_id, events, gateway.version, actor=actor)
+        return plaintext
+
+    async def set_gateway_tools(
+        self, gateway_id: str, *, tools: Sequence[str], actor: str = "system"
+    ) -> list[Event]:
+        gateway = await self._load_gateway(gateway_id)
+        events = gateway.decide_set_tools(tools=tools)
+        return await self._commit(gateway_id, events, gateway.version, actor=actor)
 
     async def revoke_api_key(
         self, gateway_id: str, *, key_id: str, actor: str = "system"

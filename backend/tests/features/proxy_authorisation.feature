@@ -84,6 +84,70 @@ Feature: Proxy authorisation
     When a second container starts against the same database
     Then the "restarted" gateway is advertised as live
 
+  # The plaintext used to be unrecoverable the moment the response was rendered:
+  # "shown once" meant "if you closed the tab, rotate". Sealing it with the
+  # deployment secret keeps that promise — the operator can read it exactly once
+  # more — without turning the panel into a secret store.
+  Scenario: A key that was never seen can be revealed once
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the operator reveals that key
+    Then the revealed key matches the issued one
+    And revealing it again is refused with a conflict
+
+  Scenario: A rotated key can be revealed, because it was never seen either
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the operator rotates that key
+    Then the new key can be revealed once
+
+  Scenario: A revoked key cannot be revealed
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the operator revokes every key
+    Then revealing the revoked key is refused
+
+  # A gateway allowlist is a second gate on *which* tools, not just who. Both
+  # halves matter: hiding a tool from the list without refusing the call is a
+  # suggestion, and refusing the call without hiding it makes a client retry.
+  Scenario: A gateway exposes only the tools it allows
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the operator allows only the tool "echo"
+    Then a caller with the issued key sees the tool "echo"
+    And calling the allowed tool succeeds
+    And calling a tool outside the allowlist is refused with 403
+
+  Scenario: The panel can read the upstream's tool catalog
+    # The allowlist is ticked, not typed. Asking the gateway would answer with
+    # what it already allows, so this path goes to the upstream directly.
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    When the operator asks which tools the upstream serves
+    Then the catalog is available and lists "echo"
+
+  Scenario: An unreachable upstream says so instead of failing
+    Given a gateway "demo" with api_key auth
+    When the operator asks which tools the upstream serves
+    Then the catalog is unavailable and names the reason
+
+  Scenario: An empty allowlist means every tool
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the operator allows no tools
+    Then a caller with the issued key sees the tool "echo"
+    And calling the allowed tool succeeds
+
+  # A checkpoint is a promise that everything before it was applied. Wiping
+  # `rm_*` without wiping the checkpoint breaks that promise silently: the boot
+  # replays nothing and the panel looks like a fresh install with all the
+  # gateways missing. The empty read model is the evidence that it happened.
+  Scenario: A wiped read model is rebuilt even though the checkpoint survived
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the read model is wiped but the checkpoint is kept
+    And a second container starts against the same database
+    Then the "demo" gateway is advertised as live
+
   Scenario: Rotating a key returns the new one and kills the old one
     # Rotation exists because the plaintext is unrecoverable: a key that leaked,
     # or one whose owner forgot it, has to be replaced without a window where

@@ -8,6 +8,7 @@ rather than propagating errors upward.
 
 import asyncio
 import contextlib
+from collections import defaultdict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -105,4 +106,84 @@ class RequestRecorder:
         await self._projections.apply(0, event)
 
 
-__all__ = ["Observation", "RequestRecorder"]
+class Metrics:
+    """Request counters in the Prometheus text format.
+
+    In-process, like the default rate limiter, and for the same reason: the
+    alternative is a client library and a push gateway for six counters. With one
+    replica (the documented default) nothing is lost; with several, each pod is a
+    series and `sum by (gateway)` in the query is the correct aggregation anyway.
+
+    Labels are deliberately low-cardinality: gateway slug, outcome, status class.
+    A label per caller or per IP would turn a metrics endpoint into a second,
+    worse traffic log.
+    """
+
+    #: Request durations, in milliseconds, summed per (gateway, outcome). A
+    #: summary without quantiles: `rate(sum) / rate(count)` is the mean, and that
+    #: is the number an operator actually acts on. Buckets are the traffic log's
+    #: job, and it already has them per minute.
+    def __init__(self) -> None:
+        self._counts: dict[tuple[str, str, str], int] = defaultdict(int)
+        self._duration_ms: dict[tuple[str, str], int] = defaultdict(int)
+        self._dropped = 0
+
+    def observe(
+        self, *, gateway: str, outcome: str, status: int, duration_ms: int
+    ) -> None:
+        self._counts[(gateway, outcome, _status_class(status))] += 1
+        self._duration_ms[(gateway, outcome)] += max(0, duration_ms)
+
+    def dropped(self, count: int) -> None:
+        """Mirror the recorder's counter. Called before every render rather than
+        kept in sync by the recorder, so the two cannot disagree."""
+        self._dropped = count
+
+    def render(self, *, live: int, pending: int, limit_backend: str) -> str:
+        """The exposition body. Gauges are supplied by the caller: this object
+        knows what it was told, not what the router currently serves."""
+        lines: list[str] = [
+            "# HELP omg_proxy_requests_total MCP requests by gateway, outcome and status class.",
+            "# TYPE omg_proxy_requests_total counter",
+        ]
+        for (gateway, outcome, klass), count in sorted(self._counts.items()):
+            lines.append(
+                f'omg_proxy_requests_total{{gateway="{_escape(gateway)}",'
+                f'outcome="{_escape(outcome)}",status="{klass}"}} {count}'
+            )
+        lines.extend([
+            "# HELP omg_proxy_request_duration_ms_sum Total time spent in proxied requests.",
+            "# TYPE omg_proxy_request_duration_ms_sum counter",
+        ])
+        for (gateway, outcome), total in sorted(self._duration_ms.items()):
+            lines.append(
+                f'omg_proxy_request_duration_ms_sum{{gateway="{_escape(gateway)}",'
+                f'outcome="{_escape(outcome)}"}} {total}'
+            )
+        lines.extend([
+            "# HELP omg_gateways_live Gateways currently serving.",
+            "# TYPE omg_gateways_live gauge",
+            f"omg_gateways_live {live}",
+            "# HELP omg_gateways_pending Enabled gateways not serving, and why (see /healthz).",
+            "# TYPE omg_gateways_pending gauge",
+            f"omg_gateways_pending {pending}",
+            "# HELP omg_traffic_observations_dropped Observations dropped before reaching the log.",
+            "# TYPE omg_traffic_observations_dropped counter",
+            f"omg_traffic_observations_dropped {self._dropped}",
+            "# HELP omg_rate_limit_backend 1 for the shared (Redis) limiter, 0 for in-process.",
+            "# TYPE omg_rate_limit_backend gauge",
+            f"omg_rate_limit_backend {1 if limit_backend == 'redis' else 0}",
+        ])
+        return "\n".join(lines) + "\n"
+
+
+def _status_class(status: int) -> str:
+    """`4xx`, not `429`: a label per status is a series per status."""
+    return f"{status // 100}xx" if 100 <= status < 600 else "other"
+
+
+def _escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+__all__ = ["Metrics", "Observation", "RequestRecorder"]

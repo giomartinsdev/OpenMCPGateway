@@ -59,6 +59,9 @@ class Settings(BaseModel):
     # Who may *become* an operator by signing in. Empty means nobody: an
     # installation with open sign-in is an installation anyone can administer.
     operator_allowlist: tuple[str, ...] = Field(default_factory=tuple)
+    # Shared rate-limit counters. Unset means in-process, which is correct for a
+    # single replica and N x the limit at N — see `proxy/rate_limit.py`.
+    redis_url: str | None = None
     log_level: str = "info"
 
     @field_validator("base_url")
@@ -128,7 +131,8 @@ class Settings(BaseModel):
             google_discovery_url=(
                 _opt("OMG_GOOGLE_DISCOVERY_URL") or DEFAULT_GOOGLE_DISCOVERY
             ),
-            operator_allowlist=tuple(
+            redis_url=_opt("OMG_REDIS_URL"),
+        operator_allowlist=tuple(
                 email.strip().lower()
                 for email in os.environ.get("OMG_OPERATOR_ALLOWLIST", "").split(",")
                 if email.strip()

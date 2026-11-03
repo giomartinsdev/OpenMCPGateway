@@ -14,6 +14,7 @@ from pydantic import Field
 from gateway.domain.events import (
     TENANT_OF_DEPLOYMENT,
     ApiKeyIssued,
+    ApiKeyRevealed,
     ApiKeyRevoked,
     AuthMode,
     Event,
@@ -23,6 +24,7 @@ from gateway.domain.events import (
     GatewayDisabled,
     GatewayEnabled,
     GatewayRateLimitSet,
+    GatewayToolsConfigured,
     GatewayUpdated,
     IdentityProvider,
     PrincipalAllowed,
@@ -52,6 +54,9 @@ class Gateway(_Aggregate):
     enabled: bool = True
     allowed_subjects: set[str] = Field(default_factory=set)
     api_key_ids: dict[str, str] = Field(default_factory=dict)  # key_id -> key_hash
+    #: Tools the upstream may expose through this gateway. Empty means every
+    #: one of them, which is what every gateway did before this existed.
+    tools: tuple[str, ...] = ()
     deleted: bool = False
     version: int = 0
 
@@ -98,6 +103,8 @@ class Gateway(_Aggregate):
                 self.allowed_subjects.add(event.subject)
             case PrincipalRevoked():
                 self.allowed_subjects.discard(event.subject)
+            case GatewayToolsConfigured():
+                self.tools = tuple(event.tools)
             case ApiKeyIssued():
                 self.api_key_ids[event.key_id] = event.key_hash
             case ApiKeyRevoked():
@@ -280,8 +287,31 @@ class Gateway(_Aggregate):
         self._ensure_live()
         return [GatewayDeleted(aggregate_id=self.id)]
 
+    def decide_set_tools(self, *, tools: Sequence[str]) -> list[Event]:
+        """Allowlist of upstream tool names. Empty means "all of them".
+
+        Names are not validated against the upstream here: the write side has no
+        network and the upstream may be down. A name that does not exist simply
+        matches nothing, and the panel shows the upstream's real list next to the
+        configured one so the difference is visible rather than guessed at.
+        """
+        self._ensure_live()
+        cleaned = tuple(dict.fromkeys(t.strip() for t in tools if t.strip()))
+        if len(cleaned) > 256:
+            raise DomainError("at most 256 tools can be allowed")
+        for name in cleaned:
+            if len(name) > 128:
+                raise DomainError("a tool name must be 128 characters or fewer")
+        return [GatewayToolsConfigured(aggregate_id=self.id, tools=cleaned)]
+
     def decide_issue_key(
-        self, *, key_id: str, label: str, key_hash: str, subject: str = "api-key"
+        self,
+        *,
+        key_id: str,
+        label: str,
+        key_hash: str,
+        subject: str = "api-key",
+        sealed: str = "",
     ) -> list[Event]:
         self._ensure_live()
         if not label.strip():
@@ -295,8 +325,22 @@ class Gateway(_Aggregate):
                 label=label.strip(),
                 key_hash=key_hash,
                 subject=subject,
+                sealed=sealed,
             )
         ]
+
+    def decide_reveal_key(self, *, key_id: str) -> list[Event]:
+        """Append the fact that the plaintext was handed out.
+
+        The wipe of the sealed copy is a separate event (`ApiKeySealedWiped` —
+        not modelled: it is the projection of this one) because the log is
+        append-only and the plaintext must stop being readable in the read
+        model, not in the history.
+        """
+        self._ensure_live()
+        if key_id not in self.api_key_ids:
+            raise DomainError("key not found")
+        return [ApiKeyRevealed(aggregate_id=self.id, key_id=key_id)]
 
     def decide_revoke_key(self, *, key_id: str) -> list[Event]:
         self._ensure_live()

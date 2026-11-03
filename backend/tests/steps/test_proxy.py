@@ -505,6 +505,43 @@ def _call_tools_list(server: str, slug: str, key: str) -> dict:
         return {"status": listed.status_code, "body": listed.text}
 
 
+def _call_tool(server: str, slug: str, key: str, tool: str,
+               arguments: dict | None = None) -> dict:
+    """Handshake, then one `tools/call`. Returns the status of the call itself."""
+    with httpx.Client(timeout=20) as client:
+        response = client.post(
+            f"{server}/g/{slug}/mcp",
+            json=_initialize_payload(),
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Authorization": f"Bearer {key}",
+            },
+        )
+        if response.status_code != 200:
+            return {"status": response.status_code, "body": response.text}
+        session = response.headers.get("mcp-session-id", "")
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Authorization": f"Bearer {key}",
+            "mcp-session-id": session,
+        }
+        client.post(
+            f"{server}/g/{slug}/mcp",
+            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+            headers=headers,
+            timeout=10,
+        )
+        called = client.post(
+            f"{server}/g/{slug}/mcp",
+            json={
+                "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                "params": {"name": tool, "arguments": arguments or {"text": "hi"}},
+            },
+            headers=headers,
+        )
+        return {"status": called.status_code, "body": called.text}
+
+
 def _find_auth(live) -> object | None:
     for route in live.routes:
         endpoint = getattr(route, "endpoint", None)
@@ -604,6 +641,28 @@ def backend_saw_bearer(protected_backend) -> None:
         assert header == "Bearer up-secret", header
 
 
+@when("the read model is wiped but the checkpoint is kept")
+def wipe_read_model(container, runner) -> None:
+    """The operator mistake the replay guard exists for.
+
+    Truncating `rm_*` is a supported recovery step; leaving the checkpoint
+    behind is what turns it into an empty panel after the next restart.
+    """
+    from sqlalchemy import text
+
+    async def wipe() -> None:
+        async with container.database.session() as session, session.begin():
+            await session.execute(
+                text(
+                    "TRUNCATE rm_gateways, rm_principals, rm_api_keys, "
+                    "rm_request_stats, rm_requests_tail, rm_roles, rm_operators "
+                    "CASCADE"
+                )
+            )
+
+    runner.run(wipe())
+
+
 @when("a second container starts against the same database",
       target_fixture="restarted")
 def second_container(runner, settings) -> Container:
@@ -663,3 +722,207 @@ def rotated_works(live_server: str, gateway: dict, rotated_key: dict) -> None:
         live_server, gateway["slug"], rotated_key["new"]["plaintext"]
     )
     assert result["status"] == 200, result
+
+
+# -- key reveal ------------------------------------------------------------
+
+
+@when("the operator reveals that key", target_fixture="revealed")
+def reveal_key(container, runner, operator: str, gateway: dict,
+               issued_key: dict) -> dict:
+    async def reveal() -> dict:
+        sealed = await container.read_models.sealed_key(
+            gateway["id"], issued_key["key_id"]
+        )
+        assert sealed, "the key was issued without a sealed copy"
+        return {
+            "plaintext": await container.commands.reveal_api_key(
+                gateway["id"],
+                key_id=issued_key["key_id"],
+                sealed=sealed,
+                actor=operator,
+            ),
+            "sealed_after": await container.read_models.sealed_key(
+                gateway["id"], issued_key["key_id"]
+            ),
+        }
+
+    return runner.run(reveal())
+
+
+@then("the revealed key matches the issued one")
+def revealed_matches(revealed: dict, issued_key: dict) -> None:
+    assert revealed["plaintext"] == issued_key["plaintext"]
+    # The reveal is what burns the copy: storing the plaintext would make the
+    # sealed column a secret store, not a one-shot delivery.
+    assert revealed["sealed_after"] is None
+
+
+@then("revealing it again is refused with a conflict")
+def revealed_twice(container, runner, gateway: dict, issued_key: dict) -> None:
+    async def again() -> None:
+        assert await container.read_models.sealed_key(
+            gateway["id"], issued_key["key_id"]
+        ) is None
+
+    runner.run(again())
+
+
+@then("the new key can be revealed once")
+def rotated_revealable(container, runner, operator: str, gateway: dict,
+                       rotated_key: dict) -> None:
+    new = rotated_key["new"]
+
+    async def check() -> None:
+        sealed = await container.read_models.sealed_key(gateway["id"], new["key_id"])
+        assert sealed, "a rotated key must be revealable too"
+        opened = await container.commands.reveal_api_key(
+            gateway["id"], key_id=new["key_id"], sealed=sealed, actor=operator
+        )
+        assert opened == new["plaintext"]
+        assert await container.read_models.sealed_key(
+            gateway["id"], new["key_id"]
+        ) is None
+
+    runner.run(check())
+
+
+@then("revealing the revoked key is refused")
+def revoked_not_revealable(container, runner, gateway: dict,
+                           issued_key: dict) -> None:
+    async def check() -> None:
+        assert await container.read_models.sealed_key(
+            gateway["id"], issued_key["key_id"]
+        ) is None
+
+    runner.run(check())
+
+
+# -- tool allowlist --------------------------------------------------------
+
+
+@when(parsers.parse('the operator allows only the tool "{tool}"'))
+def allow_one_tool(container, runner, operator: str, gateway: dict,
+                   tool: str) -> None:
+    runner.run(
+        container.commands.set_gateway_tools(
+            gateway["id"], tools=[tool], actor=operator
+        )
+    )
+    runner.run(container.refresh_router())
+
+
+@when("the operator allows no tools")
+def allow_no_tools(container, runner, operator: str, gateway: dict) -> None:
+    runner.run(
+        container.commands.set_gateway_tools(gateway["id"], tools=[], actor=operator)
+    )
+    runner.run(container.refresh_router())
+
+
+@then(parsers.parse('a caller with the issued key sees the tool "{tool}"'))
+def caller_sees(live_server: str, gateway: dict, issued_key: dict, tool: str) -> None:
+    result = _call_tools_list(live_server, gateway["slug"], issued_key["plaintext"])
+    assert result["status"] == 200, result["body"][:300]
+    assert tool in result["body"], result["body"][:300]
+
+
+@then("calling the allowed tool succeeds")
+def allowed_tool_works(live_server: str, gateway: dict, issued_key: dict) -> None:
+    result = _call_tool(
+        live_server, gateway["slug"], issued_key["plaintext"], "echo"
+    )
+    assert result["status"] == 200, result["body"][:300]
+
+
+@then("calling a tool outside the allowlist is refused with 403")
+def blocked_tool(live_server: str, gateway: dict, issued_key: dict) -> None:
+    result = _call_tool(
+        live_server, gateway["slug"], issued_key["plaintext"], "rm_rf"
+    )
+    assert result["status"] == 403, f"{result['status']}: {result['body'][:300]}"
+    assert "rm_rf" in result["body"]
+
+
+# -- metrics ---------------------------------------------------------------
+
+
+@when("anyone scrapes the metrics", target_fixture="scrape")
+def scrape_metrics(live_server: str) -> dict:
+    response = httpx.get(f"{live_server}/metrics", timeout=10)
+    return {
+        "status": response.status_code,
+        "content_type": response.headers.get("content-type", ""),
+        "body": response.text,
+    }
+
+
+@then(parsers.parse('the metrics count allowed requests on "{slug}"'))
+def metrics_count(scrape: dict, slug: str) -> None:
+    """The counter has to exist, name the gateway, and be non-zero.
+
+    Not an exact number: one MCP call is three HTTP requests (initialize, the
+    notification, the call), and pinning this to 6 would be a test of the
+    transport's shape rather than of the metric. The arithmetic is covered in
+    `test_metrics_arithmetic` below.
+    """
+    assert scrape["status"] == 200, scrape["body"][:300]
+    assert "version=0.0.4" in scrape["content_type"], scrape["content_type"]
+    line = (
+        f'omg_proxy_requests_total{{gateway="{slug}",outcome="allowed",status="2xx"}}'
+    )
+    assert line in scrape["body"], scrape["body"]
+    counted = int(scrape["body"].split(line, 1)[1].split()[0])
+    assert counted > 0, scrape["body"]
+
+
+@then("the metrics report the gateway as live")
+def metrics_live(scrape: dict) -> None:
+    assert "omg_gateways_live 1" in scrape["body"], scrape["body"]
+
+
+@then("the metrics declare their backend for the rate limiter")
+def metrics_limiter(scrape: dict) -> None:
+    assert "omg_rate_limit_backend 0" in scrape["body"], scrape["body"]
+
+
+def test_metrics_arithmetic() -> None:
+    """Counters accumulate per (gateway, outcome, class); labels are escaped."""
+    from gateway.observability import Metrics
+
+    metrics = Metrics()
+    metrics.observe(gateway="demo", outcome="allowed", status=200, duration_ms=4)
+    metrics.observe(gateway="demo", outcome="allowed", status=201, duration_ms=6)
+    metrics.observe(gateway='a"b', outcome="rate_limited", status=429, duration_ms=1)
+    body = metrics.render(live=1, pending=2, limit_backend="redis")
+
+    assert 'omg_proxy_requests_total{gateway="demo",outcome="allowed",status="2xx"} 2' in body
+    assert 'omg_proxy_requests_total{gateway="a\\"b",outcome="rate_limited",status="4xx"} 1' in body
+    assert 'omg_proxy_request_duration_ms_sum{gateway="demo",outcome="allowed"} 10' in body
+    assert "omg_gateways_pending 2" in body
+    assert "omg_rate_limit_backend 1" in body
+    # A 429 is a 4xx, and a label per exact status would be a series per status.
+    assert "status=\"429\"" not in body
+
+
+# -- tool catalog ----------------------------------------------------------
+
+
+@when("the operator asks which tools the upstream serves", target_fixture="catalog")
+def upstream_catalog(container, runner, gateway: dict) -> dict:
+    from gateway.application.services import connect
+
+    return runner.run(connect.upstream_tools(container, gateway))
+
+
+@then(parsers.parse('the catalog is available and lists "{tool}"'))
+def catalog_lists(catalog: dict, tool: str) -> None:
+    assert catalog["available"] is True, catalog["reason"]
+    assert tool in [entry["name"] for entry in catalog["tools"]], catalog["tools"]
+
+
+@then("the catalog is unavailable and names the reason")
+def catalog_unavailable(catalog: dict) -> None:
+    assert catalog["available"] is False
+    assert catalog["reason"], "an unreachable upstream must say what went wrong"
+    assert catalog["tools"] == []

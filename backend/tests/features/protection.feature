@@ -59,3 +59,15 @@ Feature: Rate limiting and traffic accounting
     And an API key was issued for the gateway
     When a caller with the issued key calls it 2 times
     Then the stats report no traffic in the previous window
+
+  # `/metrics` is the difference between "the gateway is up" and "the gateway is
+  # answering". /healthz is a liveness answer; this is the series a dashboard and
+  # an alert rule actually read.
+  Scenario: Metrics expose traffic per gateway and outcome
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When a caller with the issued key calls it 2 times
+    And anyone scrapes the metrics
+    Then the metrics count allowed requests on "demo"
+    And the metrics report the gateway as live
+    And the metrics declare their backend for the rate limiter

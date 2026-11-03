@@ -71,9 +71,27 @@ async def _tenancy(connection: AsyncConnection) -> None:
         await connection.execute(text(statement))
 
 
+async def _key_reveal_and_tools(connection: AsyncConnection) -> None:
+    """The tool allowlist, and the sealed copy of an API key.
+
+    `IF NOT EXISTS` for the same reason as `_tenancy`: the columns are also in
+    the baseline, and one of the two paths always starts from nothing.
+    """
+    for statement in (
+        "ALTER TABLE rm_gateways ADD COLUMN IF NOT EXISTS tools JSONB "
+        "NOT NULL DEFAULT '[]'::jsonb",
+        "ALTER TABLE rm_api_keys ADD COLUMN IF NOT EXISTS sealed TEXT "
+        "NOT NULL DEFAULT ''",
+        "ALTER TABLE rm_api_keys ADD COLUMN IF NOT EXISTS revealed_at TIMESTAMPTZ",
+        "ALTER TABLE rm_api_keys ADD COLUMN IF NOT EXISTS revealed_by TEXT",
+    ):
+        await connection.execute(text(statement))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline", _baseline),
     Migration(2, "tenancy", _tenancy),
+    Migration(3, "key_reveal_and_tools", _key_reveal_and_tools),
 )
 
 

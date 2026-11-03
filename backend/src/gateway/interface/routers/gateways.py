@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from gateway.application.services import connect, gateways, listing
 from gateway.domain.filters import GATEWAY_FILTERS
@@ -19,6 +19,7 @@ from gateway.interface.schemas import (
     ApiKeyRequest,
     AuthConfigRequest,
     GatewayCreateRequest,
+    GatewayToolsRequest,
     GatewayUpdateRequest,
     PrincipalRequest,
     RateLimitRequest,
@@ -93,6 +94,21 @@ async def connect_guide(gateway_id: str, session: CanReadGateways,
     return await connect.guide(
         container, await gateways.owned(container, principal.caller, gateway_id)
     )
+
+
+@router.get("/gateways/{gateway_id}/upstream-tools")
+async def upstream_tools(gateway_id: str, session: CanReadGateways,
+                         principal: PrincipalDep,
+                         container: ContainerDep) -> dict[str, Any]:
+    """What the upstream serves, so the allowlist can be ticked rather than typed.
+
+    Read permission, not write: it is a listing of a server the caller can
+    already read through this gateway. It does reach the upstream with the
+    gateway's credential, which is why it is not public.
+    """
+    del session
+    gateway = await gateways.owned(container, principal.caller, gateway_id)
+    return await connect.upstream_tools(container, gateway)
 
 
 @router.patch("/gateways/{gateway_id}")
@@ -222,6 +238,23 @@ async def list_keys(gateway_id: str, session: CanReadKeys,
     return {"keys": await container.read_models.api_keys(gateway_id)}
 
 
+@router.put("/gateways/{gateway_id}/tools")
+async def set_tools(gateway_id: str, payload: GatewayToolsRequest,
+                    session: CanWriteGateways, principal: PrincipalDep,
+                    container: ContainerDep) -> dict[str, Any]:
+    """Replace the allowlist of upstream tools this gateway exposes.
+
+    A rebuild, not a restart: the guard and the proxy both read the new list on
+    the next request, and the signature change is what triggers it.
+    """
+    await gateways.owned(container, principal.caller, gateway_id)
+    await container.commands.set_gateway_tools(
+        gateway_id, tools=payload.tools, actor=session.email
+    )
+    await container.refresh_router()
+    return {"tools": payload.tools}
+
+
 @router.post("/gateways/{gateway_id}/keys", status_code=201)
 async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: CanWriteKeys,
                     principal: PrincipalDep,
@@ -230,7 +263,40 @@ async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: CanWriteKe
     plaintext, key_id = await container.commands.issue_api_key(
         gateway_id, label=payload.label, actor=session.email
     )
-    # Shown once. Not stored, not recoverable.
+    # Shown once here, and readable once more through the reveal endpoint.
+    return {"key_id": key_id, "api_key": plaintext}
+
+
+@router.post("/gateways/{gateway_id}/keys/{key_id}/reveal")
+async def reveal_key(gateway_id: str, key_id: str, session: CanReadKeys,
+                     principal: PrincipalDep,
+                     container: ContainerDep) -> dict[str, str]:
+    """Show the plaintext of a key that has never been revealed, once.
+
+    `keys:read` rather than `keys:write`: reading a credential you were already
+    issued should not require the power to mint or revoke one. It is still
+    logged — the reveal appends an event naming the operator — and it burns the
+    sealed copy, so the second call answers 409 instead of the same secret.
+
+    A key issued before sealing existed has nothing to open, and a deployment
+    that rotated `OMG_SESSION_SECRET` cannot open its old keys; both answer 409
+    with the fix (rotate) rather than a 500.
+    """
+    await gateways.owned(container, principal.caller, gateway_id)
+    sealed = await container.read_models.sealed_key(gateway_id, key_id)
+    if not sealed:
+        raise HTTPException(
+            status_code=409,
+            detail="this key can no longer be shown; rotate it to get a new one",
+        )
+    plaintext = await container.commands.reveal_api_key(
+        gateway_id, key_id=key_id, sealed=sealed, actor=session.email
+    )
+    if plaintext is None:
+        raise HTTPException(
+            status_code=409,
+            detail="this key can no longer be shown; rotate it to get a new one",
+        )
     return {"key_id": key_id, "api_key": plaintext}
 
 

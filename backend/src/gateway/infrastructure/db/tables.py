@@ -153,6 +153,8 @@ rm_gateways = Table(
     Column("config_url", Text),
     Column("required_scopes", JSONB, nullable=False, default=list),
     Column("requests_per_minute", Integer, nullable=False, default=0),
+    #: Upstream tools this gateway exposes. Empty means all of them.
+    Column("tools", JSONB, nullable=False, default=list),
     Column("enabled", Boolean, nullable=False, default=True, server_default=true()),
     Column("deleted", Boolean, nullable=False, default=False, server_default=false()),
     Column(
@@ -183,6 +185,14 @@ rm_api_keys = Table(
     Column("label", Text, nullable=False),
     Column("key_hash", Text, nullable=False),
     Column("subject", Text, nullable=False),
+    # The plaintext, sealed with the deployment secret. Not a hash: the operator
+    # who issued a key can read it back once, and that event wipes this column.
+    # Empty for keys minted before sealing existed.
+    Column("sealed", Text, nullable=False, default=""),
+    # When the plaintext was last handed out. NULL means "never seen", which is
+    # what the panel's eye icon keys on.
+    Column("revealed_at", DateTime(timezone=True)),
+    Column("revealed_by", Text),
     Column(
         "issued_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),

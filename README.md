@@ -292,13 +292,33 @@ OAuth steps name endpoints the proxy itself serves.
 | --- | --- |
 | Authentication | OAuth proxy per gateway, or bearer key hashed with SHA-256 |
 | Authorisation | Optional allowlist of subjects; empty means "any authenticated caller" |
+| Tools | Optional allowlist of tool names per gateway; empty means "every tool the upstream serves" |
 | Rate limit | Per subject, per gateway, counting JSON-RPC requests (handshakes are free) |
-| Observability | Every attempt logged with subject, outcome, status, latency, IP |
+| Observability | Every attempt logged with subject, outcome, status, latency, IP; counters at `GET /metrics` |
 | Fail closed | An OAuth gateway without credentials serves 503, never an open proxy |
 
-Rate limiting is in-process: with N replicas the effective limit is N×. Fine for a
-single-replica deployment, which is the current design; Redis would remove the
-caveat. See `ponytail:` comments in `backend/src/gateway/proxy/rate_limit.py`.
+The key a gateway hands out is stored twice: the SHA-256 hash that authentication
+compares, and the plaintext sealed with AES-GCM under a key derived from
+`OMG_SESSION_SECRET`. The panel shows an eye icon on a key that has never been
+read — clicking it decrypts the sealed copy, shows the key once, and wipes it.
+After that the hash is all that is left, and rotating is the only way back to a
+readable key. Rotating `OMG_SESSION_SECRET` therefore also makes old sealed keys
+unrevealable; rotate the key instead.
+
+A gateway's tool allowlist is enforced twice: names outside it are hidden from
+`tools/list`, and a `tools/call` for one answers `403` naming the tool. The panel
+fills the list from the upstream catalog itself (`GET
+/api/gateways/{id}/upstream-tools`) rather than through the gateway, which would
+answer with the filter it is already applying.
+
+Rate limiting is a sliding window per (gateway, caller). With `OMG_REDIS_URL` set
+the counters live in Redis and every replica shares them, so `replicas: 2` means
+the configured limit and not twice it. Without it the limiter is in-process:
+correct for a single replica, N× the limit at N. A Redis that is down fails open
+and logs — one lost window of accounting beats an outage. `/metrics` serves the
+Prometheus text format (`omg_proxy_requests_total` per gateway, outcome and
+status class, plus duration sums and gauges); it is unauthenticated and on the
+same port, so restrict it at the ingress if the deployment faces the internet.
 
 ## Configuration as code
 

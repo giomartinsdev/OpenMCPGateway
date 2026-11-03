@@ -140,6 +140,16 @@ Feature: Cursor pagination and filtering on every list
     And the token can list the gateways
     And the token cannot create a gateway
 
+  Scenario: The console answers over HTTP, not just in-process
+    # FastMCP's streamable-HTTP app needs its lifespan entered before it serves,
+    # and `http_app()` returns a new object each call. Serving a different one was
+    # a 500 on every request — and the seeded `console` gateway pointed at it, so
+    # the "works on day one" gateway was dead on day one.
+    Given the owner has 3 gateways
+    When the owner mints a console token
+    And an MCP client lists tools over HTTP with that token
+    Then the console answers with its tool list
+
   Scenario: The manual is data, served to the panel and to an agent
     When anyone reads the manual
     Then the manual has at least 10 sections

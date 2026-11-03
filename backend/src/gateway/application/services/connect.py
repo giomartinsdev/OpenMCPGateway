@@ -242,3 +242,49 @@ def _oauth_guide(container: Container, gateway: dict[str, Any],
 
 
 __all__ = ["guide"]
+
+
+async def upstream_tools(container: Container, gateway: dict[str, Any]) -> dict[str, Any]:
+    """The tools this gateway's upstream actually serves, for the allowlist UI.
+
+    A direct client to the upstream, not a round trip through the gateway: the
+    allowlist is being *edited*, so asking the proxy would answer with the list
+    it currently allows — the panel would show the operator their own filter and
+    call it the truth.
+
+    Credentials come from the write model, and only the upstream token is used.
+    An OAuth-backed upstream is not reachable without a browser login, so that
+    case answers `available: false` with the reason. The allowlist is still
+    editable by hand there; it just cannot be ticked from a catalog.
+    """
+    from fastmcp.client import Client
+
+    endpoint = gateway["target_url"]
+    events = await container.store.load_stream(gateway["id"])
+    upstream_token = ""
+    for event in events:
+        upstream_token = event.payload().get("upstream_token") or upstream_token
+
+    config: dict[str, Any] = {"mcpServers": {
+        gateway["slug"]: {
+            "url": endpoint,
+            "transport": "http",
+            **({"headers": {"Authorization": f"Bearer {upstream_token}"}}
+               if upstream_token else {}),
+        }
+    }}
+
+    try:
+        async with Client(config, timeout=8.0) as client:
+            tools = await client.list_tools()
+    except Exception as exc:
+        return {"available": False, "reason": str(exc)[:300], "tools": []}
+
+    return {
+        "available": True,
+        "reason": "",
+        "tools": [
+            {"name": tool.name, "description": (tool.description or "")[:300]}
+            for tool in tools
+        ],
+    }

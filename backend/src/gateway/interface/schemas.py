@@ -68,6 +68,13 @@ class RateLimitRequest(BaseModel):
     requests_per_minute: int = Field(ge=0)
 
 
+class GatewayToolsRequest(BaseModel):
+    #: Empty means every upstream tool. Names are not validated against the
+    #: upstream: the write side has no network, and a stale name matching
+    #: nothing is visible in the panel next to the real catalog.
+    tools: list[str] = Field(default_factory=list)
+
+
 class PrincipalRequest(BaseModel):
     subject: str
     note: str = ""

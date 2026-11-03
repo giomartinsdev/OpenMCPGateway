@@ -1368,3 +1368,53 @@ pre.code.docs-code {
   margin-bottom: var(--s6);
 }
 .docs-top .docs-logo { margin-bottom: 0; }
+
+
+/* -- tool allowlist ------------------------------------------------------ */
+
+.tools-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.tools-search {
+  flex: 0 1 240px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--fg);
+  font-size: var(--t-label);
+}
+.tools-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Bounded so a 200-tool server does not push the rest of the page below the
+     fold; scrolling here is cheaper than a second page of controls. */
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.tools-list li {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-2);
+}
+.tools-list li:last-child { border-bottom: 0; }
+.tools-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.tools-list input[type="checkbox"] { accent-color: var(--apur); }
+.tools-list .hint { margin: 2px 0 0 24px; }
+/* A configured tool the upstream no longer serves: still listed, visibly apart,
+   because dropping it silently would erase a decision on the next save. */
+.tools-list li.gone .mono { color: var(--mute); }

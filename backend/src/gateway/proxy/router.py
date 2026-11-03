@@ -22,6 +22,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.server import create_proxy
+from fastmcp.server.transforms import Visibility
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.routing import BaseRoute, Match, Mount, Route, Router
 from starlette.types import Receive, Scope, Send
@@ -29,12 +30,11 @@ from starlette.types import Receive, Scope, Send
 from gateway.application.ports import EventStore
 from gateway.infrastructure.eventstore.projections import ReadModels
 from gateway.log import log
-from gateway.observability import RequestRecorder
+from gateway.observability import Metrics, RequestRecorder
 from gateway.proxy.runtime import (
     GatewayAuth,
     GatewayNotReady,
     GuardMiddleware,
-    RateLimiter,
     build_auth_provider,
     forget_client_store,
 )
@@ -106,7 +106,8 @@ class GatewayRouter(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     read_models: ReadModels
-    limiter: RateLimiter
+    limiter: Any
+    metrics: Metrics
     recorder: RequestRecorder
     base_url: str
     store: EventStore
@@ -222,10 +223,17 @@ class GatewayRouter(BaseModel):
             auth=provider,
             provider_error_strategy="raise",
         )
+        if config.get("tools"):
+            # Two halves of one allowlist, and both are needed: this one hides
+            # the tools the gateway does not expose, and the guard refuses a
+            # `tools/call` for them, because a client that was told about a tool
+            # yesterday must not get a 200 by asking for it today.
+            proxy.add_transform(Visibility(False, match_all=True, components={"tool"}))
+            proxy.add_transform(Visibility(True, names=set(config["tools"])))
         mcp_app = proxy.http_app(path="/mcp")
         guarded = GuardMiddleware(
             mcp_app, config=config, auth=auth, limiter=self.limiter,
-            recorder=self.recorder, base_url=self.base_url,
+            recorder=self.recorder, metrics=self.metrics, base_url=self.base_url,
         )
 
         routes: list[Any] = []
@@ -382,6 +390,7 @@ def _signature(gateway: dict[str, Any], credentials: dict[str, str]) -> str:
         "upstream" if credentials.get("upstream_token") else "",
         repr(gateway.get("requests_per_minute")),
         ",".join(sorted(gateway.get("allowed_subjects") or [])),
+        ",".join(gateway.get("tools") or []),
     ]
     return hashlib.sha256("\x00".join(parts).encode()).hexdigest()[:16]
 

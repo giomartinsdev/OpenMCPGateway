@@ -89,9 +89,18 @@ export const api = {
   issueKey: (id, label) => call("POST", `/gateways/${id}/keys`, { label }),
   // Rotation returns the new plaintext once; the old key stops working in the
   // same append, so there is no window where neither one authenticates.
+  // The eye icon. Answers 409 once the key has been revealed or when it was
+  // issued before sealing existed; the panel turns that into "rotate it".
+  revealKey: (id, keyId) => call("POST", `/gateways/${id}/keys/${keyId}/reveal`),
   rotateKey: (id, keyId) =>
     call("POST", `/gateways/${id}/keys/${keyId}/rotate`),
   revokeKey: (id, keyId) => call("DELETE", `/gateways/${id}/keys/${keyId}`),
+  // The upstream's real catalog, fetched by the panel (not through the gateway,
+  // which would answer with the filter it is already applying).
+  upstreamTools: (id) => call("GET", `/gateways/${id}/upstream-tools`),
+  // Which upstream tools this gateway exposes. Empty means all of them.
+  setGatewayTools: (id, tools) =>
+    call("PUT", `/gateways/${id}/tools`, { tools }),
 
   stats: (gatewayId, minutes = 60) =>
     call("GET", `/stats?minutes=${minutes}${gatewayId ? `&gateway_id=${gatewayId}` : ""}`),

@@ -59,6 +59,8 @@ class GatewayRow(ReadRow):
     config_url: str | None = None
     required_scopes: list[str] = []
     requests_per_minute: int = 0
+    #: Upstream tools exposed through this gateway. Empty means all of them.
+    tools: list[str] = []
     enabled: bool = True
     deleted: bool = False
     created_at: datetime | None = None
@@ -76,6 +78,11 @@ class ApiKeyRow(ReadRow):
     label: str
     subject: str
     issued_at: datetime | None = None
+    #: Whether the plaintext can still be handed back. Never the plaintext
+    #: itself: this row is served by a list endpoint to anyone with `keys:read`.
+    revealed_at: datetime | None = None
+    revealed_by: str | None = None
+    recoverable: bool = False
 
 class TenantRow(ReadRow):
     id: str

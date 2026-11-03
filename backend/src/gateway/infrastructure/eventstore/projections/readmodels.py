@@ -89,6 +89,16 @@ class ReadModels:
             ).mappings()
             return [GatewayRow.model_validate(dict(row)) for row in rows]
 
+    async def is_empty(self) -> bool:
+        """No gateway rows at all — the signature of a wiped read model.
+
+        Deliberately not "no rows in any table": gateways are the one table every
+        deployment has after the first command, so an empty one means the schema
+        was reset rather than that a tenant happens to own nothing.
+        """
+        async with self._db.session() as session:
+            return await session.scalar(select(func.count()).select_from(rm_gateways)) == 0
+
     async def page_gateways(
         self,
         tenant_id: str,
@@ -223,6 +233,9 @@ class ReadModels:
                         rm_api_keys.c.label,
                         rm_api_keys.c.subject,
                         rm_api_keys.c.issued_at,
+                        rm_api_keys.c.revealed_at,
+                        rm_api_keys.c.revealed_by,
+                        (rm_api_keys.c.sealed != "").label("recoverable"),
                     )
                     .where(
                         (rm_api_keys.c.gateway_id == gateway_id)
@@ -232,6 +245,18 @@ class ReadModels:
                 )
             ).mappings()
             return [ApiKeyRow.model_validate(dict(row)) for row in rows]
+
+    async def sealed_key(self, gateway_id: str, key_id: str) -> str | None:
+        """The sealed plaintext, still encrypted. The router opens it, not here."""
+        async with self._db.session() as session:
+            return await session.scalar(
+                select(rm_api_keys.c.sealed).where(
+                    (rm_api_keys.c.gateway_id == gateway_id)
+                    & (rm_api_keys.c.key_id == key_id)
+                    & (rm_api_keys.c.sealed != "")
+                    & rm_api_keys.c.revoked.is_(False)
+                )
+            )
 
     async def subject_for_key_hash(
         self, gateway_id: str, key_hash: str

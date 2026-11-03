@@ -20,11 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from gateway.domain.events import (
     ApiKeyIssued,
+    ApiKeyRevealed,
     ApiKeyRevoked,
     Event,
     GatewayAuthConfigured,
     GatewayCreated,
     GatewayRateLimitSet,
+    GatewayToolsConfigured,
     GatewayUpdated,
     OperatorJoinedTenant,
     OperatorRegistered,
@@ -186,6 +188,7 @@ async def on_key_issued(session: AsyncSession, event: Event) -> None:
         label=event.label,
         key_hash=event.key_hash,
         subject=event.subject,
+        sealed=event.sealed,
         issued_at=event.occurred_at,
         revoked=False,
     )
@@ -194,6 +197,33 @@ async def on_key_issued(session: AsyncSession, event: Event) -> None:
             index_elements=[rm_api_keys.c.gateway_id, rm_api_keys.c.key_id],
             set_={"revoked": False},
         )
+    )
+
+
+async def on_key_revealed(session: AsyncSession, event: Event) -> None:
+    """Record the reveal and burn the sealed copy in the same statement.
+
+    Wiping here rather than in the command keeps the read model the thing that
+    decides what is still readable: after this, the plaintext exists only in the
+    operator's clipboard. History keeps the event, not the secret.
+    """
+    assert isinstance(event, ApiKeyRevealed)
+    await session.execute(
+        update(rm_api_keys)
+        .where(
+            (rm_api_keys.c.gateway_id == event.aggregate_id)
+            & (rm_api_keys.c.key_id == event.key_id)
+        )
+        .values(sealed="", revealed_at=event.occurred_at, revealed_by=event.actor)
+    )
+
+
+async def on_tools_configured(session: AsyncSession, event: Event) -> None:
+    assert isinstance(event, GatewayToolsConfigured)
+    await session.execute(
+        update(rm_gateways)
+        .where(rm_gateways.c.id == event.aggregate_id)
+        .values(tools=list(event.tools), updated_at=func.now())
     )
 
 

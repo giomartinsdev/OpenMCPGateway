@@ -15,7 +15,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from gateway.domain.events import AuthMode
 from gateway.log import log
-from gateway.observability import RequestRecorder
+from gateway.observability import Metrics, RequestRecorder
 from gateway.proxy.identity import GatewayAuth, Identity
 from gateway.proxy.rate_limit import RateLimiter
 
@@ -27,12 +27,13 @@ class GuardMiddleware:
 
     def __init__(self, app: ASGIApp, *, config: dict[str, Any],
                  auth: GatewayAuth, limiter: RateLimiter,
-                 recorder: RequestRecorder, base_url: str) -> None:
+                 recorder: RequestRecorder, metrics: Metrics, base_url: str) -> None:
         self.app = app
         self.config = config
         self.auth = auth
         self.limiter = limiter
         self.recorder = recorder
+        self.metrics = metrics
         self.base_url = base_url.rstrip("/")
         self.prefix = f"/g/{config['slug']}"
         self.inner_path = "/mcp"
@@ -69,11 +70,26 @@ class GuardMiddleware:
                 scope["omg.identity"] = identity
                 body = await _read_body(receive)
                 receive = _replay(body, receive)
+                blocked = self._blocked_tool(body)
+                if blocked is not None:
+                    # A tool outside the allowlist is a 403 with the name in it,
+                    # not a silent removal from `tools/list`: the caller asked
+                    # for something specific, and "unknown tool" would send it
+                    # looking for a typo in its own config.
+                    outcome, status = "forbidden", 403
+                    response = JSONResponse(
+                        {
+                            "error": "forbidden",
+                            "message": f"tool '{blocked}' is not exposed by gateway "
+                                       f"'{self.config['slug']}'",
+                        },
+                        status_code=403,
+                    )
                 # Rate limiting counts MCP *requests* (JSON-RPC messages that
                 # carry an id), not HTTP POSTs: one MCP call is a handshake plus
                 # a call on the wire, and charging for the transport would make
                 # a limit of N mean fewer than N calls to the user.
-                if _is_jsonrpc_request(body) and not await self.limiter.allow(
+                elif _is_jsonrpc_request(body) and not await self.limiter.allow(
                     self.config["id"],
                     identity.subject,
                     int(self.config.get("requests_per_minute") or 0),
@@ -102,6 +118,12 @@ class GuardMiddleware:
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 ip=_client_ip(scope, headers),
                 method=scope.get("method", "POST"),
+            )
+            self.metrics.observe(
+                gateway=self.config["slug"],
+                outcome=outcome,
+                status=status,
+                duration_ms=int((time.perf_counter() - started) * 1000),
             )
             await self.recorder.record(
                 gateway_id=self.config["id"],
@@ -133,6 +155,32 @@ class GuardMiddleware:
     def _authorized(self, subject: str) -> bool:
         allowed: list[str] = self.config.get("allowed_subjects") or []
         return not allowed or subject in allowed or "*" in allowed
+
+    def _blocked_tool(self, body: bytes) -> str | None:
+        """The tool name this request asks for that the gateway does not expose.
+
+        Only `tools/call` is checked here. `tools/list` is filtered by the
+        server itself (a `Visibility` transform), because that answer is built
+        from the upstream catalog and rewriting it mid-stream would mean parsing
+        SSE frames in the guard.
+        """
+        allowed = self.config.get("tools") or []
+        if not allowed or not body:
+            return None
+        try:
+            payload = json.loads(body)
+        except (ValueError, UnicodeDecodeError):
+            return None
+        messages = payload if isinstance(payload, list) else [payload]
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            if message.get("method") != "tools/call":
+                continue
+            name = (message.get("params") or {}).get("name")
+            if isinstance(name, str) and name not in allowed:
+                return name
+        return None
 
     def _unauthorized(self) -> JSONResponse:
         if self.auth.mode is AuthMode.OAUTH:

@@ -483,6 +483,54 @@ def token_cannot_write(container, runner) -> None:
         "traffic_stats",
     }
 
+@when("an MCP client lists tools over HTTP with that token",
+      target_fixture="console_listing")
+def console_over_http(console_token: dict, live_server: str) -> dict:
+    """The same handshake a real client does, against `/mcp`.
+
+    In-process `list_tools()` proves the registry; only an HTTP round trip proves
+    the ASGI app was the one whose lifespan ran. The endpoint the API reports is
+    the deployment's public URL, so this swaps in the test server's origin.
+    """
+    endpoint = f"{live_server}/mcp"
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {console_token['token']}",
+    }
+    with httpx.Client(timeout=20) as client:
+        response = client.post(
+            endpoint,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1"},
+                },
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200, f"{response.status_code}: {response.text[:400]}"
+        headers["mcp-session-id"] = response.headers.get("mcp-session-id", "")
+        client.post(
+            endpoint,
+            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+            headers=headers,
+        )
+        listed = client.post(
+            endpoint,
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            headers=headers,
+        )
+    assert listed.status_code == 200, f"{listed.status_code}: {listed.text[:400]}"
+    return {"status": listed.status_code, "body": listed.text}
+
+@then("the console answers with its tool list")
+def console_http_body(console_listing: dict) -> None:
+    assert "list_gateways" in console_listing["body"], console_listing["body"][:400]
+
 
 # ------------------------------------------------------------------- docs
 

@@ -19,7 +19,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
@@ -36,6 +36,10 @@ from gateway.proxy import branding
 WEB_DIST = Path(
     os.environ.get("OMG_WEB_DIST") or Path(__file__).resolve().parents[4] / "web" / "dist"
 )
+# Prometheus's own content type; the trailing `version` is what its scraper
+# negotiates on and what makes plain `text/plain` insufficient.
+_PROMETHEUS = "text/plain; version=0.0.4; charset=utf-8"
+
 SPA_FALLBACK = {
     "message": "Frontend not built. Run `npm --prefix web ci && npm --prefix web run build`, "
                "or use `npm --prefix web run dev` and set OMG_CORS_ORIGINS.",
@@ -115,6 +119,27 @@ def create_admin_app(settings: Settings) -> FastAPI:
             "pending": pending,
         }
 
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics() -> Response:
+        """Prometheus's text format, unauthenticated and on the same port.
+
+        No separate admin listener and no token: the endpoint exposes counts and
+        slugs, and a scraper that needs a credential is a scraper configured in
+        the cluster anyway. If the deployment is exposed to the internet, the
+        ingress is where `/metrics` gets restricted — that is a routing decision,
+        not something this handler can make.
+        """
+        container: Container | None = app.state.container
+        if container is None:
+            return Response("# starting\n", media_type=_PROMETHEUS)
+        container.metrics.dropped(container.recorder.dropped)
+        body = container.metrics.render(
+            live=len(container.router.live),
+            pending=len(container.router.pending),
+            limit_backend="redis" if container.settings.redis_url else "local",
+        )
+        return Response(body, media_type=_PROMETHEUS)
+
     errors.install(app)
     app.include_router(api_router)
 
@@ -150,14 +175,6 @@ class GatewayDispatcher:
 
     def __init__(self, admin_app: FastAPI) -> None:
         self.admin_app = admin_app
-        self._console: Any = None
-
-    def _console_app(self, container: Container) -> Any:
-        if self._console is None:
-            from gateway.console.mount import console_app
-
-            self._console = console_app(container)
-        return self._console
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] in {"http", "websocket"}:
@@ -170,7 +187,10 @@ class GatewayDispatcher:
                     await container.router(scope, receive, send)
                     return
                 if path == "/mcp" or path.startswith("/mcp/"):
-                    await self._console_app(container)(scope, receive, send)
+                    # The app the container entered the lifespan of, not a fresh
+                    # `http_app()`: a second one has no session manager and answers
+                    # "Task group is not initialized" to every request.
+                    await container.console_app(scope, receive, send)
                     return
         await self.admin_app(scope, receive, send)
 

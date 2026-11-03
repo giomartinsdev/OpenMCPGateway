@@ -186,14 +186,38 @@ class ApiKeyIssued(Event):
 
     key_id: str
     label: str
-    key_hash: str  # sha256 hex; the plaintext is shown once and never stored
+    key_hash: str  # sha256 hex; what the proxy compares against
     subject: str = "api-key"
+    # The plaintext, sealed with the deployment secret, so the operator who
+    # issued it can still read it once from the panel. Empty for keys minted
+    # before sealing existed, and wiped the moment the key is revealed.
+    sealed: str = ""
+
+
+class ApiKeyRevealed(Event):
+    """The plaintext was handed back to an operator.
+
+    A fact worth recording: it is the last moment the credential can be read,
+    and the audit trail should say who did it and when.
+    """
+
+    EVENT = "api_key.revealed"
+
+    key_id: str
 
 
 class ApiKeyRevoked(Event):
     EVENT = "api_key.revoked"
 
     key_id: str
+
+
+class GatewayToolsConfigured(Event):
+    """Which upstream tools this gateway exposes. Empty means all of them."""
+
+    EVENT = "gateway.tools_configured"
+
+    tools: tuple[str, ...] = ()
 
 
 class SignInConfigured(Event):
@@ -227,9 +251,11 @@ WRITE_EVENTS: tuple[type[Event], ...] = (
     GatewayDisabled,
     GatewayEnabled,
     GatewayDeleted,
+    GatewayToolsConfigured,
     PrincipalAllowed,
     PrincipalRevoked,
     ApiKeyIssued,
+    ApiKeyRevealed,
     ApiKeyRevoked,
     SignInConfigured,
 )
@@ -238,6 +264,7 @@ __all__ = [
     "TENANT_OF_DEPLOYMENT",
     "WRITE_EVENTS",
     "ApiKeyIssued",
+    "ApiKeyRevealed",
     "ApiKeyRevoked",
     "GatewayAuthConfigured",
     "GatewayCreated",
@@ -245,6 +272,7 @@ __all__ = [
     "GatewayDisabled",
     "GatewayEnabled",
     "GatewayRateLimitSet",
+    "GatewayToolsConfigured",
     "GatewayUpdated",
     "OperatorJoinedTenant",
     "OperatorLoggedIn",
