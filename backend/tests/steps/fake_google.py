@@ -11,6 +11,7 @@ token for a different audience, to claim an unverified address, or to hand back
 a code nobody issued.
 """
 
+import base64
 import time
 from typing import Any
 
@@ -78,6 +79,7 @@ class FakeGoogle:
             "userinfo_endpoint": f"{self.issuer}/userinfo",
             "response_types_supported": ["code"],
             "id_token_signing_alg_values_supported": ["RS256"],
+            "subject_types_supported": ["public"],
             "scopes_supported": ["openid", "email", "profile"],
             "token_endpoint_auth_methods_supported": ["client_secret_post"],
             "code_challenge_methods_supported": ["S256"],
@@ -88,9 +90,18 @@ class FakeGoogle:
 
     async def token(self, request: Request) -> JSONResponse:
         form = await request.form()
-        if form.get("client_id") != self.client_id:
+        # A client authenticates either in the body (`client_secret_post`) or in
+        # an Authorization header (`client_secret_basic`). Both are legitimate
+        # and libraries pick different defaults, so accept both.
+        client_id = form.get("client_id")
+        client_secret = form.get("client_secret")
+        header = request.headers.get("authorization", "")
+        if header.lower().startswith("basic "):
+            decoded = base64.b64decode(header[6:]).decode()
+            client_id, _, client_secret = decoded.partition(":")
+        if client_id != self.client_id:
             return JSONResponse({"error": "invalid_client"}, status_code=401)
-        if self.client_secret and form.get("client_secret") != self.client_secret:
+        if self.client_secret and client_secret != self.client_secret:
             return JSONResponse({"error": "invalid_client"}, status_code=401)
         if form.get("grant_type") != "authorization_code":
             return JSONResponse({"error": "unsupported_grant_type"}, status_code=400)
@@ -109,8 +120,14 @@ class FakeGoogle:
         id_token = jwt.encode(
             {"alg": "RS256", "kid": self.key.kid}, claims, self.key
         )
+        # The access token is a JWT too: providers that validate upstream tokens
+        # by signature (rather than by calling a tokeninfo endpoint) need it to
+        # be self-describing, exactly as a real OIDC provider's would be.
+        access_token = jwt.encode(
+            {"alg": "RS256", "kid": self.key.kid}, claims, self.key
+        )
         return JSONResponse({
-            "access_token": "fake-access-token",
+            "access_token": access_token,
             "token_type": "Bearer",
             "expires_in": 600,
             "id_token": id_token,

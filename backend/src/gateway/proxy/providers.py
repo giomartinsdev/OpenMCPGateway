@@ -111,6 +111,7 @@ def build_auth_provider(
                 client_secret=credentials.get("client_secret") or "",
                 base_url=issuer,
                 jwt_signing_key=jwt_key,
+                client_storage=client_storage,
             )
     raise ValueError(f"unsupported identity provider {idp}")
 
