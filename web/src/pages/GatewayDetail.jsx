@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { useT } from "../i18n.jsx";
 import {
-  Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, Stat, can, relative,
+  AuthBadge, Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, Stat, can, relative,
 } from "../ui.jsx";
 import { navigate } from "../App.jsx";
 import { ConnectGuide } from "./gateway/ConnectGuide.jsx";
@@ -40,12 +40,6 @@ const SAMPLE = {
   health: null,
   stats: { requests: 0, previous_requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, by_tool: {}, by_gateway: {}, by_gateway_outcome: {}, series: [], busiest: null },
 };
-
-const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
-
-function authLabel(t, mode) {
-  return mode ? t(AUTH_LABEL[mode] ?? mode) : mode;
-}
 
 /** The eye: one click, one plaintext, one time. */
 function EyeIcon() {
@@ -309,16 +303,7 @@ export function GatewayDetail({ id, me }) {
             <div className="row" style={{ gap: 24, marginBottom: 14 }}>
               <div>
                 <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Mode")}</div>
-                <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
-                  {authLabel(t, gateway.auth_mode)}
-                  {gateway.idp ? ` · ${gateway.idp}` : ""}
-                  {gateway.allow_api_key ? ` ${t("+ keys")}` : ""}
-                  {gateway.verifiers?.length
-                    ? gateway.verifiers.length === 1
-                      ? ` ${t("+ 1 issuer")}`
-                      : ` ${t("+ {count} issuers", { count: gateway.verifiers.length })}`
-                    : ""}
-                </Badge>
+                <AuthBadge gateway={gateway} t={t} />
               </div>
               <div>
                 <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Allowlist")}</div>

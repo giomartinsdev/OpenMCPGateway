@@ -71,6 +71,15 @@ test("a gateway accepts a key and a second issuer beside its login", async ({ pa
   await page.reload();
   await expect(page.getByLabel("Also accept API keys on this gateway")).toBeChecked();
   await expect(page.getByLabel("Issuer")).toHaveValue("https://login.example.com/");
+
+  // The list is where an operator answers "what does this URL accept" for every
+  // gateway at once, so it has to say the same thing the detail card says. It
+  // used to print only "SSO · <idp>" while the gateway also accepted keys, and
+  // that omission is what makes someone create a second, key-only gateway.
+  await page.goto("/#/gateways");
+  const row = page.locator("tbody tr", { hasText: "multi-mcp" });
+  await expect(row).toContainText("SSO");
+  await expect(row).toContainText("+ keys");
 });
 
 test("an issuer row can be removed before saving", async ({ page }) => {

@@ -3,17 +3,11 @@ import { api } from "../api.js";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import { useT } from "../i18n.jsx";
 import {
-  Badge, Card, Drawer, Endpoint, NoMatches, Notice, Skeleton,
+  AuthBadge, Badge, Card, Drawer, Endpoint, NoMatches, Notice, Skeleton,
   SAMPLE_GATEWAYS, SAMPLE_STATS, Stat, can, relative,
 } from "../ui.jsx";
 import { Flow } from "../Sankey.jsx";
 import { navigate } from "../App.jsx";
-
-const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
-
-function authLabel(t, mode) {
-  return mode ? t(AUTH_LABEL[mode] ?? mode) : mode;
-}
 
 // One filter per column, under its own label. Endpoint is derived, not stored, so
 // it is not filterable; the name box answers to a slug or an id too, because
@@ -267,10 +261,7 @@ export function Gateways({ me }) {
                       </td>
                       <td className="mono">{gateway.endpoint}</td>
                       <td>
-                        <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
-                          {authLabel(t, gateway.auth_mode)}
-                          {gateway.idp ? ` · ${gateway.idp}` : ""}
-                        </Badge>
+                        <AuthBadge gateway={gateway} t={t} />
                       </td>
                       <td className="num">
                         {gateway.requests_per_minute

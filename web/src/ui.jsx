@@ -52,6 +52,30 @@ export function Stat({ label, value, hint }) {
   );
 }
 
+/** One badge for "what does this URL accept", shared by the list and the detail
+ * card. It lives here because the two drifted: the detail said "SSO · google
+ * + keys" while the list said only "SSO · google", and an operator reading the
+ * list concluded the gateway was login-only. */
+export function AuthBadge({ gateway, t }) {
+  const label = gateway.auth_mode
+    ? t({ none: "open", api_key: "API key", oauth: "SSO" }[gateway.auth_mode] ?? gateway.auth_mode)
+    : gateway.auth_mode;
+  const extra = [
+    gateway.idp,
+    gateway.allow_api_key ? t("+ keys") : null,
+    gateway.verifiers?.length
+      ? gateway.verifiers.length === 1
+        ? t("+ 1 issuer")
+        : t("+ {count} issuers", { count: gateway.verifiers.length })
+      : null,
+  ].filter(Boolean);
+  return (
+    <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
+      {[label, ...extra].join(" · ")}
+    </Badge>
+  );
+}
+
 export function Card({ title, aside, actions, children, className = "", flush = false }) {
   return (
     <section className={`card${flush ? " flush" : ""} ${className}`}>
