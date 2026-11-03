@@ -3,7 +3,7 @@ import { api } from "../api.js";
 import { useI18n, useT } from "../i18n.jsx";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
-  Badge, Bars, Card, Chart, Details, Drawer, NoMatches, Notice, Skeleton,
+  Badge, Bars, Card, Chart, Details, Drawer, Empty, NoMatches, Notice, Skeleton,
   SAMPLE_REQUESTS, SAMPLE_STATS, Stat, outcomeKind, outcomeLabel, relative,
 } from "../ui.jsx";
 
@@ -103,6 +103,12 @@ export function Traffic() {
               </button>
             ))}
           </div>
+          {/* A plain link, not a fetch: the response is a file, and the browser
+              saving it is the whole feature. Filters travel with it, so the
+              export is the table the operator is looking at. */}
+          <a className="btn ghost sm" href={api.requestsCsvUrl(filters)} download>
+            {t("Export CSV")}
+          </a>
         </div>
       </div>
 
@@ -175,7 +181,7 @@ export function Traffic() {
         </Skeleton>
       </Card>
 
-      <div className="grid-3" style={{ marginTop: 12 }}>
+      <div className="grid-4" style={{ marginTop: 12 }}>
         <Card title={t("By outcome")}>
           <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading outcomes")}>
             {(data) => (
@@ -199,6 +205,19 @@ export function Traffic() {
         <Card title={t("Top callers")}>
           <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading callers")}>
             {(data) => <Bars total={data.requests} data={data.by_ip} />}
+          </Skeleton>
+        </Card>
+        {/* Tools, not callers: the allowlist is a set of decisions, and a
+            decision nobody can audit against usage is a list that only grows. */}
+        <Card title={t("By tool")}>
+          <Skeleton
+            data={stats}
+            sample={SAMPLE_STATS}
+            label={t("Loading tools")}
+            empty={stats && Object.keys(stats.by_tool ?? {}).length === 0}
+            emptyMessage={<Empty>{t("No tools called in this window.")}</Empty>}
+          >
+            {(data) => <Bars total={data.requests} data={data.by_tool} />}
           </Skeleton>
         </Card>
       </div>
@@ -337,6 +356,10 @@ export function Traffic() {
               [t("Method"), <span className="mono">{open.method}</span>],
               [t("Tool"), <span className="mono">{open.tool || "—"}</span>],
               [t("IP"), <span className="mono">{open.ip || "—"}</span>],
+              // Only when there is something to say: a row that is always present
+              // and usually empty trains the reader to skip the section.
+              // Same sentence the guard stored; translated on the way out.
+              ...(open.reason ? [[t("Reason"), t(open.reason)]] : []),
               [t("Event id"), <span className="mono">{open.event_id}</span>],
               [t("Gateway id"), <span className="mono">{open.gateway_id}</span>],
             ]}

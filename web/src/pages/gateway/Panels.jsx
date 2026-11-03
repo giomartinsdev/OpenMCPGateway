@@ -307,6 +307,12 @@ export function Requests({ gateway }) {
               [t("Method"), <span className="mono">{open.method}</span>],
               [t("Tool"), <span className="mono">{open.tool || "—"}</span>],
               [t("IP"), <span className="mono">{open.ip || "—"}</span>],
+              // Only when there is something to say: an empty row on every
+              // allowed call would train the reader to skip the section.
+              // The server stores an English sentence, not a code, so the log is
+              // readable from `psql` too. Translating it here keeps that choice
+              // from making the panel English-only.
+              ...(open.reason ? [[t("Reason"), t(open.reason)]] : []),
               [t("Event id"), <span className="mono">{open.event_id}</span>],
             ]}
           />

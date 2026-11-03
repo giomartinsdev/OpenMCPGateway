@@ -31,6 +31,15 @@ def _opt(name: str) -> str | None:
     return os.environ.get(name) or None
 
 
+def _int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a whole number of days, not {raw!r}") from exc
+
 def _require(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -62,6 +71,9 @@ class Settings(BaseModel):
     # Shared rate-limit counters. Unset means in-process, which is correct for a
     # single replica and N x the limit at N — see `proxy/rate_limit.py`.
     redis_url: str | None = None
+    #: Days of traffic to keep. `0` keeps everything, which is the default: an
+    #: unset horizon must not delete history. The audit log is never pruned.
+    retention_days: int = 0
     log_level: str = "info"
 
     @field_validator("base_url")
@@ -132,7 +144,8 @@ class Settings(BaseModel):
                 _opt("OMG_GOOGLE_DISCOVERY_URL") or DEFAULT_GOOGLE_DISCOVERY
             ),
             redis_url=_opt("OMG_REDIS_URL"),
-        operator_allowlist=tuple(
+            retention_days=_int("OMG_RETENTION_DAYS", 0),
+            operator_allowlist=tuple(
                 email.strip().lower()
                 for email in os.environ.get("OMG_OPERATOR_ALLOWLIST", "").split(",")
                 if email.strip()

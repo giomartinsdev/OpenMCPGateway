@@ -8,6 +8,7 @@ Invariants deliberately enforced here rather than in the API layer:
 """
 
 from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime
 
 from pydantic import Field
 
@@ -312,12 +313,18 @@ class Gateway(_Aggregate):
         key_hash: str,
         subject: str = "api-key",
         sealed: str = "",
+        expires_at: datetime | None = None,
     ) -> list[Event]:
         self._ensure_live()
         if not label.strip():
             raise DomainError("label is required")
         if key_id in self.api_key_ids:
             raise DomainError("key already exists")
+        if expires_at is not None and expires_at <= datetime.now(UTC):
+            # A key minted already dead is a mistake in the caller, not a
+            # deliberate revocation; refusing here names the field instead of
+            # handing back a credential that answers 401.
+            raise DomainError("expires_at must be in the future")
         return [
             ApiKeyIssued(
                 aggregate_id=self.id,
@@ -326,6 +333,7 @@ class Gateway(_Aggregate):
                 key_hash=key_hash,
                 subject=subject,
                 sealed=sealed,
+                expires_at=expires_at,
             )
         ]
 

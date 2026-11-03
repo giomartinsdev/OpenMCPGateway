@@ -82,6 +82,8 @@ class ApiKeyRow(ReadRow):
     #: itself: this row is served by a list endpoint to anyone with `keys:read`.
     revealed_at: datetime | None = None
     revealed_by: str | None = None
+    #: None means never. The panel warns on a date close to today.
+    expires_at: datetime | None = None
     recoverable: bool = False
 
 class TenantRow(ReadRow):
@@ -141,6 +143,8 @@ class TrafficStats(ReadRow):
     #: gateway is refusing everybody", because the same totals fit a healthy
     #: gateway next to a broken one; the flow chart needs the pair.
     by_gateway_outcome: dict[str, dict[str, int]] = {}
+    #: Tool name -> calls in the window. Empty when nothing reached `tools/call`.
+    by_tool: dict[str, int] = {}
     series: list[SeriesPoint]
     #: The minute with the most requests, and how many: a spike is easier to
     #: spot in a sentence than in a bar chart.

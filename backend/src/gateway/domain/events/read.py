@@ -29,6 +29,9 @@ class RequestObserved(Event):
     ip: str | None = None
     tool: str | None = None
     method: str = "POST"
+    #: Why this was refused, in a sentence a reader can act on. Empty for an
+    #: allowed call: the normal case has nothing to explain.
+    reason: str = ""
 
 
 READ_EVENTS: tuple[type[Event], ...] = (RequestObserved,)

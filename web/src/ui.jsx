@@ -252,6 +252,7 @@ export const SAMPLE_STATS = {
   max_duration_ms: 0,
   by_ip: {},
   by_outcome: {},
+  by_tool: {},
   by_gateway: {},
   by_gateway_outcome: {},
   series: [],

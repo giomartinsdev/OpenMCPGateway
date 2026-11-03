@@ -190,6 +190,7 @@ async def on_key_issued(session: AsyncSession, event: Event) -> None:
         subject=event.subject,
         sealed=event.sealed,
         issued_at=event.occurred_at,
+        expires_at=event.expires_at,
         revoked=False,
     )
     await session.execute(
@@ -254,6 +255,7 @@ async def on_request(session: AsyncSession, event: Event) -> None:
             ip=event.ip,
             tool=event.tool,
             method=event.method,
+            reason=event.reason,
             occurred_at=event.occurred_at,
         )
         .on_conflict_do_nothing(index_elements=[rm_requests_tail.c.event_id])

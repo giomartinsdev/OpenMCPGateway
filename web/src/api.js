@@ -86,7 +86,16 @@ export const api = {
   removePrincipal: (id, subject) =>
     call("DELETE", `/gateways/${id}/principals/${encodeURIComponent(subject)}`),
 
-  issueKey: (id, label) => call("POST", `/gateways/${id}/keys`, { label }),
+  // `expires_in_days` is optional; omitting it means the key never expires, which
+  // is what every key issued before this field existed already is.
+  issueKey: (id, label, expiresInDays = null) =>
+    call("POST", `/gateways/${id}/keys`, {
+      label,
+      expires_in_days: expiresInDays || null,
+    }),
+  // A real MCP handshake with the upstream, timed. Write permission: it costs a
+  // round trip to a server the operator only indirectly owns.
+  testGateway: (id) => call("POST", `/gateways/${id}/test`),
   // Rotation returns the new plaintext once; the old key stops working in the
   // same append, so there is no window where neither one authenticates.
   // The eye icon. Answers 409 once the key has been revealed or when it was
@@ -107,6 +116,9 @@ export const api = {
   // Cursor lists: `before` is the cursor the previous page answered with, and
   // every other key is a filter field the endpoint declares.
   requests: (params) => call("GET", `/requests?${query(params)}`),
+  // Same log, one file. Built here rather than through `call`: the response is
+  // CSV, not JSON, so the browser is pointed at it and saves it.
+  requestsCsvUrl: (params) => `/api/requests.csv?${query(params)}`,
   events: (params) => call("GET", `/events?${query(params)}`),
   // The manual is served per language; an unknown code gets English.
   docs: (lang) => call("GET", `/docs${lang ? `?lang=${lang}` : ""}`),
@@ -114,6 +126,8 @@ export const api = {
   mintConsoleToken: () => call("POST", "/mcp/token"),
 
   exportConfig: () => call("GET", "/config/export"),
+  // What an apply would change. Reads only, so it is safe behind `config:read`.
+  planConfig: (yaml) => call("POST", "/config/plan", { yaml }),
   applyConfig: (yaml) => call("POST", "/config/apply", { yaml }),
   validateConfig: (yaml) => call("POST", "/config/validate", { yaml }),
 };

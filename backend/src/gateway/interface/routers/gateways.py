@@ -1,5 +1,6 @@
 """Gateway CRUD, auth configuration, and the sub-resources under a gateway."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -109,6 +110,22 @@ async def upstream_tools(gateway_id: str, session: CanReadGateways,
     del session
     gateway = await gateways.owned(container, principal.caller, gateway_id)
     return await connect.upstream_tools(container, gateway)
+
+
+@router.post("/gateways/{gateway_id}/test")
+async def test_upstream(gateway_id: str, session: CanWriteGateways,
+                        principal: PrincipalDep,
+                        container: ContainerDep) -> dict[str, Any]:
+    """Probe the upstream now: a real MCP handshake, timed, with the reason.
+
+    Write permission: this reaches a server the operator only indirectly owns and
+    costs a round trip, so it is not something a read-only role should be able to
+    make the gateway do on demand.
+    """
+    del session
+    gateway = await gateways.owned(container, principal.caller, gateway_id)
+    result = await container.prober.probe(container, gateway, fresh=True)
+    return result.model_dump(mode="json")
 
 
 @router.patch("/gateways/{gateway_id}")
@@ -261,7 +278,12 @@ async def issue_key(gateway_id: str, payload: ApiKeyRequest, session: CanWriteKe
                     container: ContainerDep) -> dict[str, str]:
     await gateways.owned(container, principal.caller, gateway_id)
     plaintext, key_id = await container.commands.issue_api_key(
-        gateway_id, label=payload.label, actor=session.email
+        gateway_id, label=payload.label, actor=session.email,
+        expires_at=(
+            datetime.now(UTC) + timedelta(days=payload.expires_in_days)
+            if payload.expires_in_days
+            else None
+        ),
     )
     # Shown once here, and readable once more through the reveal endpoint.
     return {"key_id": key_id, "api_key": plaintext}

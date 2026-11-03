@@ -239,6 +239,66 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
     )
 
 
+async def plan_document(document: ConfigDocument, read_models: Any, *,
+                        tenant_id: str) -> dict[str, Any]:
+    """What an apply would do, without doing it.
+
+    `prune: true` plus a truncated file is a delete nobody saw coming. The plan
+    is the diff that makes it visible before it happens — the same merge rules as
+    `apply_document`, so a plan cannot disagree with the apply it describes.
+
+    It reads only: no command handler is touched, which is why this is safe to
+    call from a screen that has not been confirmed.
+    """
+    existing = {
+        row["slug"]: row for row in await read_models.list_gateways(tenant_id)
+    }
+    declared = {spec.slug for spec in document.gateways}
+
+    create: list[str] = []
+    update: list[dict[str, Any]] = []
+    unchanged: list[str] = []
+    errors: list[str] = []
+
+    for spec in document.gateways:
+        current = existing.get(spec.slug)
+        if current is None:
+            create.append(spec.slug)
+            continue
+        changes: list[str] = []
+        if current["name"] != spec.name:
+            changes.append("name")
+        if current["target_url"] != spec.target_url:
+            changes.append("target_url")
+        if (current["description"] or "") != spec.description:
+            changes.append("description")
+        if current["auth_mode"] != spec.auth_mode.value:
+            changes.append("auth")
+        if int(current["requests_per_minute"]) != spec.rate_limit:
+            changes.append("rate_limit")
+        if changes:
+            update.append({"slug": spec.slug, "fields": changes})
+        else:
+            unchanged.append(spec.slug)
+
+    # Pruning is the destructive half, so it is reported even when the file did
+    # not ask for it: an empty `delete` is the reassuring answer.
+    delete = (
+        sorted(slug for slug in existing if slug not in declared)
+        if document.prune
+        else []
+    )
+
+    return {
+        "create": create,
+        "update": update,
+        "delete": delete,
+        "unchanged": unchanged,
+        "errors": errors,
+        "prune": document.prune,
+    }
+
+
 async def apply_document(document: ConfigDocument, commands: Any,
                          read_models: Any, *, tenant_id: str,
                          actor: str = "config-file",

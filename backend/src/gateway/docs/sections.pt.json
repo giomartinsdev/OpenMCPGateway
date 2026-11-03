@@ -56,7 +56,7 @@
         "Um gateway é um slug, uma URL de upstream e uma política. O slug é global: `/g/<slug>/mcp` é a string que as pessoas colam nos clientes, então dois tenants não podem ambos ser donos de `rancher`.",
         "Um gateway é criado para você: `console`, apontando para o MCP somente leitura desta própria implantação. O slug é global porque `/g/<slug>/mcp` é uma URL pública, então em uma implantação com vários tenants o primeiro fica com `console` e os outros com `console-<tenant id>` — o id, não um contador, para que o endereço ainda diga de quem é o gateway.",
         "`target_url` é o endpoint streamable-HTTP do upstream, incluindo seu caminho (`http://rancher-mcp.support.svc.cluster.local:8000/mcp`). Precisa ser `http://` ou `https://`.",
-        "Um gateway também decide *quais* ferramentas expõe. A lista é um conjunto de nomes de ferramentas do upstream; vazia significa tudo o que o upstream serve, que é como todo gateway começa. Uma ferramenta fora da lista desaparece de `tools/list` e um `tools/call` para ela responde `403` nomeando a ferramenta, então um cliente que manteve um nome antigo na config recebe uma frase em vez de um sucesso silencioso ou de uma caça a erro de digitação.",
+        "Um gateway também decide *quais* ferramentas expõe. A lista é um conjunto de nomes de ferramentas do upstream; vazia significa tudo o que o upstream serve, que é como todo gateway começa. Uma ferramenta fora da lista desaparece de `tools/list` e um `tools/call` para ela responde `403` nomeando a ferramenta, então um cliente que manteve um nome antigo na config recebe uma frase em vez de um sucesso silencioso ou de uma caça a erro de digitação. A página do gateway sonda o upstream sob demanda: handshake de verdade, quantas ferramentas ele serve e o motivo da falha. Um upstream morto antes parecia um gateway silencioso e saudável.",
         "O painel lê o catálogo do upstream diretamente para preencher essa lista - não pelo gateway, que responderia com o filtro que já está aplicando. Um nome configurado que o upstream não serve mais continua visível e marcado, porque sumir com ele em silêncio no próximo salvamento apagaria uma decisão do operador."
       ],
       "table": {
@@ -101,7 +101,7 @@
       "title": "Modos de autenticação",
       "body": [
         "**`none`** - sem autenticação. Aceitável em rede privada; o painel avisa enquanto qualquer gateway assim estiver habilitado.",
-        "**`api_key`** - o chamador envia `Authorization: Bearer omg_...`. A chave é guardada como hash SHA-256 (é o que a autenticação compara) ao lado de uma cópia selada da plaintext, cifrada com o segredo da implantação. A resposta que a emite devolve a plaintext, e a página do gateway mostra um ícone de olho para chave que nunca foi lida: clicar decifra a cópia selada, mostra a chave uma vez e a apaga. Depois disso só resta o hash, e o único caminho de volta a uma chave legível é rotacioná-la.",
+        "**`api_key`** - o chamador envia `Authorization: Bearer omg_...`. A chave é guardada como hash SHA-256 (é o que a autenticação compara) ao lado de uma cópia selada da plaintext, cifrada com o segredo da implantação. A resposta que a emite devolve a plaintext, e a página do gateway mostra um ícone de olho para chave que nunca foi lida: clicar decifra a cópia selada, mostra a chave uma vez e a apaga. Depois disso só resta o hash, e o único caminho de volta a uma chave legível é rotacioná-la. Uma chave pode ser emitida com validade. Depois dela a chave não autentica mais, e uma rotação herda o prazo da chave que substitui — o objetivo de rotacionar é trocar o segredo, não estender por quanto tempo ele é confiável.",
         "**`oauth`** - o gateway é seu próprio resource server OAuth. Um cliente sem token recebe `401` com `WWW-Authenticate: Bearer resource_metadata=...`; ele descobre os documentos de metadados, registra-se e abre um navegador. O operador aprova uma vez, e o subject fica na allowlist a partir daí.",
         "O cliente não precisa de um token versionado em dotfile para o modo OAuth - essa é a ideia. Para o modo API-key precisa, e é por isso que a chave é por gateway e revogável isoladamente.",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
@@ -183,7 +183,7 @@
         "Cada lista também aceita seus próprios campos de filtro como parâmetros de query, uma caixa por coluna no painel. Colunas de texto casam um fragmento (`?name=anch` encontra `rancher`), `status` e `enabled` casam exatamente, e toda lista carrega uma caixa `id` para a linha que você copiou pela metade. Um campo desconhecido é 422 nomeando os campos que existem — um filtro silenciosamente ignorado é pior que um erro.",
         "A ordenação é `?sort=<column>&order=asc|desc`. As colunas ordenáveis são um conjunto fechado por lista: gateways por `created_at`, `updated_at`, `name` ou `slug`; traffic por `occurred_at`, `duration_ms`, `status` ou `subject`; o log de auditoria por `occurred_at`, `actor` ou `type`; membros por `email` e `created_at`; funções por `name` e `created_at`. Uma chave desconhecida é 422 que lista as válidas.",
         "Um cursor significa *depois desta linha, nesta ordem*, então fica vinculado à ordenação sob a qual foi emitido. Mude `sort` ou `order` e comece da primeira página: reutilizar o cursor antigo é 422, não uma lista silenciosamente furada.",
-        "Dois endpoints não cabem na forma CRUD e vale conhecê-los: `POST /api/gateways/<id>/keys/<key_id>/reveal` devolve a plaintext selada uma vez e `409` depois disso, e `GET /api/gateways/<id>/upstream-tools` pergunta ao upstream o que ele serve para a lista ser marcada em vez de digitada. `PUT /api/gateways/<id>/tools` substitui a lista."
+        "Dois endpoints não cabem na forma CRUD e vale conhecê-los: `POST /api/gateways/<id>/keys/<key_id>/reveal` devolve a plaintext selada uma vez e `409` depois disso, e `GET /api/gateways/<id>/upstream-tools` pergunta ao upstream o que ele serve para a lista ser marcada em vez de digitada. `PUT /api/gateways/<id>/tools` substitui a lista. `GET /api/requests.csv` responde aos mesmos filtros de `/requests`, em arquivo; `POST /api/config/plan` diz o que um apply mudaria sem mudar nada, e `POST /api/gateways/<id>/test` sonda o upstream com um handshake MCP de verdade."
       ],
       "table": {
         "head": [
@@ -254,6 +254,18 @@
           [
             "GET /api/config/export",
             "Renderizar o estado atual como YAML, sem segredos"
+          ],
+          [
+            "GET /api/requests.csv?gateway=&outcome=&subject=…",
+            "O log de requisições em um arquivo CSV: mesmos filtros, mesmo escopo de tenant, limitado por `limit`"
+          ],
+          [
+            "POST /api/config/plan",
+            "O que um apply criaria, atualizaria e apagaria — sem aplicar"
+          ],
+          [
+            "POST /api/gateways/{id}/test",
+            "Sonda o upstream agora: handshake real, número de ferramentas, motivo"
           ]
         ]
       }
@@ -317,7 +329,7 @@
         "O rate limiting é uma janela deslizante por (gateway, chamador). Com `OMG_REDIS_URL` setado, os contadores vivem no Redis e todas as réplicas os compartilham, então `replicas: 2` significa o limite configurado e não o dobro dele. Sem isso o limiter é em processo: correto para uma réplica, N vezes o limite em N. Um Redis fora do ar falha aberto e loga - uma janela de contagem perdida é melhor que uma queda.",
         "O estado do proxy OAuth (registros de clientes, tokens de upstream, mapeamentos de `jti`) vive no mesmo Postgres, cifrado em repouso, então um rollout não desconecta todos os clientes conectados. Essa parte já é segura para réplicas, e com `OMG_REDIS_URL` setado o limiter também é.",
         "O estado é event-sourced. Toda mudança é um evento append-only e os read models são projeções dele, o que torna o log de auditoria confiável e permite que duas réplicas compartilhem um banco sem uma história de coerência de cache.",
-        "O schema é versionado em código (`infrastructure/db/migrations.py`): uma lista numerada de passos, registrada em `schema_migrations`. O boot aplica o que esta build ainda não aplicou, então uma atualização é um rollout, não uma sessão manual de `psql`. Os read models moram no próprio schema, `readmodels` — toda tabela com prefixo `rm_` — enquanto `events`, as tabelas de unicidade e o histórico ficam em `public`. A divisão é o ponto: uma projeção é reconstruível a partir do log, então `DROP SCHEMA readmodels CASCADE` seguido de um boot é um reset seguro que o boot seguinte percebe e refaz. Nada de que o log depende está lá.",
+        "O schema é versionado em código (`infrastructure/db/migrations.py`): uma lista numerada de passos, registrada em `schema_migrations`. O boot aplica o que esta build ainda não aplicou, então uma atualização é um rollout, não uma sessão manual de `psql`. Os read models moram no próprio schema, `readmodels` — toda tabela com prefixo `rm_` — enquanto `events`, as tabelas de unicidade e o histórico ficam em `public`. A divisão é o ponto: uma projeção é reconstruível a partir do log, então `DROP SCHEMA readmodels CASCADE` seguido de um boot é um reset seguro que o boot seguinte percebe e refaz. Nada de que o log depende está lá. `OMG_RETENTION_DAYS` poda o log de requisições no boot. Além do corte, eventos `request.observed`, `rm_requests_tail` e `rm_request_stats` são apagados; eventos de auditoria nunca, porque o log de quem mudou o quê não é o log de quem chamou. `0`, o padrão, guarda tudo.",
         "`GET /metrics` serve o formato texto do Prometheus: `omg_proxy_requests_total` por gateway, desfecho e classe de status; `omg_proxy_request_duration_ms_sum` para dividir pela contagem e obter uma média; e gauges para gateways no ar, gateways pendentes, observações descartadas e qual backend de rate limit está em uso. É sem autenticação e na mesma porta, então restrinja no ingress se a implantação estiver exposta à internet. Os contadores são em processo: com várias réplicas cada pod é uma série e `sum by (gateway)` é a consulta correta."
       ],
       "table": {
@@ -396,6 +408,10 @@
           [
             "OMG_REDIS_URL",
             "Opcional; contadores de rate limit compartilhados em vez de em processo"
+          ],
+          [
+            "OMG_RETENTION_DAYS",
+            "Apaga linhas do log de requisições e read models de requisição mais antigos que N dias, no boot. `0` (padrão) guarda tudo; eventos de auditoria nunca são podados"
           ]
         ]
       }

@@ -10,6 +10,7 @@ not on Postgres. Persistence is an adapter, and swapping it is a wiring change.
 
 import secrets
 from collections.abc import Sequence
+from datetime import datetime
 
 from gateway.application.ports import EventStore
 from gateway.domain.events import (
@@ -414,7 +415,8 @@ class CommandHandler:
     # -- api keys ---------------------------------------------------------
 
     async def issue_api_key(
-        self, gateway_id: str, *, label: str, actor: str = "system"
+        self, gateway_id: str, *, label: str, actor: str = "system",
+        expires_at: datetime | None = None,
     ) -> tuple[str, str]:
         """Returns (plaintext, key_id). The plaintext is sealed for one reveal."""
         gateway = await self._load_gateway(gateway_id)
@@ -428,6 +430,7 @@ class CommandHandler:
             # key's budget on the same gateway.
             subject=f"api-key:{key_id}",
             sealed=self._seal(plaintext),
+            expires_at=expires_at,
         )
         await self._commit(gateway_id, events, gateway.version, actor=actor)
         return plaintext, key_id
@@ -452,6 +455,10 @@ class CommandHandler:
                 key_hash=key_hash,
                 subject=f"api-key:{new_id}",
                 sealed=self._seal(plaintext),
+                # A rotation keeps the deadline the key it replaces had: the
+                # point of rotating is to change the secret, not to silently
+                # extend how long it is trusted.
+                expires_at=_key_expiry(await self._store.load_stream(gateway_id), key_id),
             ),
             *gateway.decide_revoke_key(key_id=key_id),
         ]
@@ -498,6 +505,14 @@ class CommandHandler:
 
 
 __all__ = ["CommandHandler"]
+
+
+def _key_expiry(events: Sequence[Event], key_id: str) -> datetime | None:
+    """The deadline a rotated key inherits. `None` when it never had one."""
+    for event in reversed(events):
+        if isinstance(event, ApiKeyIssued) and event.key_id == key_id:
+            return event.expires_at
+    return None
 
 
 def _key_label(events: Sequence[Event], key_id: str) -> str:

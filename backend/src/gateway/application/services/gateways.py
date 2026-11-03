@@ -57,6 +57,10 @@ async def detail(container: Container, caller: Caller,
     result["stats"] = await container.read_models.stats(
         gateway_id, 60, tenant_id=gateway["tenant_id"]
     )
+    # `None` until something probed it: an empty badge is honest, and "up" that
+    # was never checked is the kind of default that hides a dead upstream.
+    health = container.prober.last(gateway_id)
+    result["health"] = health.model_dump(mode="json") if health else None
     return result
 
 

@@ -29,13 +29,15 @@ const SAMPLE = {
       key_id: "key_0000",
       label: "default",
       issued_at: new Date().toISOString(),
+      expires_at: null,
       revealed_at: null,
       revealed_by: null,
       recoverable: true,
     },
   ],
   tools: [],
-  stats: { requests: 0, previous_requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, by_gateway: {}, by_gateway_outcome: {}, series: [], busiest: null },
+  health: null,
+  stats: { requests: 0, previous_requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, by_tool: {}, by_gateway: {}, by_gateway_outcome: {}, series: [], busiest: null },
 };
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
@@ -58,6 +60,45 @@ function EyeIcon() {
   );
 }
 
+/** The upstream's last known answer, or "not checked yet" — which is not "up". */
+function UpstreamHealth({ health, testing }) {
+  const t = useT();
+  if (testing || !health) {
+    return (
+      <Badge kind="mute">
+        {testing ? t("Testing…") : t("Upstream not checked yet")}
+      </Badge>
+    );
+  }
+  return (
+    <>
+      <Badge kind={health.up ? "ok" : "err"}>
+        {health.up
+          ? t("Upstream up · {detail}", { detail: health.detail })
+          : t("Upstream down")}
+      </Badge>
+      {!health.up && health.detail ? (
+        <span className="hint mono">{health.detail}</span>
+      ) : null}
+      <span className="hint">
+        {t("checked {when}", { when: relative(health.checked_at) })}
+      </span>
+    </>
+  );
+}
+
+/** "expires in 3 days" / "expired" / nothing at all for a key that never does. */
+function expiryLabel(t, expiresAt) {
+  if (!expiresAt) return null;
+  const left = new Date(expiresAt).getTime() - Date.now();
+  if (left <= 0) return { kind: "err", text: t("expired") };
+  const days = Math.ceil(left / 86_400_000);
+  return {
+    kind: days <= 7 ? "warn" : "mute",
+    text: days === 1 ? t("expires tomorrow") : t("expires in {days} days", { days }),
+  };
+}
+
 export function GatewayDetail({ id, me }) {
   const t = useT();
   // Two separate permissions: managing a gateway is not the same as minting a
@@ -69,13 +110,23 @@ export function GatewayDetail({ id, me }) {
   const [banner, setBanner] = useState(null); // {kind, text}
   // Holds a plaintext only between the response and the operator's clipboard.
   const [newKey, setNewKey] = useState("");
+  // The upstream probe result: seeded from the detail payload (last cached
+  // answer), replaced by an explicit test. `null` means nobody checked yet.
+  const [health, setHealth] = useState(null);
+  const [testing, setTesting] = useState(false);
+  // Which expiry the next issued key gets. Empty string = never.
+  const [keyDays, setKeyDays] = useState("");
   // Which key's plaintext is on screen, and why one cannot be shown. The eye is
   // per row: a revealed key is a fact about that key, not about the page.
   const [shownKey, setShownKey] = useState("");
 
   async function load() {
     try {
-      setGateway(await api.gateway(id));
+      const next = await api.gateway(id);
+      setGateway(next);
+      // The poll refreshes the probe result too, but only when the server has
+      // one: an empty badge is honest, and "up" that was never checked is not.
+      if (next.health) setHealth(next.health);
     } catch (err) {
       setError(err.message);
     }
@@ -179,6 +230,31 @@ export function GatewayDetail({ id, me }) {
                     {t("0 means no limit. Each subject gets its own budget, and only JSON-RPC requests count — handshakes and notifications are free.")}
                   </span>
                 </div>
+              )}
+            </div>
+            {/* "Is the gateway up" and "is the thing behind it up" are different
+                questions. /healthz answers the first; this answers the second,
+                because a dead upstream used to look like a quiet, healthy
+                gateway. */}
+            <div className="health-row">
+              <UpstreamHealth health={health} testing={testing} />
+              {canEdit && (
+                <button
+                  className="ghost sm"
+                  disabled={testing}
+                  onClick={async () => {
+                    setTesting(true);
+                    try {
+                      setHealth(await api.testGateway(id));
+                    } catch (err) {
+                      setHealth({ up: false, detail: err.message, tools: 0 });
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                >
+                  {testing ? t("Testing…") : t("Test upstream")}
+                </button>
               )}
             </div>
           </>
@@ -292,19 +368,35 @@ export function GatewayDetail({ id, me }) {
         <Card
           title={t("API keys")}
           actions={gateway && canKeys && (
-            <button
-              className="sm"
-              onClick={() => {
-                api.issueKey(id, "default")
-                  .then((issued) => {
-                    setNewKey(issued.api_key);
-                    load();
-                  })
-                  .catch((e) => setError(e.message));
-              }}
-            >
-              {t("Issue key")}
-            </button>
+            <div className="row" style={{ gap: 8 }}>
+              {/* Default "never": making every new key expire on a guess would
+                  break an integration nobody thought about. The point is that
+                  the choice is visible at mint time, not after a year of drift. */}
+              <select
+                aria-label={t("Expires in")}
+                value={keyDays}
+                onChange={(event) => setKeyDays(event.target.value)}
+                style={{ height: 26, fontSize: "var(--t-label)" }}
+              >
+                <option value="">{t("never expires")}</option>
+                <option value="30">{t("in 30 days")}</option>
+                <option value="90">{t("in 90 days")}</option>
+                <option value="365">{t("in 365 days")}</option>
+              </select>
+              <button
+                className="sm"
+                onClick={() => {
+                  api.issueKey(id, "default", keyDays ? Number(keyDays) : null)
+                    .then((issued) => {
+                      setNewKey(issued.api_key);
+                      load();
+                    })
+                    .catch((e) => setError(e.message));
+                }}
+              >
+                {t("Issue key")}
+              </button>
+            </div>
           )}
         >
           {/* Two moments produce a plaintext: minting one, and using the eye on a
@@ -366,6 +458,7 @@ export function GatewayDetail({ id, me }) {
                   <th>{t("Label")}</th>
                   <th>{t("Key id")}</th>
                   <th className="num">{t("Issued")}</th>
+                  <th>{t("Expires")}</th>
                   <th>{t("Seen")}</th>
                   <th />
                 </tr>
@@ -379,6 +472,16 @@ export function GatewayDetail({ id, me }) {
                         used to invite. */}
                     <td className="mono hint">{key.key_id}</td>
                     <td className="num hint">{relative(key.issued_at)}</td>
+                    <td className="hint">
+                      {(() => {
+                        const expiry = expiryLabel(t, key.expires_at);
+                        return expiry ? (
+                          <Badge kind={expiry.kind}>{expiry.text}</Badge>
+                        ) : (
+                          t("never")
+                        );
+                      })()}
+                    </td>
                     <td className="hint">
                       {key.revealed_at
                         ? t("seen {when} by {who}", {

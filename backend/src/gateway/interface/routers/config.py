@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from gateway.configexport import render_document
-from gateway.configfile import apply_document, parse_document
+from gateway.configfile import apply_document, parse_document, plan_document
 from gateway.interface.dependencies import (
     CanReadConfig,
     CanWriteConfig,
@@ -30,6 +30,23 @@ async def validate_config(payload: ConfigFileRequest, session: CanReadConfig,
         "members": [spec.email for spec in document.members],
         "prune": document.prune,
     }
+
+
+@router.post("/config/plan")
+async def plan_config(payload: ConfigFileRequest, session: CanReadConfig,
+                      principal: PrincipalDep,
+                      container: ContainerDep) -> dict[str, Any]:
+    """What an apply would change, without changing it.
+
+    Reads, so `config:read` is enough: the destructive half of this screen is the
+    apply, and looking before leaping should not require the permission to leap.
+    """
+    del session
+    text = payload.yaml or json.dumps(payload.document or {})
+    document = parse_document(text)
+    return await plan_document(
+        document, container.read_models, tenant_id=principal.tenant
+    )
 
 
 @router.post("/config/apply")

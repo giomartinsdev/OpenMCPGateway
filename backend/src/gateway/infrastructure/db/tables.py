@@ -204,6 +204,9 @@ rm_api_keys = Table(
     # what the panel's eye icon keys on.
     Column("revealed_at", DateTime(timezone=True)),
     Column("revealed_by", Text),
+    # NULL means the key never expires, which is every key minted before this
+    # column existed.
+    Column("expires_at", DateTime(timezone=True)),
     Column(
         "issued_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     ),
@@ -238,6 +241,7 @@ rm_requests_tail = Table(
     Column("ip", Text),
     Column("tool", Text),
     Column("method", Text, nullable=False),
+    Column("reason", Text, nullable=False, default="", server_default=""),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
     schema=READMODELS_SCHEMA,
 )

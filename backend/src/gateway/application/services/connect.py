@@ -241,8 +241,7 @@ def _oauth_guide(container: Container, gateway: dict[str, Any],
     }
 
 
-__all__ = ["guide"]
-
+__all__ = ["guide", "upstream_tools"]
 
 async def upstream_tools(container: Container, gateway: dict[str, Any]) -> dict[str, Any]:
     """The tools this gateway's upstream actually serves, for the allowlist UI.

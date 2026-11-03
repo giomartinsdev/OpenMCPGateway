@@ -22,6 +22,10 @@ export function ToolsPanel({ gateway, me, onSaved }) {
   const t = useT();
   const canEdit = can(me, "gateways:write");
   const [catalog, setCatalog] = useState(null); // {available, reason, tools}
+  // Calls per tool over the last week, so the allowlist can say "nobody calls
+  // this" instead of only "this is ticked". A week is the longest window the
+  // stats endpoint serves, and it is enough to spot a forgotten tool.
+  const [usage, setUsage] = useState(null);
   const [selected, setSelected] = useState(gateway.tools ?? []);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +45,24 @@ export function ToolsPanel({ gateway, me, onSaved }) {
       })
       .catch((err) => {
         if (!cancelled) setCatalog({ available: false, reason: err.message, tools: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gateway.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setUsage(null);
+    api
+      .stats(gateway.id, 10080)
+      .then((data) => {
+        if (!cancelled) setUsage(data.by_tool ?? {});
+      })
+      // Usage is a hint, not a requirement: the allowlist still works when the
+      // stats query fails, so a failure here stays quiet.
+      .catch(() => {
+        if (!cancelled) setUsage({});
       });
     return () => {
       cancelled = true;
@@ -145,6 +167,9 @@ export function ToolsPanel({ gateway, me, onSaved }) {
             const entry = catalog?.tools.find((tool) => tool.name === name);
             const on = all || selected.includes(name);
             const gone = !entry;
+            // Only claim "unused" once the usage numbers actually arrived: an
+            // empty map from a failed request is not the same as zero calls.
+            const calls = usage?.[name];
             return (
               <li key={name} className={gone ? "gone" : ""}>
                 <label title={entry?.description ?? undefined}>
@@ -156,6 +181,12 @@ export function ToolsPanel({ gateway, me, onSaved }) {
                   />
                   <span className="tool-name mono">{name}</span>
                   {gone && <Badge kind="warn">{t("not served upstream")}</Badge>}
+                  {!gone && usage && !calls && (
+                    <Badge kind="mute">{t("no calls in 7 days")}</Badge>
+                  )}
+                  {!gone && calls ? (
+                    <span className="hint">{t("{count} calls in 7 days", { count: calls })}</span>
+                  ) : null}
                   {entry?.description ? (
                     <span className="tool-desc">{entry.description}</span>
                   ) : null}

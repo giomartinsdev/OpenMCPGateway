@@ -49,14 +49,20 @@ class GuardMiddleware:
         response: JSONResponse | None = None
         outcome = "allowed"
         status = 200
+        #: Why this call was refused. Empty for an allowed call, which needs no
+        #: explanation. `outcome` says "forbidden"; this says which gate.
+        reason = ""
+        tool: str | None = None
 
         try:
             identity = await self.auth.resolve(_bearer(headers))
             if identity is None:
                 outcome, status = "unauthenticated", 401
+                reason = "missing or invalid credential"
                 response = self._unauthorized()
             elif not self._authorized(identity.subject):
                 outcome, status = "forbidden", 403
+                reason = "subject not in allowlist"
                 response = JSONResponse(
                     {
                         "error": "forbidden",
@@ -70,6 +76,7 @@ class GuardMiddleware:
                 scope["omg.identity"] = identity
                 body = await _read_body(receive)
                 receive = _replay(body, receive)
+                tool = _called_tool(body)
                 blocked = self._blocked_tool(body)
                 if blocked is not None:
                     # A tool outside the allowlist is a 403 with the name in it,
@@ -77,6 +84,7 @@ class GuardMiddleware:
                     # for something specific, and "unknown tool" would send it
                     # looking for a typo in its own config.
                     outcome, status = "forbidden", 403
+                    reason = "tool not in allowlist"
                     response = JSONResponse(
                         {
                             "error": "forbidden",
@@ -95,6 +103,7 @@ class GuardMiddleware:
                     int(self.config.get("requests_per_minute") or 0),
                 ):
                     outcome, status = "rate_limited", 429
+                    reason = "rate limit exceeded"
                     response = JSONResponse(
                         {"error": "rate_limited", "message": "too many requests"},
                         status_code=429,
@@ -107,6 +116,7 @@ class GuardMiddleware:
         except Exception:
             outcome = "error"
             status = 502
+            reason = "upstream error"
             raise
         finally:
             log.info(
@@ -132,8 +142,9 @@ class GuardMiddleware:
                 status=status,
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 ip=_client_ip(scope, headers),
-                tool=None,
+                tool=tool,
                 method=scope.get("method", "POST"),
+                reason=reason,
             )
 
         if response is not None:
@@ -233,6 +244,29 @@ def _replay(body: bytes, receive: Receive) -> Receive:
         return await receive()
 
     return replay
+
+
+def _called_tool(body: bytes) -> str | None:
+    """The tool a `tools/call` names, so the log can say what was called.
+
+    `tools/list` and the handshake name nothing, and a batch may carry several
+    calls; the first name is enough for a traffic row that already collapses a
+    request into one line.
+    """
+    if not body:
+        return None
+    try:
+        payload = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    messages = payload if isinstance(payload, list) else [payload]
+    for message in messages:
+        if not isinstance(message, dict) or message.get("method") != "tools/call":
+            continue
+        name = (message.get("params") or {}).get("name")
+        if isinstance(name, str) and name:
+            return name
+    return None
 
 
 def _is_jsonrpc_request(body: bytes) -> bool:

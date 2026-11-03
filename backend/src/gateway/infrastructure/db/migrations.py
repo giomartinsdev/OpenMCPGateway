@@ -124,11 +124,31 @@ async def _readmodels_schema(connection: AsyncConnection) -> None:
         )
 
 
+async def _key_expiry_and_reason(connection: AsyncConnection) -> None:
+    """Two columns for two questions the log could not answer.
+
+    `expires_at` turns "this key has been in a CI secret for three years" into a
+    401 with a date on it. `reason` on the traffic tail turns "forbidden" into
+    which gate refused it. Both are nullable/defaulted so a database that already
+    has rows upgrades without a rewrite.
+    """
+    # Qualified, like migration 4: this step also runs against a database that
+    # was just built by the baseline, and the search_path is not guaranteed to
+    # include the read-model schema for everyone who calls `run`.
+    for statement in (
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_api_keys "
+        "ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ",
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_requests_tail "
+        "ADD COLUMN IF NOT EXISTS reason TEXT NOT NULL DEFAULT ''",
+    ):
+        await connection.execute(text(statement))
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline", _baseline),
     Migration(2, "tenancy", _tenancy),
     Migration(3, "key_reveal_and_tools", _key_reveal_and_tools),
     Migration(4, "readmodels_schema", _readmodels_schema),
+    Migration(5, "key_expiry_and_reason", _key_expiry_and_reason),
 )
 
 

@@ -8,8 +8,9 @@ gateway", "when did someone change that role". The filter catalogue lives in
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response
 
-from gateway.application.services import listing
+from gateway.application.services import export, listing
 from gateway.domain.filters import EVENT_FILTERS, REQUEST_FILTERS
 from gateway.domain.readmodels import TrafficStats
 from gateway.interface.dependencies import (
@@ -52,6 +53,40 @@ async def requests(
         order=page.order,
     )
     return {"requests": result.items, "next": result.next}
+
+
+@router.get("/requests.csv")
+async def requests_csv(
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadTraffic,
+    principal: PrincipalDep,
+    container: ContainerDep,
+) -> Response:
+    """The same log as `/requests`, as one CSV file.
+
+    Bounded by `limit` rather than streamed: an export that walks a whole table
+    over one HTTP response is a query that outlives the request that started it.
+    The caller pages with `before` like everywhere else; a SIEM that wants a
+    window asks for a high limit.
+    """
+    del session
+    result = await listing.requests(
+        container,
+        principal.caller,
+        window=page.window,
+        filters=filters(request, REQUEST_FILTERS),
+        sort=page.sort,
+        order=page.order,
+    )
+    body = export.render(result.items)
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="requests.csv"',
+        },
+    )
 
 
 @router.get("/events")

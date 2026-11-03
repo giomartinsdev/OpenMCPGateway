@@ -31,6 +31,8 @@ class Observation(BaseModel):
     ip: str | None = None
     tool: str | None = None
     method: str = "POST"
+    #: Why a refused call was refused. Empty for an allowed one.
+    reason: str = ""
 
 
 class RequestRecorder:

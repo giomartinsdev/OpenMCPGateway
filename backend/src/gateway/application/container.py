@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from gateway.application.commands import CommandHandler
 from gateway.application.ports import EventStore
+from gateway.application.retention import Retention
 from gateway.config import Settings
 from gateway.domain.events import TENANT_OF_DEPLOYMENT
 from gateway.infrastructure.db.database import Database
@@ -22,6 +23,7 @@ from gateway.infrastructure.eventstore.postgres import PostgresEventStore
 from gateway.infrastructure.eventstore.projections import ProjectionRunner, ReadModels
 from gateway.log import log
 from gateway.observability import Metrics, RequestRecorder
+from gateway.proxy.health import Prober
 from gateway.proxy.providers import close_client_storage, configure_client_storage
 from gateway.proxy.router import GatewayRouter, LifespanTask
 from gateway.proxy.runtime import build_limiter
@@ -41,6 +43,11 @@ class Container(BaseModel):
     recorder: RequestRecorder
     metrics: Metrics = Field(default_factory=Metrics)
     limiter: Any
+    #: Traffic retention. Built here so the boot job and the panel share one
+    #: definition of "old".
+    retention: Any = None
+    #: Last upstream health per gateway. In-process: liveness is not an event.
+    prober: Any = None
     router: GatewayRouter = Field(default=None)  # type: ignore[assignment]
     #: The read-only console MCP, and the verifier in front of it. Built here so
     #: a test can call a tool without standing up an HTTP transport, and so there
@@ -87,6 +94,8 @@ class Container(BaseModel):
             recorder=recorder,
             limiter=build_limiter(settings.redis_url),
         )
+        container.retention = Retention(database)
+        container.prober = Prober()
         container.router = GatewayRouter(
             read_models=read_models,
             limiter=container.limiter,
@@ -122,6 +131,17 @@ class Container(BaseModel):
         from gateway.application.services.tenants import backfill_console_gateways
 
         await backfill_console_gateways(container)
+        # Retention runs at boot, not on a timer: a daily cron in the panel would
+        # be a scheduler inside a web process, and a pod that restarts more than
+        # daily would never reach it. Pruning is idempotent, so a boot per deploy
+        # is a good enough clock.
+        if settings.retention_days > 0:
+            try:
+                await container.retention.prune(settings.retention_days)
+            except Exception as exc:
+                # Losing a prune is a disk problem tomorrow, not a serving problem
+                # now; refusing to boot over it would be the worse trade.
+                log.error("retention.failed", error=str(exc))
         return container
 
     async def refresh_router(self) -> None:

@@ -82,6 +82,8 @@ class PrincipalRequest(BaseModel):
 
 class ApiKeyRequest(BaseModel):
     label: str
+    #: Days from now until this key stops working. `None` means never.
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
 
 
 class ConfigFileRequest(BaseModel):

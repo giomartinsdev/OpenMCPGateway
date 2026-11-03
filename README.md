@@ -211,14 +211,29 @@ everybody"; the pair can.
 A gateway's page puts what it exposes in one place: the endpoint, its rate limit
 and the tool allowlist, then the auth, the keys and the allowlisted subjects. The
 allowlist is a grid of tiles with a search box — three tools and three hundred use
-the same component — and the connect guide is an accordion, closed by default,
-because six code blocks are read once. Under it, that gateway's own request log
-pages, filters, sorts and opens in a drawer exactly like the Traffic screen.
+the same component — each tile carrying its call count for the last week, so a
+tool nobody uses is visible before it becomes a decision nobody remembers. The
+connect guide is an accordion, closed by default, because six code blocks are read
+once. Under it, that gateway's own request log pages, filters, sorts and opens in
+a drawer exactly like the Traffic screen.
+
+"Is the gateway up" and "is the thing behind it up" are different questions.
+`/healthz` answers the first; the badge next to the endpoint answers the second,
+and **Test upstream** asks it now: a real MCP handshake against the target, cached
+for 30 seconds, with the tool count when it worked and the reason when it did not.
+A dead upstream used to look like a quiet, healthy gateway.
 
 The Traffic screen is the dashboard: totals with the change against the equal
 window before, latency, rejection rate, distinct callers, a volume chart with the
-busiest minute named, and breakdowns by outcome, gateway and caller. It refreshes
-every ten seconds without a reload.
+busiest minute named, and breakdowns by outcome, gateway, caller and tool. It
+refreshes every ten seconds without a reload. **Export CSV** saves the same rows
+through the same filters as one file.
+
+A refused request says why. The guard stores the reason as an English sentence
+(`subject not in allowlist`, `tool not in allowlist`, `rate limit exceeded`,
+`missing or invalid credential`, `upstream error`) so the log reads from `psql`
+too, and the drawer translates it on the way out. The outcome column says
+"forbidden"; the reason says which gate did it.
 
 Creation is a drawer too — gateway, member and role all open the same way from
 the button in the page header, so the form never pushes the list down the page.
@@ -318,6 +333,10 @@ After that the hash is all that is left, and rotating is the only way back to a
 readable key. Rotating `OMG_SESSION_SECRET` therefore also makes old sealed keys
 unrevealable; rotate the key instead.
 
+A key can be issued with an expiry (30, 90, 365 days, or never — the default).
+Past it the key no longer authenticates, and a rotation inherits the deadline of
+the key it replaces: rotating changes the secret, not how long it is trusted.
+
 A gateway's tool allowlist is enforced twice: names outside it are hidden from
 `tools/list`, and a `tools/call` for one answers `403` naming the tool. The panel
 fills the list from the upstream catalog itself (`GET
@@ -332,6 +351,12 @@ and logs — one lost window of accounting beats an outage. `/metrics` serves th
 Prometheus text format (`omg_proxy_requests_total` per gateway, outcome and
 status class, plus duration sums and gauges); it is unauthenticated and on the
 same port, so restrict it at the ingress if the deployment faces the internet.
+
+`OMG_RETENTION_DAYS` prunes the request log at boot. Past the cutoff it deletes
+`request.observed` events, `rm_requests_tail` rows and `rm_request_stats` buckets
+— the request log, not the audit log, so "who changed what" is never on a timer.
+`0`, the default, keeps everything. There is no in-process scheduler: the window
+is a deployment decision, and a pod that restarts is a pod that prunes.
 
 ## Configuration as code
 
@@ -377,7 +402,11 @@ omission. Built-in roles (`owner`, `viewer`) may be named but not redefined.
 Applying the file obeys the same delegation rule as the panel: nobody grants a
 permission it does not hold itself.
 
-`/config` in the UI does the same with a diff-free "validate, then apply".
+`/config` in the UI does the same with **Validate**, **Preview changes** and
+**Apply**. Preview runs the same merge an apply would and prints the result as a
+diff — `+ create`, `~ update` with the fields that differ, `− delete` — without
+touching a command. `prune: true` plus a truncated file is a delete nobody saw
+coming; this is the screen that shows it first, and it needs only `config:read`.
 
 ## Documentation
 

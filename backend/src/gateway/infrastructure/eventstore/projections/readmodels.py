@@ -235,6 +235,7 @@ class ReadModels:
                         rm_api_keys.c.issued_at,
                         rm_api_keys.c.revealed_at,
                         rm_api_keys.c.revealed_by,
+                        rm_api_keys.c.expires_at,
                         (rm_api_keys.c.sealed != "").label("recoverable"),
                     )
                     .where(
@@ -267,6 +268,12 @@ class ReadModels:
                     (rm_api_keys.c.gateway_id == gateway_id)
                     & (rm_api_keys.c.key_hash == key_hash)
                     & rm_api_keys.c.revoked.is_(False)
+                    # `expires_at IS NULL OR > now()`: an expiry column that only
+                    # the panel reads is a promise, not a control.
+                    & (
+                        rm_api_keys.c.expires_at.is_(None)
+                        | (rm_api_keys.c.expires_at > func.now())
+                    )
                 )
             )
 
@@ -310,6 +317,7 @@ class ReadModels:
             rm_requests_tail.c.ip,
             rm_requests_tail.c.tool,
             rm_requests_tail.c.method,
+            rm_requests_tail.c.reason,
             rm_requests_tail.c.occurred_at,
         )
         if gateway_id is not None:
@@ -636,6 +644,31 @@ class ReadModels:
                 )
             }
 
+            # Per-tool counts come from the tail, not from `rm_request_stats`:
+            # the cross-product table is keyed by gateway/outcome/ip so a
+            # dashboard never scans the log, and adding a fourth key for a
+            # query nobody runs every ten seconds would slow every write.
+            tool_query = (
+                select(rm_requests_tail.c.tool, func.count().label("count"))
+                .where(
+                    (rm_requests_tail.c.occurred_at >= boundary)
+                    & rm_requests_tail.c.tool.is_not(None)
+                )
+                .group_by(rm_requests_tail.c.tool)
+                .order_by(func.count().desc())
+            )
+            if gateway_id is not None:
+                tool_query = tool_query.where(
+                    rm_requests_tail.c.gateway_id == gateway_id
+                )
+            if tenant_id is not None:
+                tool_query = tool_query.where(
+                    rm_requests_tail.c.gateway_id.in_(_tenant_gateways(tenant_id))
+                )
+            by_tool = {
+                row[0]: int(row[1]) for row in await session.execute(tool_query)
+            }
+
         points = [
             SeriesPoint(bucket=bucket, count=count)
             for bucket, count in sorted(series.items())
@@ -662,6 +695,7 @@ class ReadModels:
                     key=lambda kv: -sum(kv[1].values()),
                 )
             },
+            by_tool=by_tool,
             series=points,
             busiest=busiest,
         )

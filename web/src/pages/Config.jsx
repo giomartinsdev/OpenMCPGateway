@@ -49,12 +49,33 @@ function summarize(result) {
   return lines.join("\n");
 }
 
+/** The plan, as a diff a person can read before pressing Apply.
+ *
+ *  Apply is a blind write: `prune: true` plus a truncated file is a delete nobody
+ *  saw coming. This is the same merge the apply runs, printed instead of run. */
+function planLines(t, plan) {
+  const lines = [];
+  for (const slug of plan.create ?? []) lines.push(t("+ create {slug}", { slug }));
+  for (const entry of plan.update ?? []) {
+    lines.push(
+      t("~ update {slug}: {fields}", {
+        slug: entry.slug,
+        fields: entry.fields.join(", "),
+      }),
+    );
+  }
+  for (const slug of plan.delete ?? []) lines.push(t("− delete {slug}", { slug }));
+  if (!lines.length) lines.push(t("nothing would change"));
+  return lines;
+}
+
 export function ConfigPage({ me }) {
   const t = useT();
   const canEdit = can(me, "config:write");
   const [yaml, setYaml] = useState(null);
   const [banner, setBanner] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [plan, setPlan] = useState(null);
 
   useEffect(() => {
     api.exportConfig()
@@ -65,20 +86,26 @@ export function ConfigPage({ me }) {
   async function run(action) {
     setBusy(true);
     setBanner(null);
+    setPlan(null);
     try {
       const result = await action(yaml ?? "");
-      setBanner({
-        kind: result.errors?.length ? "err" : "ok",
-        text:
-          action === api.validateConfig
-            ? t("parsed — gateways: {gateways} · roles: {roles} · members: {members} · prune: {prune}", {
-                gateways: result.gateways?.join(", ") || t("none"),
-                roles: result.roles?.join(", ") || t("none"),
-                members: result.members?.join(", ") || t("none"),
-                prune: result.prune,
-              })
-            : summarize(result),
-      });
+      if (action === api.planConfig) {
+        setPlan(result);
+        setBanner(null);
+      } else {
+        setBanner({
+          kind: result.errors?.length ? "err" : "ok",
+          text:
+            action === api.validateConfig
+              ? t("parsed — gateways: {gateways} · roles: {roles} · members: {members} · prune: {prune}", {
+                  gateways: result.gateways?.join(", ") || t("none"),
+                  roles: result.roles?.join(", ") || t("none"),
+                  members: result.members?.join(", ") || t("none"),
+                  prune: result.prune,
+                })
+              : summarize(result),
+        });
+      }
       if (action === api.applyConfig) {
         const fresh = await api.exportConfig();
         setYaml(fresh.yaml);
@@ -106,6 +133,9 @@ export function ConfigPage({ me }) {
           <button onClick={() => run(api.validateConfig)} disabled={busy}>
             {t("Validate")}
           </button>
+          <button onClick={() => run(api.planConfig)} disabled={busy}>
+            {t("Preview changes")}
+          </button>
           {canEdit && (
             <button className="primary" onClick={() => run(api.applyConfig)} disabled={busy}>
               {busy ? t("Working…") : t("Apply")}
@@ -118,6 +148,26 @@ export function ConfigPage({ me }) {
         {banner?.text ||
           t("Validate parses and resolves placeholders without touching state. Apply runs the commands.")}
       </Notice>
+
+      {plan && (
+        <Card
+          title={t("What this apply would change")}
+          actions={
+            <button className="ghost sm" onClick={() => setPlan(null)}>
+              {t("dismiss")}
+            </button>
+          }
+        >
+          <pre className="plan" aria-label={t("Planned changes")}>
+            {planLines(t, plan).join("\n")}
+          </pre>
+          {plan.delete?.length ? (
+            <Notice kind="warn">
+              {t("This apply would delete the gateways above. Removing an entry from the file is a delete when prune is on.")}
+            </Notice>
+          ) : null}
+        </Card>
+      )}
 
       <Card
         title="gateways.yaml"

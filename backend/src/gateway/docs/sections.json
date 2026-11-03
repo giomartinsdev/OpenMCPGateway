@@ -56,7 +56,7 @@
         "A gateway is a slug, an upstream URL, and a policy. The slug is global: `/g/<slug>/mcp` is the string people paste into clients, so two tenants cannot both own `rancher`.",
         "One gateway is created for you: `console`, pointing at this deployment's own read-only MCP. The slug is global because `/g/<slug>/mcp` is a public URL, so on a deployment with several tenants the first one takes `console` and the others take `console-<tenant id>` — the id, not a counter, so the address still says whose gateway it is.",
         "`target_url` is the streamable-HTTP endpoint of the upstream, including its path (`http://rancher-mcp.support.svc.cluster.local:8000/mcp`). It must be `http://` or `https://`.",
-        "A gateway also decides *which* tools it exposes. The allowlist is a set of upstream tool names; empty means everything the upstream serves, which is how every gateway starts. A tool outside the list disappears from `tools/list` and a `tools/call` for it answers `403` naming the tool, so a client that kept an old name in its config gets a sentence instead of a silent success or a typo hunt.",
+        "A gateway also decides *which* tools it exposes. The allowlist is a set of upstream tool names; empty means everything the upstream serves, which is how every gateway starts. A tool outside the list disappears from `tools/list` and a `tools/call` for it answers `403` naming the tool, so a client that kept an old name in its config gets a sentence instead of a silent success or a typo hunt. The gateway's page probes the upstream on demand: a real handshake, the tool count, and the reason it failed. A dead upstream used to look like a quiet, healthy gateway.",
         "The panel reads the upstream catalog directly to fill that list - not through the gateway, which would answer with the filter it is already applying. A configured name the upstream no longer serves stays visible and marked, because dropping it silently on the next save would erase a decision the operator made."
       ],
       "table": {
@@ -101,7 +101,7 @@
       "title": "Authentication modes",
       "body": [
         "**`none`** - no authentication. Fine on a private network; the panel warns while any such gateway is enabled.",
-        "**`api_key`** - the caller sends `Authorization: Bearer omg_...`. The key is stored as a SHA-256 hash (that is what authentication compares) next to a sealed copy of the plaintext, encrypted with the deployment secret. The response that mints it returns the plaintext, and the gateway's page carries an eye icon for a key that has never been read: clicking it decrypts the sealed copy, shows the key once, and wipes it. After that the hash is all that remains, and the only way back to a readable key is rotating it.",
+        "**`api_key`** - the caller sends `Authorization: Bearer omg_...`. The key is stored as a SHA-256 hash (that is what authentication compares) next to a sealed copy of the plaintext, encrypted with the deployment secret. The response that mints it returns the plaintext, and the gateway's page carries an eye icon for a key that has never been read: clicking it decrypts the sealed copy, shows the key once, and wipes it. After that the hash is all that remains, and the only way back to a readable key is rotating it. A key can be issued with an expiry. Past it the key no longer authenticates, and a rotation inherits the deadline of the key it replaces — the point of rotating is to change the secret, not to extend how long it is trusted.",
         "**`oauth`** - the gateway is its own OAuth resource server. A client with no token gets a `401` with `WWW-Authenticate: Bearer resource_metadata=...`; it discovers the metadata documents, registers itself, and opens a browser. The operator approves once, and the subject is allowlisted from then on.",
         "The client does not need a token checked into a dotfile for OAuth mode - that is the point. For API-key mode it does, which is why the key is per gateway and revocable on its own.",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
@@ -183,7 +183,7 @@
         "Each list also accepts its own filter fields as query parameters, one box per column in the panel. Text columns match a fragment (`?name=anch` finds `rancher`), `status` and `enabled` match exactly, and every list carries an `id` box for the row you only half copied. An unknown field is a 422 naming the fields that exist — a filter silently ignored is worse than an error.",
         "Ordering is `?sort=<column>&order=asc|desc`. The sortable columns are a closed set per list: gateways by `created_at`, `updated_at`, `name` or `slug`; traffic by `occurred_at`, `duration_ms`, `status` or `subject`; the audit log by `occurred_at`, `actor` or `type`; members by `email` and `created_at`; roles by `name` and `created_at`. An unknown key is a 422 that lists the legal ones.",
         "A cursor means *after this row, in this order*, so it is bound to the sort it was minted under. Change `sort` or `order` and start from the first page: reusing the old cursor is a 422, not a silently holed list.",
-        "Two endpoints do not fit the CRUD shape and are worth knowing: `POST /api/gateways/<id>/keys/<key_id>/reveal` answers the sealed plaintext once and `409` afterwards, and `GET /api/gateways/<id>/upstream-tools` asks the upstream what it serves so the allowlist can be ticked rather than typed. `PUT /api/gateways/<id>/tools` replaces the list."
+        "Two endpoints do not fit the CRUD shape and are worth knowing: `POST /api/gateways/<id>/keys/<key_id>/reveal` answers the sealed plaintext once and `409` afterwards, and `GET /api/gateways/<id>/upstream-tools` asks the upstream what it serves so the allowlist can be ticked rather than typed. `PUT /api/gateways/<id>/tools` replaces the list. `GET /api/requests.csv` answers the same filters as `/requests`, as a file; `POST /api/config/plan` says what an apply would change without changing it, and `POST /api/gateways/<id>/test` probes the upstream with a real MCP handshake."
       ],
       "table": {
         "head": [
@@ -254,6 +254,18 @@
           [
             "GET /api/config/export",
             "Render current state as YAML, without secrets"
+          ],
+          [
+            "GET /api/requests.csv?gateway=&outcome=&subject=…",
+            "The request log as one CSV file: same filters, same tenant scope, bounded by `limit`"
+          ],
+          [
+            "POST /api/config/plan",
+            "What an apply would create, update and delete — without applying it"
+          ],
+          [
+            "POST /api/gateways/{id}/test",
+            "Probe the upstream now: real handshake, tool count, reason"
           ]
         ]
       }
@@ -317,7 +329,7 @@
         "Rate limiting is a sliding window per (gateway, caller). With `OMG_REDIS_URL` set, the counters live in Redis and every replica shares them, so `replicas: 2` means the configured limit and not twice it. Without it the limiter is in-process: correct for a single replica, N times the limit at N. A Redis that is down fails open and logs - one lost window of accounting beats an outage.",
         "OAuth proxy state (client registrations, upstream tokens, `jti` mappings) lives in the same Postgres, encrypted at rest, so a rollout does not log every connected client out. That part is already replica-safe, and with `OMG_REDIS_URL` set the limiter is too.",
         "State is event-sourced. Every change is an append-only event and the read models are projections of it, which is what makes the audit log trustworthy and lets two replicas share one database without a cache-coherence story.",
-        "The schema is versioned in code (`infrastructure/db/migrations.py`): a numbered list of steps, recorded in `schema_migrations`. Boot applies whatever this build has not applied yet, so an upgrade is a rollout, not a manual `psql` session. The read models live in their own schema, `readmodels` — every table prefixed `rm_` — while `events`, the uniqueness tables and the history stay in `public`. That split is the point: a projection is rebuildable from the log, so `DROP SCHEMA readmodels CASCADE` followed by a boot is a safe reset that the next boot notices and repairs. Nothing the log depends on is in there.",
+        "The schema is versioned in code (`infrastructure/db/migrations.py`): a numbered list of steps, recorded in `schema_migrations`. Boot applies whatever this build has not applied yet, so an upgrade is a rollout, not a manual `psql` session. The read models live in their own schema, `readmodels` — every table prefixed `rm_` — while `events`, the uniqueness tables and the history stay in `public`. That split is the point: a projection is rebuildable from the log, so `DROP SCHEMA readmodels CASCADE` followed by a boot is a safe reset that the next boot notices and repairs. Nothing the log depends on is in there. `OMG_RETENTION_DAYS` prunes the request log at boot. Past the cutoff, `request.observed` events, `rm_requests_tail` and `rm_request_stats` are deleted; audit events never are, because the log of who changed what is not the log of who called. `0`, the default, keeps everything.",
         "`GET /metrics` serves Prometheus's text format: `omg_proxy_requests_total` per gateway, outcome and status class; `omg_proxy_request_duration_ms_sum` to divide by the count for a mean; and gauges for live gateways, pending gateways, dropped observations and which rate-limit backend is in use. It is unauthenticated and on the same port, so restrict it at the ingress if the deployment faces the internet. Counters are in-process: with several replicas each pod is a series and `sum by (gateway)` is the correct query."
       ],
       "table": {
@@ -396,6 +408,10 @@
           [
             "OMG_REDIS_URL",
             "Optional; shared rate-limit counters instead of in-process"
+          ],
+          [
+            "OMG_RETENTION_DAYS",
+            "Delete request-log rows and request read models older than N days, at boot. `0` (default) keeps everything; audit events are never pruned"
           ]
         ]
       }

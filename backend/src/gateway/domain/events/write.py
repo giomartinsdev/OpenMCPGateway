@@ -5,6 +5,7 @@ These are the events the command handler appends. Read models consume them too
 so renaming one is a domain change, not a reporting change.
 """
 
+from datetime import datetime
 
 from pydantic import Field
 
@@ -192,6 +193,10 @@ class ApiKeyIssued(Event):
     # issued it can still read it once from the panel. Empty for keys minted
     # before sealing existed, and wiped the moment the key is revealed.
     sealed: str = ""
+    #: When this key stops being accepted. `None` means never, which is what
+    #: every key issued before this field existed gets — a key that silently
+    #: expired on upgrade would take a production integration down.
+    expires_at: datetime | None = None
 
 
 class ApiKeyRevealed(Event):
