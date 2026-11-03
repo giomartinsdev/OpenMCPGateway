@@ -103,6 +103,26 @@ Feature: Cursor pagination and filtering on every list
     Then the list includes a gateway called "console"
     And its target is this deployment's console
 
+  Scenario: A tenant that predates the seed gets one on the next boot
+    # "The feature exists but mine is missing" is worse than no feature: a
+    # deployment upgraded to this version has tenants that never saw `create`,
+    # so no gateway row for the console exists at all.
+    Given the owner has 3 gateways
+    And the tenant's console gateway row is removed
+    When the console backfill runs
+    And the owner lists gateways
+    Then the gateway list counts 4 gateways
+
+  Scenario: A console gateway the owner deleted stays deleted
+    # "Missing" has to mean missing, not soft-deleted: a backfill that resurrects a
+    # gateway someone removed is a feature arguing with its owner.
+    Given the owner has 3 gateways
+    And the tenant's console gateway is deleted
+    When the console backfill runs
+    And the console backfill runs
+    And the owner lists gateways
+    Then the gateway list counts 3 gateways
+
   Scenario: A console token reads the deployment but cannot change it
     # The console MCP is what an agent plugs into; the token is the whole
     # boundary between "read the logs" and "operate the deployment".

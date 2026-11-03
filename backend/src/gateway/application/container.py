@@ -92,6 +92,10 @@ class Container(BaseModel):
         await container.router.refresh()
         await bootstrap_admin(container)
         await adopt_legacy_tenants(container)
+        # Imported here: the tenant service imports this module for the type.
+        from gateway.application.services.tenants import backfill_console_gateways
+
+        await backfill_console_gateways(container)
         return container
 
     async def refresh_router(self) -> None:

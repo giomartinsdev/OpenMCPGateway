@@ -166,6 +166,7 @@ export function Roles({ me }) {
                     />
                     <th>Permissions</th>
                     <th className="num">Holders</th>
+                    <th>ID</th>
                     <th />
                   </tr>
                   <FilterRow
@@ -173,7 +174,8 @@ export function Roles({ me }) {
                       { key: "name", label: "Role" },
                       null,
                       null,
-                      { key: "id", label: "ID", placeholder: "role_…" },
+                      { key: "id", label: "ID" },
+                      null,
                     ]}
                     value={filters}
                     onChange={setFilters}
@@ -182,10 +184,7 @@ export function Roles({ me }) {
                 <tbody>
                   {rows.map((role) => (
                     <tr key={role.id}>
-                      <td className="strong nowrap">
-                        {role.name}
-                        <div className="sub-line">{role.id}</div>
-                      </td>
+                      <td className="strong nowrap">{role.name}</td>
                       <td>
                         <div className="row" style={{ gap: 4 }}>
                           {role.permissions.length === 0 ? (
@@ -202,6 +201,7 @@ export function Roles({ me }) {
                       <td className="num">
                         {role.builtin ? <Badge kind="purple">built-in</Badge> : role.holders}
                       </td>
+                      <td className="mono hint">{role.id}</td>
                       <td className="actions">
                         {canWrite && !role.builtin && (
                           <>

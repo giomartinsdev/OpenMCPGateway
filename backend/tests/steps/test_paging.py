@@ -155,6 +155,58 @@ def list_includes(listing: dict, slug: str) -> None:
     assert slug in slugs, listing
 
 
+@given("the tenant's console gateway row is removed")
+def remove_console_row(account: dict, container, runner) -> None:
+    """A tenant that never saw the seed: no rows at all, not a soft-deleted one.
+
+    Both tables, because a slug is claimed in `gateway_slugs` before the gateway
+    is projected: leaving that row behind is what a tenant that never ran the
+    seed would *not* have, and the re-seed would then pick `console-2`.
+    """
+    from sqlalchemy import delete as sql_delete
+
+    from gateway.infrastructure.db.tables import gateway_slugs, rm_gateways
+
+    listing = account["browser"].get("/api/gateways").json()
+    console = next(g for g in listing["gateways"] if g["slug"].startswith("console"))
+
+    async def remove() -> None:
+        async with container.database.session() as session, session.begin():
+            await session.execute(
+                sql_delete(rm_gateways).where(rm_gateways.c.id == console["id"])
+            )
+            await session.execute(
+                sql_delete(gateway_slugs).where(
+                    gateway_slugs.c.aggregate_id == console["id"]
+                )
+            )
+
+    runner.run(remove())
+
+
+@given("the tenant's console gateway is deleted", target_fixture="deleted")
+def delete_console(account: dict) -> str:
+    """Delete the seeded gateway, then let the projections catch up."""
+    listing = account["browser"].get("/api/gateways").json()
+    gateway = next(g for g in listing["gateways"] if g["slug"].startswith("console"))
+    response = account["browser"].delete(f"/api/gateways/{gateway['id']}")
+    assert response.status_code in (200, 204), response.text
+    return gateway["id"]
+
+
+@when("the console backfill runs", target_fixture="seeded")
+def run_backfill(container, runner) -> int:
+    from gateway.application.services.tenants import backfill_console_gateways
+
+    return runner.run(backfill_console_gateways(container))
+
+
+@then(parsers.parse("the gateway list counts {count:d} gateways"))
+def gateway_count(account: dict, count: int) -> None:
+    listing = account["browser"].get("/api/gateways").json()
+    assert len(listing["gateways"]) == count, listing
+
+
 @then("its target is this deployment's console")
 def target_is_console(listing: dict) -> None:
     """The seeded gateway points at `/mcp` of this very deployment.

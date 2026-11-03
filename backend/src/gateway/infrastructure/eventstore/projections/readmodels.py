@@ -468,6 +468,48 @@ class ReadModels:
             )
         return result.rowcount or 0
 
+    async def tenants_without_console_gateway(
+        self, target_url: str
+    ) -> list[dict[str, str]]:
+        """Tenants with no gateway pointing at `target_url`, and who to key it for.
+
+        The seed runs when a tenant is created, which is right for a new tenant
+        and useless for every existing one. This is the boot-time counterpart,
+        and it reads "missing" as a fact rather than a flag: a tenant that deleted
+        its console gateway has a row with `deleted = true` and a matching URL, so
+        it is not recreated behind the owner's back.
+
+        One row per tenant, the earliest owner as the credential's subject: the
+        account that made the tenant is the one whose permissions the console
+        token mirrors.
+        """
+        owned = (
+            rm_operators.c.is_admin.is_(True)
+            | rm_operators.c.role_ids.contains([OWNER_ROLE])
+        )
+        has_console = (
+            select(rm_gateways.c.id)
+            .where(
+                (rm_gateways.c.tenant_id == rm_tenants.c.id)
+                & (rm_gateways.c.target_url == target_url)
+            )
+            .exists()
+        )
+        query = (
+            select(
+                rm_tenants.c.id.label("tenant_id"),
+                rm_operators.c.id.label("owner_id"),
+                rm_operators.c.email.label("email"),
+            )
+            .join(rm_operators, rm_operators.c.tenant_id == rm_tenants.c.id)
+            .where(owned & ~has_console)
+            .distinct(rm_tenants.c.id)
+            .order_by(rm_tenants.c.id, rm_operators.c.created_at)
+        )
+        async with self._db.session() as session:
+            rows = (await session.execute(query)).mappings()
+            return [dict(row) for row in rows]
+
     async def operator_tenant(self, operator_id: str) -> str | None:
         """The tenant an account belongs to, read fresh.
 

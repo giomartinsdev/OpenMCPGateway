@@ -145,6 +145,7 @@ export function Members({ me }) {
                       onSort={setSort}
                       className="num"
                     />
+                    <th>ID</th>
                     <th />
                   </tr>
                   <FilterRow
@@ -152,7 +153,8 @@ export function Members({ me }) {
                       { key: "email", label: "Email" },
                       null,
                       null,
-                      { key: "id", label: "ID", placeholder: "op_…" },
+                      { key: "id", label: "ID" },
+                      null,
                     ]}
                     value={filters}
                     onChange={setFilters}
@@ -170,6 +172,7 @@ export function Members({ me }) {
                         </div>
                       </td>
                       <td className="num hint">{relative(operator.created_at)}</td>
+                      <td className="mono hint">{operator.operator_id}</td>
                       <td className="actions">
                         {canAssign && (
                           <button

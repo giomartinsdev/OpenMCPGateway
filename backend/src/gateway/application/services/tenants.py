@@ -109,6 +109,41 @@ async def seed_console_gateway(
     return {"id": gateway_id, "slug": slug, "api_key": api_key}
 
 
+async def backfill_console_gateways(container: Container) -> int:
+    """Give tenants that predate the seed the same console gateway.
+
+    The seed on `create` only ever helps new tenants; a deployment upgraded to
+    this version has tenants that never saw it, and "the feature exists but mine
+    is missing" is worse than no feature. Runs on every boot and is idempotent:
+    the query asks for tenants whose gateway *rows* for this URL are gone, and a
+    deleted gateway still has its row, so an owner who removed theirs keeps it
+    removed.
+
+    Failures are per tenant and logged: a boot must not fail because one tenant's
+    seed did.
+    """
+    seeded = 0
+    for row in await container.read_models.tenants_without_console_gateway(
+        f"{container.settings.base_url}/mcp"
+    ):
+        try:
+            await seed_console_gateway(
+                container,
+                row["tenant_id"],
+                owner_id=row["owner_id"],
+                email=row["email"],
+            )
+            seeded += 1
+        except Exception as exc:
+            log.warning(
+                "tenant.console_gateway_backfill_failed",
+                tenant_id=row["tenant_id"],
+                error=repr(exc),
+            )
+    if seeded:
+        log.info("tenancy.seeded_console_gateways", tenants=seeded)
+    return seeded
+
 async def join(container: Container, caller: Caller, code: str) -> dict[str, Any]:
     """Join with the code the tenant's owner shared."""
     return await container.commands.join_tenant(
@@ -133,4 +168,11 @@ async def current(container: Container, caller: Caller) -> dict[str, Any]:
     }
 
 
-__all__ = ["CONSOLE_SLUG", "create", "current", "join", "seed_console_gateway"]
+__all__ = [
+    "CONSOLE_SLUG",
+    "backfill_console_gateways",
+    "create",
+    "current",
+    "join",
+    "seed_console_gateway",
+]

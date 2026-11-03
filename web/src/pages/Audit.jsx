@@ -8,11 +8,12 @@ import {
 // The filter fields are the table's own labels, in the table's own order, which
 // is why this is a list of objects and not a toolbar of inputs.
 const FIELDS = [
-  { key: "id", label: "#", placeholder: "event id" },
+  null, // the sequence number is not a filter
   { key: "type", label: "Type" },
   { key: "aggregate", label: "Aggregate" },
   { key: "actor", label: "Actor" },
   null, // when: `since`/`until` are a range, and a range is not a text box
+  { key: "id", label: "ID" },
 ];
 
 const SORTS = { occurred_at: "desc", actor: "asc", type: "asc" };
@@ -78,6 +79,7 @@ export function Audit() {
                       onSort={setSort}
                       className="num"
                     />
+                    <th>ID</th>
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
@@ -89,6 +91,7 @@ export function Audit() {
                       <td className="mono hint">{event.aggregate_id}</td>
                       <td className="hint">{event.actor || "—"}</td>
                       <td className="num hint nowrap">{relative(event.occurred_at)}</td>
+                      <td className="mono hint">{event.event_id}</td>
                     </tr>
                   ))}
                 </tbody>

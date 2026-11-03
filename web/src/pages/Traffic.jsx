@@ -22,14 +22,15 @@ const OUTCOME_LABEL = {
 
 // One filter per column, under the column's own label.
 const FIELDS = [
-  { key: "id", label: "When", placeholder: "call id" },
+  null, // when: the window selector above already says it
   { key: "gateway", label: "Gateway" },
   { key: "subject", label: "Subject" },
   { key: "outcome", label: "Outcome" },
   { key: "status", label: "Status" },
-  null, // latency is a number, and nobody sorts a log by typing milliseconds
+  null, // latency is a number, and nobody filters a log by milliseconds
   { key: "tool", label: "Tool" },
   { key: "ip", label: "IP" },
+  { key: "id", label: "ID" },
 ];
 
 const SORTS = { occurred_at: "desc", duration_ms: "desc", status: "asc", subject: "asc" };
@@ -212,6 +213,7 @@ export function Traffic() {
                     />
                     <th>Tool</th>
                     <th>IP</th>
+                    <th>ID</th>
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
@@ -226,6 +228,7 @@ export function Traffic() {
                       <td className="num">{request.duration_ms} ms</td>
                       <td className="mono hint">{request.tool || "—"}</td>
                       <td className="mono hint">{request.ip || "—"}</td>
+                      <td className="mono hint">{request.event_id}</td>
                     </tr>
                   ))}
                 </tbody>

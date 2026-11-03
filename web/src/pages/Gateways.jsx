@@ -18,7 +18,8 @@ const FIELDS = [
   { key: "auth_mode", label: "Auth" },
   null,
   { key: "enabled", label: "Status" },
-  { key: "id", label: "ID", placeholder: "gw_…" },
+  null,
+  { key: "id", label: "ID" },
 ];
 
 // Which column each header sorts by, and the direction its data suggests.
@@ -179,6 +180,7 @@ export function Gateways({ me }) {
                       onSort={setSort}
                       className="num"
                     />
+                    <th>ID</th>
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
@@ -211,6 +213,7 @@ export function Gateways({ me }) {
                         </Badge>
                       </td>
                       <td className="num hint">{relative(gateway.updated_at)}</td>
+                      <td className="mono hint">{gateway.id}</td>
                     </tr>
                   ))}
                 </tbody>
