@@ -82,7 +82,9 @@ test("the latency card reports the tail, not only the average", async ({ page })
   });
 
   await page.goto("/#/traffic");
-  const latency = page.locator(".stat", { hasText: "Avg latency" });
+  // The skeleton paints a placeholder stat while the first read is in flight,
+  // so two nodes can match during the swap; the last one is the real card.
+  const latency = page.locator(".stat", { hasText: "Avg latency" }).last();
   // The percentiles ride in the hint of the average: a percentile is a second
   // reading of the same number, not a fifth card.
   await expect(latency).toContainText(/p95 \d+ ms · p99 \d+ ms/, { timeout: 15_000 });
