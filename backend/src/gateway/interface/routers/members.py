@@ -35,6 +35,8 @@ async def list_operators(
         principal.caller,
         window=page.window,
         filters=filters(request, MEMBER_FILTERS),
+        sort=page.sort,
+        order=page.order,
     )
     return {"operators": result.items, "next": result.next}
 

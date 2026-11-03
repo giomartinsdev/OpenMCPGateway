@@ -3,12 +3,15 @@
 Offset pagination renumbers the page on every write and skips rows when the table
 grows underneath the reader; a cursor names a *position* instead.
 
-Convention: rows are ordered by `(at, id)`. The `id` is part of the cursor because
-two requests in the same millisecond are not an order — a page boundary between
-them would duplicate or drop one, and only a tiebreaker makes "next" exact.
+Convention: rows are ordered by `(sort column, id)`. The `id` is part of the
+cursor because two rows with the same value are not an order — a page boundary
+between them would duplicate or drop one, and only a tiebreaker makes "next"
+exact.
 
 The cursor is opaque on purpose: handing back `at=...&id=...` invites clients to
-build their own, and then the encoding is a compatibility promise.
+build their own, and then the encoding is a compatibility promise. It also
+carries the sort it was minted under, because a cursor means "everything after
+this row *in this order*" and is meaningless under a different one.
 """
 
 import base64
@@ -25,28 +28,62 @@ from pydantic import BaseModel
 MAX_LIMIT = 200
 DEFAULT_LIMIT = 50
 
+#: How a sort value travels in the cursor. Without the tag, a role called
+#: `2026-11-03T00:00:00` would decode as a datetime and compare against the wrong
+#: type.
+TIME = "dt"
+TEXT = "str"
+INT = "int"
+
 
 class InvalidCursor(ValueError):
-    """The cursor is not one this API issued."""
+    """The cursor is not one this API issued, or not for this ordering."""
+
+
+@dataclass(frozen=True)
+class Sort:
+    """One legal order for a list: the name clients use, and the column behind it.
+
+    `desc` is the *default* direction; a request may flip it. Keeping the default
+    next to the column means the newest-first lists and the alphabetical ones
+    declare their own intent instead of sharing a guess.
+    """
+
+    key: str
+    column: str
+    kind: str = TEXT
+    desc: bool = False
 
 
 @dataclass(frozen=True)
 class Cursor:
-    """Where a page ended: the sort values of its last row.
+    """Where a page ended: the sort values of its last row, and the order used.
 
-    `at` is a datetime for a time-ordered list (traffic, audit, gateways) and a
-    string for one ordered by a label (roles by name). The kind travels with the
-    value so decoding never has to guess: a role called `2026-11-03T00:00:00`
-    would otherwise come back as a timestamp and compare against the wrong type.
+    `at` is a datetime for a time-ordered list, an int for a numeric one, and a
+    string for one ordered by a label.
     """
 
-    at: datetime | str
+    at: datetime | str | int
     id: str
+    #: Sort key this cursor was minted under. Empty means "unknown", which is only
+    #: true of cursors issued before sorting existed; they are accepted as is.
+    sort: str = ""
+    desc: bool = True
 
     def encode(self) -> str:
-        kind = "dt" if isinstance(self.at, datetime) else "str"
-        value = self.at.isoformat() if isinstance(self.at, datetime) else str(self.at)
-        raw = json.dumps({"k": kind, "at": value, "id": self.id})
+        kind = TIME if isinstance(self.at, datetime) else TEXT
+        if isinstance(self.at, int):
+            kind = INT
+        value = self.at.isoformat() if isinstance(self.at, datetime) else self.at
+        raw = json.dumps(
+            {
+                "k": kind,
+                "at": value,
+                "id": self.id,
+                "s": self.sort,
+                "d": 1 if self.desc else 0,
+            }
+        )
         return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
 
     @classmethod
@@ -55,9 +92,17 @@ class Cursor:
             padded = value + "=" * (-len(value) % 4)
             body = json.loads(base64.urlsafe_b64decode(padded.encode()))
             at = body["at"]
-            if body.get("k") == "dt":
+            kind = body.get("k")
+            if kind == TIME:
                 at = datetime.fromisoformat(at)
-            return cls(at=at, id=str(body["id"]))
+            elif kind == INT:
+                at = int(at)
+            return cls(
+                at=at,
+                id=str(body["id"]),
+                sort=str(body.get("s") or ""),
+                desc=bool(body.get("d", 1)),
+            )
         except (ValueError, KeyError, TypeError, binascii.Error) as exc:
             raise InvalidCursor(f"not a cursor: {value!r}") from exc
 
@@ -90,12 +135,30 @@ class Window:
         )
 
 
+def same_order(window: Window, sort: Sort) -> None:
+    """Refuse a cursor that was minted under a different order.
+
+    Silently reusing it would page through rows compared against the wrong
+    column: no error, just a list with holes in it.
+    """
+    before = window.before
+    if before is None or not before.sort:
+        return
+    if before.sort != sort.key or before.desc != sort.desc:
+        direction = "desc" if before.desc else "asc"
+        raise InvalidCursor(
+            f"cursor was minted for sort={before.sort} {direction}; "
+            f"this request sorts by {sort.key} {'desc' if sort.desc else 'asc'}. "
+            "Start from the first page when changing the order."
+        )
+
+
 def cut(
     rows: list[dict[str, Any]],
     window: Window,
+    sort: Sort,
     *,
-    at: str = "occurred_at",
-    id: str = "event_id",
+    id: str = "id",
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Trim a page that was fetched with `limit + 1` rows.
 
@@ -106,15 +169,22 @@ def cut(
         return rows, None
     items = rows[: window.limit]
     last = items[-1]
-    return items, Cursor(at=last[at], id=str(last[id])).encode()
+    return items, Cursor(
+        at=last[sort.column], id=str(last[id]), sort=sort.key, desc=sort.desc
+    ).encode()
 
 
 __all__ = [
     "DEFAULT_LIMIT",
+    "INT",
     "MAX_LIMIT",
+    "TEXT",
+    "TIME",
     "Cursor",
     "InvalidCursor",
     "Page",
+    "Sort",
     "Window",
     "cut",
+    "same_order",
 ]

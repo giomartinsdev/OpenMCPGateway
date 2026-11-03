@@ -29,6 +29,11 @@ const FEATURES = [
     body: "Export the tenant to YAML, edit it, apply it back. Both paths reach one command handler, so they cannot disagree.",
   },
   {
+    icon: "log",
+    title: "A console you can ask",
+    body: "Every tenant ships with a gateway to this deployment's own read-only MCP. Point an agent at /g/console/mcp and ask what broke, or what the audit log says.",
+  },
+  {
     icon: "tn",
     title: "Tenants, not accounts",
     body: "Gateways, roles, members and traffic are scoped to a tenant. A guessed id from another one is a 404.",
@@ -46,7 +51,7 @@ const STEPS = [
   },
   {
     title: "Paste the endpoint",
-    body: "Copy /g/<slug>/mcp into your client. For OAuth, the client discovers the rest from the 401 challenge on its own.",
+    body: "Copy /g/<slug>/mcp into your client. For OAuth, the client discovers the rest from the 401 challenge on its own. Every tenant starts with one gateway already there: /g/console/mcp, the deployment's own read-only console.",
   },
 ];
 
@@ -96,7 +101,9 @@ export function Landing({ onLogin }) {
           <p className="lead">
             One endpoint per server, an identity provider you already run, and a call
             log that answers "who used this and what broke". No static token copied
-            into five laptops.
+            into five laptops — and every new tenant starts with a gateway to the
+            deployment's own read-only console, so there is something to ask on day
+            one.
           </p>
           <div className="cta">
             <a className="cta-primary" href="#signin">Open the panel</a>

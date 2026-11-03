@@ -26,8 +26,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
 from gateway.domain.events import ALL_EVENTS, Event
-from gateway.domain.filters import Clause
-from gateway.domain.paging import Window, cut
+from gateway.domain.filters import EVENT_SORTS, Clause
+from gateway.domain.paging import Sort, Window, cut
 from gateway.infrastructure.db.database import Database
 from gateway.infrastructure.db.query import paged, predicates
 from gateway.infrastructure.db.tables import (
@@ -205,6 +205,7 @@ class PostgresEventStore:
         *,
         aggregate_ids: Sequence[str] | None = None,
         clauses: Iterable[Clause] = (),
+        sort: Sort | None = None,
     ) -> tuple[list[dict[str, Any]], str | None]:
         """A page of the audit log, newest first, plus the next cursor.
 
@@ -217,10 +218,11 @@ class PostgresEventStore:
             query = query.where(events.c.aggregate_id.in_(list(aggregate_ids)))
         for predicate in predicates(events, clauses):
             query = query.where(predicate)
-        query = paged(query, events, window, at="occurred_at", id="event_id")
+        order = sort or EVENT_SORTS.resolve(None)
+        query = paged(query, events, window, order, id="event_id")
         async with self._db.session() as session:
             rows = [dict(row) for row in (await session.execute(query)).mappings()]
-        items, next_cursor = cut(rows, window, at="occurred_at", id="event_id")
+        items, next_cursor = cut(rows, window, order, id="event_id")
         return [
             {
                 "global_seq": row["global_seq"],

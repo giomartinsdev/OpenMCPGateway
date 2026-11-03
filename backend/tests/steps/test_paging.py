@@ -142,6 +142,94 @@ def filter_refused(attempt: httpx.Response, fragment: str) -> None:
     assert fragment in attempt.json()["detail"], attempt.text
 
 
+@when("the owner lists gateways", target_fixture="listing")
+def list_gateways(account: dict) -> dict:
+    response = account["browser"].get("/api/gateways")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@then(parsers.parse('the list includes a gateway called "{slug}"'))
+def list_includes(listing: dict, slug: str) -> None:
+    slugs = [gateway["slug"] for gateway in listing["gateways"]]
+    assert slug in slugs, listing
+
+
+@then("its target is this deployment's console")
+def target_is_console(listing: dict) -> None:
+    """The seeded gateway points at `/mcp` of this very deployment.
+
+    Asserted on the path rather than the host, because the host is whatever the
+    deployment calls itself; the path is what makes it the console.
+    """
+    [gateway] = [g for g in listing["gateways"] if g["slug"] == "console"]
+    assert gateway["target_url"].endswith("/mcp"), gateway
+    assert gateway["auth_mode"] == "api_key", gateway
+
+
+@when("the owner lists gateways filtered by the first gateway's id",
+      target_fixture="listing")
+def filtered_by_id(account: dict, gateways: list[dict]) -> dict:
+    gateway_id = gateways[0]["id"]
+    # The middle of the id, not the whole thing: that is how someone reads it off
+    # a URL or a log line.
+    response = account["browser"].get(f"/api/gateways?id={gateway_id[3:-3]}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _sorted(account: dict, order: str) -> dict:
+    response = account["browser"].get(f"/api/gateways?sort=name&order={order}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@when(parsers.parse("the owner lists gateways sorted by name {order}"),
+      target_fixture="listing")
+def sorted_by_name(account: dict, order: str) -> dict:
+    return _sorted(account, "asc" if order == "ascending" else "desc")
+
+
+@then(parsers.parse("the gateway names are in {order} order"))
+def names_in_order(listing: dict, order: str) -> None:
+    names = [gateway["name"] for gateway in listing["gateways"]]
+    assert names == sorted(names, reverse=order == "descending"), names
+
+
+@given("the owner has a cursor from the gateway list sorted by name",
+       target_fixture="cursor")
+def cursor_from_name_sort(account: dict) -> str:
+    response = account["browser"].get("/api/gateways?sort=name&order=asc&limit=1")
+    assert response.status_code == 200, response.text
+    assert response.json()["next"], response.text
+    return response.json()["next"]
+
+
+@when("the owner asks for the next page sorted by slug", target_fixture="attempt")
+def next_page_other_sort(account: dict, cursor: str) -> httpx.Response:
+    return account["browser"].get(f"/api/gateways?sort=slug&before={cursor}")
+
+
+@when(parsers.parse('the owner lists gateways sorted by "{key}"'),
+      target_fixture="attempt")
+def sorted_by_unknown(account: dict, key: str) -> httpx.Response:
+    return account["browser"].get(f"/api/gateways?sort={key}")
+
+
+@then(parsers.parse('the sort is refused naming "{fragment}"'))
+def sort_refused(attempt: httpx.Response, fragment: str) -> None:
+    assert attempt.status_code == 422, attempt.text
+    assert fragment in attempt.json()["detail"], attempt.text
+
+
+@when("the owner lists requests sorted by duration descending",
+      target_fixture="listing")
+def requests_by_duration(account: dict) -> dict:
+    response = account["browser"].get("/api/requests?sort=duration_ms&order=desc")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 @when(
     parsers.parse('the owner lists gateways with the cursor "{cursor}"'),
     target_fixture="attempt",
@@ -219,6 +307,11 @@ def events_by_type(account: dict, kind: str) -> dict:
 @then(parsers.parse("the event list has {count:d} rows"))
 def event_list_count(listing: dict, count: int) -> None:
     assert len(listing["events"]) == count, listing
+
+
+@then(parsers.parse("the event list has at least {count:d} rows"))
+def event_list_at_least(listing: dict, count: int) -> None:
+    assert len(listing["events"]) >= count, listing
 
 
 @then(parsers.parse('every event is a "{kind}"'))

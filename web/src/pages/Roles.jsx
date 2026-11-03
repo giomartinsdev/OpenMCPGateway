@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
+import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Card, Empty, Notice, Skeleton, SAMPLE_ROLES, can,
 } from "../ui.jsx";
@@ -12,14 +12,15 @@ export function Roles({ me }) {
   const canWrite = can(me, "roles:write");
   const [catalog, setCatalog] = useState([]);
   const [filters, setFilters] = useState({});
+  const [sort, setSort] = useSort("name", { name: "asc" });
   const {
     items: roles, next, busy: listBusy, more, reload,
   } = usePagedList(
-    async ({ limit, before, ...fields }) => {
-      const page = await api.roles({ limit, before, ...fields });
+    async ({ limit, before, ...query }) => {
+      const page = await api.roles({ limit, before, ...query });
       return { items: page.roles, next: page.next };
     },
-    filters,
+    { ...filters, ...sort },
   );
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
@@ -157,13 +158,23 @@ export function Roles({ me }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Role</th>
+                    <SortHeader
+                      field="name"
+                      label="Role"
+                      sort={sort}
+                      onSort={setSort}
+                    />
                     <th>Permissions</th>
                     <th className="num">Holders</th>
                     <th />
                   </tr>
                   <FilterRow
-                    fields={[{ key: "name", label: "Role" }, null, null, null]}
+                    fields={[
+                      { key: "name", label: "Role" },
+                      null,
+                      null,
+                      { key: "id", label: "ID", placeholder: "role_…" },
+                    ]}
                     value={filters}
                     onChange={setFilters}
                   />

@@ -8,13 +8,15 @@ Feature: Cursor pagination and filtering on every list
   # the last page happened to contain — and the row you are looking for is the
   # one that did not fit.
 
+  # Every tenant ships with one gateway of its own (the console), so the counts
+  # below are always "the ones this scenario made, plus that one".
   Background:
     Given the owner registered
 
   Scenario: The gateway list answers with a cursor
     Given the owner has 3 gateways
-    When the owner pages through the gateway list with a limit of 2
-    Then the first page has 2 gateways
+    When the owner pages through the gateway list with a limit of 3
+    Then the first page has 3 gateways
     And the first page offers a next cursor
     And the second page has 1 gateway
     And the second page offers no next cursor
@@ -38,6 +40,33 @@ Feature: Cursor pagination and filtering on every list
     When the owner lists gateways filtered by "outcame" "allowed"
     Then the filter is refused naming "outcame"
 
+  Scenario: A filter by id finds a row whose id you only half remember
+    Given the owner has 3 gateways
+    When the owner lists gateways filtered by the first gateway's id
+    Then the list has 1 gateway
+    And the gateway is "rancher"
+
+  Scenario: The gateway list sorts by name, both ways
+    Given the owner has 3 gateways
+    When the owner lists gateways sorted by name ascending
+    Then the gateway names are in ascending order
+    When the owner lists gateways sorted by name descending
+    Then the gateway names are in descending order
+
+  Scenario: A cursor is refused when the order changed under it
+    # A cursor means "after this row, in this order". Silently reusing it under
+    # another order pages through a different comparison and loses rows without
+    # ever saying so.
+    Given the owner has 3 gateways
+    And the owner has a cursor from the gateway list sorted by name
+    When the owner asks for the next page sorted by slug
+    Then the cursor is refused
+
+  Scenario: A sort nobody declared is refused, naming the ones that exist
+    Given the owner has 3 gateways
+    When the owner lists gateways sorted by "password"
+    Then the sort is refused naming "password"
+
   Scenario: A cursor from another list is refused
     Given the owner has 3 gateways
     When the owner lists gateways with the cursor "not-a-cursor"
@@ -53,8 +82,14 @@ Feature: Cursor pagination and filtering on every list
   Scenario: The audit log filters by event type
     Given the owner has 3 gateways
     When the owner lists events filtered by type "gateway.created"
-    Then the event list has 3 rows
+    Then the event list has at least 3 rows
     And every event is a "gateway.created"
+
+  Scenario: The request log sorts by how slow the call was
+    Given the owner has 3 gateways
+    And 5 requests were recorded, 2 of them refused
+    When the owner lists requests sorted by duration descending
+    Then the request list has 5 rows
 
   Scenario: Members and roles page too
     Given the owner has 3 gateways
@@ -62,6 +97,11 @@ Feature: Cursor pagination and filtering on every list
     When the owner pages through the member list with a limit of 2
     Then the first member page has 2 members
     And the member page offers a next cursor
+
+  Scenario: A new tenant gets a gateway to the deployment's own console
+    When the owner lists gateways
+    Then the list includes a gateway called "console"
+    And its target is this deployment's console
 
   Scenario: A console token reads the deployment but cannot change it
     # The console MCP is what an agent plugs into; the token is the whole

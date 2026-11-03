@@ -43,6 +43,7 @@
         "You need a Postgres the gateway can reach and a hostname that terminates TLS in front of it.",
         "```bash\n# 1. run it\nexport OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg\nexport OMG_SESSION_SECRET=$(openssl rand -hex 32)\nexport OMG_BASE_URL=https://gateway.example.com\nomg serve\n\n# 2. create the first account, then a tenant, in the browser\nopen https://gateway.example.com\n```",
         "The first account creates a tenant and becomes its `owner`. Everyone else either joins with the tenant's join code or is added by an administrator.",
+        "The tenant arrives with a `console` gateway already pointing at this deployment's own read-only MCP. Point an agent at `/g/console/mcp` with the API key from its page and ask it what the deployment is doing — no upstream to configure.",
         "Point a client at a gateway as soon as one exists:",
         "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"my-server\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/g/my-server/mcp\"\n    }\n  }\n}\n```"
       ]
@@ -52,6 +53,7 @@
       "title": "Gateways",
       "body": [
         "A gateway is a slug, an upstream URL, and a policy. The slug is global: `/g/<slug>/mcp` is the string people paste into clients, so two tenants cannot both own `rancher`.",
+        "One gateway is created for you and cannot be confused with a hand-made one: `console`, pointing at this deployment's own read-only MCP. On a deployment with several tenants the seeded gateway takes the next free slug (`console`, `console-2`, …), because a slug is global.",
         "`target_url` is the streamable-HTTP endpoint of the upstream, including its path (`http://rancher-mcp.support.svc.cluster.local:8000/mcp`). It must be `http://` or `https://`."
       ],
       "table": {
@@ -174,7 +176,10 @@
       "title": "HTTP API",
       "body": [
         "Everything the panel does is an endpoint under `/api`, authenticated by an `HttpOnly` session cookie. The MCP routes themselves live at `/g/<slug>/mcp` and speak JSON-RPC, not this API.",
-        "Every list is cursor-paginated: `?limit=50&before=<cursor>`, answering `{items, next}`. `next` is null on the last page. Each list also accepts its own filter fields as query parameters; an unknown field is a 422 naming the fields that exist."
+        "Every list is cursor-paginated: `?limit=50&before=<cursor>`, answering `{items, next}`. `next` is null on the last page, and `limit` is clamped to 200 rather than refused.",
+        "Each list also accepts its own filter fields as query parameters, one box per column in the panel. Text columns match a fragment (`?name=anch` finds `rancher`), `status` and `enabled` match exactly, and every list carries an `id` box for the row you only half copied. An unknown field is a 422 naming the fields that exist — a filter silently ignored is worse than an error.",
+        "Ordering is `?sort=<column>&order=asc|desc`. The sortable columns are a closed set per list: gateways by `created_at`, `updated_at`, `name` or `slug`; traffic by `occurred_at`, `duration_ms`, `status` or `subject`; the audit log by `occurred_at`, `actor` or `type`; members by `email` and `created_at`; roles by `name` and `created_at`. An unknown key is a 422 that lists the legal ones.",
+        "A cursor means *after this row, in this order*, so it is bound to the sort it was minted under. Change `sort` or `order` and start from the first page: reusing the old cursor is a 422, not a silently holed list."
       ],
       "table": {
         "head": [
@@ -255,6 +260,10 @@
       "body": [
         "The gateway exposes a read-only MCP server of its own at `/mcp`, so an agent can answer questions about *this deployment*: which gateways exist, what failed in the last hour, what the audit log says about a role change.",
         "It is read-only by construction - every tool is a query, none is a command - and it is tenant-scoped: a token minted by one tenant's operator can only ever read that tenant's rows.",
+        "Every new tenant already has one gateway pointing at it. It is created with the tenant, named `console`, with the deployment's own `/mcp` as its upstream and an API key for the caller — so the first thing a new tenant can do is plug an agent in without configuring anything. It is a gateway like any other: same auth, same rate limit, and its questions land in the traffic log next to every other call.",
+        "Connect to it exactly like a hand-made gateway:",
+        "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"gateway-console\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/g/console/mcp\",\n      \"headers\": { \"Authorization\": \"Bearer omgc_gateway_api_key\" }\n    }\n  }\n}\n```",
+        "The key is issued when the tenant is created and shown once, on the gateway's page. Rotate it there if it leaks; delete the gateway if you would rather call `/mcp` directly.",
         "1. Mint a token: `POST /api/mcp/token` with your session cookie. The plaintext is returned once, exactly like an API key.",
         "2. Point a client at it:",
         "```jsonc\n// opencode.json\n{\n  \"mcp\": {\n    \"gateway-console\": {\n      \"type\": \"remote\",\n      \"url\": \"https://gateway.example.com/mcp\",\n      \"headers\": { \"Authorization\": \"Bearer omg_...\" }\n    }\n  }\n}\n```",

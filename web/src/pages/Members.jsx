@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
+import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, SAMPLE_MEMBERS,
   can, relative,
@@ -12,6 +12,7 @@ export function Members({ me }) {
   const canWrite = can(me, "members:write");
   const canAssign = can(me, "roles:write");
   const [filters, setFilters] = useState({});
+  const [sort, setSort] = useSort("email", { email: "asc", created_at: "desc" });
   const [roles, setRoles] = useState([]);
   const [error, setError] = useState("");
   const [banner, setBanner] = useState(null);
@@ -23,11 +24,11 @@ export function Members({ me }) {
   const {
     items: operators, next, busy: listBusy, more, reload, error: listError,
   } = usePagedList(
-    async ({ limit, before, ...fields }) => {
-      const page = await api.operators({ limit, before, ...fields });
+    async ({ limit, before, ...query }) => {
+      const page = await api.operators({ limit, before, ...query });
       return { items: page.operators, next: page.next };
     },
-    filters,
+    { ...filters, ...sort },
   );
 
   async function load() {
@@ -130,13 +131,29 @@ export function Members({ me }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Email</th>
+                    <SortHeader
+                      field="email"
+                      label="Email"
+                      sort={sort}
+                      onSort={setSort}
+                    />
                     <th>Roles</th>
-                    <th className="num">Joined</th>
+                    <SortHeader
+                      field="created_at"
+                      label="Joined"
+                      sort={sort}
+                      onSort={setSort}
+                      className="num"
+                    />
                     <th />
                   </tr>
                   <FilterRow
-                    fields={[{ key: "email", label: "Email" }, null, null, null]}
+                    fields={[
+                      { key: "email", label: "Email" },
+                      null,
+                      null,
+                      { key: "id", label: "ID", placeholder: "op_…" },
+                    ]}
                     value={filters}
                     onChange={setFilters}
                   />

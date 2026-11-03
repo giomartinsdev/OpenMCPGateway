@@ -18,8 +18,19 @@ export function Onboarding({ me, onReady }) {
     setBusy(true);
     setError("");
     try {
-      if (mode === "create") await api.createTenant(name);
-      else await api.joinTenant(code);
+      if (mode === "create") {
+        const created = await api.createTenant(name);
+        // The key for the gateway every tenant ships with is shown once, so the
+        // page it lands on has to know about it. Session storage survives the
+        // route change and disappears with the tab — which is the lifetime of a
+        // credential you have not copied yet.
+        const gateway = created.console_gateway;
+        if (gateway?.api_key) {
+          sessionStorage.setItem("omg.new_console", JSON.stringify(gateway));
+        }
+      } else {
+        await api.joinTenant(code);
+      }
       // Read the identity back: the roles that came with the tenant are
       // resolved server-side, and the panel must not guess them.
       onReady(await api.me());

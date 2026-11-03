@@ -32,6 +32,10 @@ async function registerOwner(page) {
   await expect(
     page.getByRole("heading", { name: "Gateways", level: 1 }),
   ).toBeVisible();
+  // The console gateway's key is shown once, right where it can be copied.
+  await expect(
+    page.getByRole("heading", { name: "Your tenant's console gateway" }),
+  ).toBeVisible();
 }
 
 /**
@@ -77,7 +81,8 @@ test("a filter under a column narrows the table, and clearing it restores", asyn
   await page.reload();
 
   const rows = dataRows(page);
-  await expect(rows).toHaveCount(3);
+  // Three the scenario made, plus the console gateway every tenant ships with.
+  await expect(rows).toHaveCount(4);
 
   // The input lives *under* the label it filters, which is what makes "Name"
   // unambiguous when three other columns are also text.
@@ -91,8 +96,73 @@ test("a filter under a column narrows the table, and clearing it restores", asyn
   await name.fill("an");
   await expect(rows).toHaveCount(2);
 
-  await name.fill("");
-  await expect(rows).toHaveCount(3);
+  // Clearing is part of filtering: a box you cannot empty is one you escape by
+  // reloading. The `x` and the empty value are the same code path.
+  await page.getByRole("button", { name: "Clear Name filter" }).click();
+  await expect(name).toHaveValue("");
+  await expect(rows).toHaveCount(4);
+});
+
+test("typing in a filter does not fire a request per keystroke", async ({ page }) => {
+  await signIn(page);
+  const rows = dataRows(page);
+  await expect(rows.first()).toBeVisible();
+
+  // The debounce is what keeps "cli" from asking for "c", "cl" and "cli" — and
+  // from flashing "nothing matched" at the two prefixes that matched nothing.
+  const asked = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/gateways")) asked.push(request.url());
+  });
+
+  await page.getByRole("textbox", { name: "Filter by Name" }).pressSequentially(
+    "rancher",
+    { delay: 40 },
+  );
+  await expect(rows).toHaveCount(1);
+  expect(asked.length).toBeLessThanOrEqual(2);
+});
+
+test("clicking a column header reorders the list, and clicking again flips it", async ({
+  page,
+}) => {
+  await signIn(page);
+  const rows = dataRows(page);
+  await expect(rows.first()).toBeVisible();
+
+  // Nothing bulk exists yet: this is the four gateways the tenant starts with,
+  // and their names make the two orders distinguishable by the first row.
+  const header = page.getByRole("button", { name: /^Name/ });
+
+  await header.click();
+  await expect(page.getByRole("columnheader", { name: /Name/ })).toHaveAttribute(
+    "aria-sort",
+    "ascending",
+  );
+  // The header state flips before the rows do, so this waits on the data: a
+  // reorder that never reached the server would keep the old first row.
+  await expect(rows.first()).toContainText("Gateway console");
+
+  await header.click();
+  await expect(page.getByRole("columnheader", { name: /Name/ })).toHaveAttribute(
+    "aria-sort",
+    "descending",
+  );
+  await expect(rows.first()).toContainText("Rancher cluster");
+});
+
+test("the id filter finds a row from a fragment of its id", async ({ page }) => {
+  await signIn(page);
+  const id = await page.evaluate(async () => {
+    const response = await fetch("/api/gateways?slug=grafana", {
+      credentials: "same-origin",
+    });
+    return (await response.json()).gateways[0].id;
+  });
+
+  await page.getByRole("textbox", { name: "Filter by ID" }).fill(id.slice(3, -3));
+  await expect(dataRows(page)).toHaveCount(1);
+  await expect(dataRows(page).first()).toContainText("Grafana dashboards");
 });
 
 test("load more appends the next page instead of replacing the list", async ({
@@ -134,8 +204,8 @@ test("load more appends the next page instead of replacing the list", async ({
   await expect(rows).toHaveCount(50);
 
   await page.getByRole("button", { name: "Load more" }).click();
-  // 60 bulk + the 3 from the previous scenario: one more page, appended.
-  await expect(rows).toHaveCount(63);
+  // 60 bulk + the 4 from the previous scenarios: one more page, appended.
+  await expect(rows).toHaveCount(64);
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
 });
 

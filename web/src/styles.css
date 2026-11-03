@@ -395,6 +395,46 @@ tr.filters input {
 tr.filters input::placeholder { color: var(--fg-4); opacity: 0.7; }
 tr.filters input:hover { border-color: var(--line); }
 tr.filters input:focus { outline: none; border-color: var(--line-3); background: var(--panel-2); }
+
+/* The box holds its own clear button: an input you cannot empty is one you
+   reload the page to escape. */
+tr.filters .filter-box { position: relative; display: block; }
+tr.filters .filter-box input { padding-right: 18px; }
+tr.filters .clear-filter {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+  height: 16px;
+  width: 16px;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--fg-4);
+  font: 400 13px / 1 var(--sans);
+}
+tr.filters .clear-filter:hover { color: var(--fg); background: var(--panel-4); }
+
+/* A sortable header says so: the affordance is the arrow slot, which holds
+   still so the label does not jump when the direction changes. */
+thead .sort {
+  height: auto;
+  padding: 0;
+  gap: 4px;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+thead .sort:hover { background: transparent; color: var(--fg); box-shadow: none; }
+thead .sort span { width: 8px; color: var(--fg-4); }
+thead .sort.active { color: var(--fg); }
+thead .sort.active span { color: var(--fg-2); }
+th.num .sort { justify-content: flex-end; width: 100%; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: rgba(250, 250, 249, 0.022); }
 tr.clickable:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }

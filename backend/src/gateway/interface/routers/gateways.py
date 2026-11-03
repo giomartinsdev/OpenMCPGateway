@@ -35,14 +35,19 @@ async def list_gateways(
     principal: PrincipalDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
-    """A page of this tenant's gateways. Filter by `slug`, `name`, `auth_mode`,
-    `enabled`."""
+    """A page of this tenant's gateways.
+
+    Filter by `slug`, `name`, `auth_mode`, `enabled`; sort by `created_at`,
+    `updated_at`, `name`, `slug`.
+    """
     del session
     result = await listing.gateways(
         container,
         principal.caller,
         window=page.window,
         filters=filters(request, GATEWAY_FILTERS),
+        sort=page.sort,
+        order=page.order,
     )
     # `gateways` and `next` rather than `items`/`next`: the key was there before
     # the cursor was, and a list that only adds fields cannot break a client.

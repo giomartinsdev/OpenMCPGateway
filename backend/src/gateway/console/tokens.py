@@ -46,14 +46,24 @@ def _sign(payload: bytes, secret: str) -> str:
 
 
 def mint(*, secret: str, operator_id: str, email: str,
-         ttl_seconds: int = TOKEN_TTL_SECONDS) -> str:
+         ttl_seconds: int | None = TOKEN_TTL_SECONDS) -> str:
+    """Sign a console token. `ttl_seconds=None` mints one that does not expire.
+
+    The expiring kind is for a person pasting a token into an agent config: a
+    credential in a wiki should stop working on its own. The non-expiring kind is
+    for the gateway that every tenant ships with — it is machine-to-machine over
+    the deployment's own URL, and a token that expires after ninety days would
+    turn a default that is supposed to just work into a silent 401 three months
+    later. Revoking that one is deleting the gateway or rotating the secret.
+    """
     body = {
         "sub": operator_id,
         "email": email,
         "purpose": _PURPOSE,
         "issued": int(time.time()),
-        "exp": int(time.time()) + ttl_seconds,
     }
+    if ttl_seconds is not None:
+        body["exp"] = int(time.time()) + ttl_seconds
     encoded = base64.urlsafe_b64encode(
         json.dumps(body, separators=(",", ":")).encode()
     ).decode()
@@ -74,12 +84,15 @@ def read(token: str, *, secret: str) -> ConsoleToken:
         raise BadToken("undecodable token") from exc
     if body.get("purpose") != _PURPOSE:
         raise BadToken("wrong purpose")
-    if int(body.get("exp", 0)) < int(time.time()):
+    # Absent `exp` is a service token (the per-tenant default gateway), which
+    # lives until the secret rotates. Any other shape is not one we signed.
+    expires_at = int(body["exp"]) if "exp" in body else 0
+    if expires_at and expires_at < int(time.time()):
         raise BadToken("token expired")
     return ConsoleToken(
         operator_id=str(body["sub"]),
         email=str(body["email"]),
-        expires_at=int(body["exp"]),
+        expires_at=expires_at,
     )
 
 

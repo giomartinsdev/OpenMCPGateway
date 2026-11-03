@@ -13,7 +13,7 @@ from gateway.application.services.roles import CannotGrant
 from gateway.application.services.signin import SignInRefused
 from gateway.configfile import ConfigFileError
 from gateway.domain.errors import DomainRefusal, NotFound
-from gateway.domain.filters import UnknownFilter
+from gateway.domain.filters import UnknownFilter, UnknownSort
 from gateway.domain.model import DomainError
 from gateway.domain.paging import InvalidCursor
 from gateway.domain.permissions import PermissionCatalogError
@@ -35,6 +35,7 @@ _STATUS = {
     CannotGrant: 422,
     UnknownFilter: 422,
     InvalidCursor: 422,
+    UnknownSort: 422,
 }
 
 

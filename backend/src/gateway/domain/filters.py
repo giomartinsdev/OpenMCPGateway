@@ -1,21 +1,26 @@
-"""Filtering for list endpoints: what may be filtered, and how a value compares.
+"""Listing vocabulary: what a list may be filtered and sorted by, and how.
 
-Two rules, both learned from the alternative:
+Every list endpoint declares two closed sets — its filters and its sort keys —
+and the query string is validated against them. Nothing else decides what a
+column means to a client:
 
-* **A closed set per endpoint.** A filter name is data from the client, so an
-  unknown field is a 422 that names the fields that exist — not a clause that is
-  silently ignored, which reads as "no rows matched".
-* **`contains` for text, `equals` for everything else.** Typing "ran" into a
-  gateway column means "the gateway name has ran in it"; picking an outcome from
-  a dropdown means exactly that outcome. Guessing per value would make
-  `outcome=allowed` also match `allowed-ish`.
+* An unknown filter is a 422 that names the fields that exist, not a clause that
+  is silently ignored — which reads as "no rows matched".
+* `contains` for text, `equals` for everything else. Typing "ran" into a gateway
+  column means "the name has ran in it"; picking an outcome from a dropdown
+  means exactly that outcome.
+* Sort keys resolve to columns here, so a client string never reaches
+  `.order_by()`.
 
 The vocabulary lives here; the SQL lives in the read model. Public names are kept
 apart from column names so a rename does not break a bookmarked URL.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Literal
+
+from gateway.domain.paging import INT, Sort
+from gateway.domain.paging import TIME as TIME_SORT
 
 Op = Literal["eq", "contains", "gte", "lte", "gateway"]
 
@@ -29,21 +34,53 @@ class UnknownFilter(ValueError):
     """The field is not in this endpoint's catalog."""
 
 
+class UnknownSort(ValueError):
+    """The requested order is not one this endpoint offers."""
+
+
 @dataclass(frozen=True)
 class Filter:
     """One filterable field.
 
-    `column` is the read-model column; `related` marks a filter that matches a
-    *slug or name* instead, resolved to an id by the read model (people filter by
-    the name they see, not by an opaque id they never read).
+    `column` is the read-model column; `over` widens one box to several columns
+    when the reader would expect it to (that is what `columns` is for).
+
+    `match` is declared per field, not derived from `kind`, because `since` and
+    `until` are the same kind of value compared two ways.
     """
 
     name: ClassVar[str]
     column: ClassVar[str]
     kind: ClassVar[str] = EXACT
-    #: How this field is compared. Declared per field, not derived from `kind`,
-    #: because `since` and `until` are the same kind of value compared two ways.
     match: ClassVar[Op] = "eq"
+    #: Set instead of `column` when one input should search several columns.
+    over: ClassVar[tuple[str, ...]] = ()
+
+    @classmethod
+    def columns(cls) -> tuple[str, ...]:
+        """Every column one input searches."""
+        return cls.over or (cls.column,)
+
+
+class Id(Filter):
+    """The primary key, matched loosely.
+
+    People read it off a URL or a log line and paste the middle of it, so a
+    substring match is what they mean; an exact match would answer "no rows" and
+    read as "that row is gone".
+    """
+
+    name = "id"
+    kind = TEXT
+    match = "contains"
+
+
+class RowId(Id):
+    column = "id"
+
+
+class EventId(Id):
+    column = "event_id"
 
 
 class Gateway(Filter):
@@ -132,13 +169,11 @@ class Until(Filter):
 
 #: Field name -> spec. `GET /requests?unknown=1` is refused against this.
 REQUEST_FILTERS: dict[str, type[Filter]] = {
-    f.name: f for f in (Gateway, Subject, Outcome, Status, Method, Tool, Ip)
+    f.name: f for f in (EventId, Gateway, Subject, Outcome, Status, Method, Tool, Ip)
 }
 EVENT_FILTERS: dict[str, type[Filter]] = {
-    f.name: f for f in (EventType, Aggregate, Actor, Since, Until)
+    f.name: f for f in (EventId, EventType, Aggregate, Actor, Since, Until)
 }
-
-#: Gateways are filtered by their own text columns.
 
 
 class Slug(Filter):
@@ -172,28 +207,101 @@ class Email(Filter):
     match = "contains"
 
 
+class RoleName(Filter):
+    name = "name"
+    column = "name"
+    kind = TEXT
+    match = "contains"
+
+
 #: Gateways are filtered by their own columns, all of them local text.
 GATEWAY_FILTERS: dict[str, type[Filter]] = {
-    f.name: f for f in (Slug, Name, AuthMode, Enabled)
+    f.name: f for f in (RowId, Slug, Name, AuthMode, Enabled)
 }
 
-#: The address book is scanned by name, never by id.
-MEMBER_FILTERS: dict[str, type[Filter]] = {f.name: f for f in (Email,)}
+#: The address book is scanned by address, never by role.
+MEMBER_FILTERS: dict[str, type[Filter]] = {f.name: f for f in (RowId, Email)}
 
 #: Roles too: the label is the name, and there is nothing else to narrow by.
-ROLE_FILTERS: dict[str, type[Filter]] = {f.name: f for f in (Name,)}
+ROLE_FILTERS: dict[str, type[Filter]] = {f.name: f for f in (RowId, RoleName)}
+
+
+@dataclass(frozen=True)
+class Sorts:
+    """The orders one list offers, and the one it uses when asked for none.
+
+    Closed for the same reason the filters are: a sort key is client input, and
+    `?sort=<column I guessed>` reaching `.order_by()` is an injection with extra
+    steps.
+    """
+
+    fields: dict[str, Sort]
+    default: str
+
+    def resolve(self, key: str | None, order: str | None = None) -> Sort:
+        name = key or self.default
+        spec = self.fields.get(name)
+        if spec is None:
+            raise UnknownSort(
+                f"unknown sort {name!r}; this endpoint sorts by: "
+                f"{', '.join(sorted(self.fields))}"
+            )
+        direction = (order or "").lower()
+        if direction not in {"", "asc", "desc"}:
+            raise UnknownSort(f"order must be asc or desc, not {order!r}")
+        return replace(spec, desc=spec.desc if not direction else direction == "desc")
+
+
+GATEWAY_SORTS = Sorts(
+    {
+        "created_at": Sort("created_at", "created_at", TIME_SORT, desc=True),
+        "updated_at": Sort("updated_at", "updated_at", TIME_SORT, desc=True),
+        "name": Sort("name", "name"),
+        "slug": Sort("slug", "slug"),
+    },
+    default="created_at",
+)
+REQUEST_SORTS = Sorts(
+    {
+        "occurred_at": Sort("occurred_at", "occurred_at", TIME_SORT, desc=True),
+        "duration_ms": Sort("duration_ms", "duration_ms", INT, desc=True),
+        "status": Sort("status", "status", INT),
+        "subject": Sort("subject", "subject"),
+    },
+    default="occurred_at",
+)
+EVENT_SORTS = Sorts(
+    {
+        "occurred_at": Sort("occurred_at", "occurred_at", TIME_SORT, desc=True),
+        "actor": Sort("actor", "actor"),
+        "type": Sort("type", "event_type"),
+    },
+    default="occurred_at",
+)
+MEMBER_SORTS = Sorts(
+    {
+        "email": Sort("email", "email"),
+        "created_at": Sort("created_at", "created_at", TIME_SORT, desc=True),
+    },
+    default="email",
+)
+ROLE_SORTS = Sorts(
+    {
+        "name": Sort("name", "name"),
+        "created_at": Sort("created_at", "created_at", TIME_SORT, desc=True),
+    },
+    default="name",
+)
 
 
 @dataclass(frozen=True)
 class Clause:
-    column: str
+    columns: tuple[str, ...]
     op: Op
     value: Any
 
 
-def parse(
-    filters: dict[str, type[Filter]], values: dict[str, Any]
-) -> list[Clause]:
+def parse(filters: dict[str, type[Filter]], values: dict[str, Any]) -> list[Clause]:
     """Turn `{field: value}` from the query string into SQL-ready clauses.
 
     Blank values are dropped instead of matching blank columns: an empty input is
@@ -210,19 +318,26 @@ def parse(
                 f"unknown filter {field!r}; this endpoint filters by: "
                 f"{', '.join(sorted(filters))}"
             )
-        clauses.append(Clause(column=spec.column, op=spec.match, value=value))
+        clauses.append(Clause(columns=spec.columns(), op=spec.match, value=value))
     return clauses
 
 
 __all__ = [
     "EVENT_FILTERS",
+    "EVENT_SORTS",
     "GATEWAY_FILTERS",
+    "GATEWAY_SORTS",
     "MEMBER_FILTERS",
+    "MEMBER_SORTS",
     "REQUEST_FILTERS",
+    "REQUEST_SORTS",
     "ROLE_FILTERS",
+    "ROLE_SORTS",
     "Clause",
     "Filter",
     "Op",
+    "Sorts",
     "UnknownFilter",
+    "UnknownSort",
     "parse",
 ]

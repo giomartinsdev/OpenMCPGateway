@@ -1,24 +1,37 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
+import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
-  Badge, Card, Empty, Notice, Skeleton, SAMPLE_GATEWAYS, SAMPLE_STATS,
+  Badge, Card, Empty, Endpoint, Notice, Skeleton, SAMPLE_GATEWAYS, SAMPLE_STATS,
   Stat, can, relative,
 } from "../ui.jsx";
 import { navigate } from "../App.jsx";
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
 
-// One filter per column, under its own label. Endpoint and "updated" are derived,
-// not stored, so they are not filterable.
+// One filter per column, under its own label. Endpoint is derived, not stored, so
+// it is not filterable; the name box answers to a slug or an id too, because
+// that is what people paste.
 const FIELDS = [
   { key: "name", label: "Name" },
   null,
   { key: "auth_mode", label: "Auth" },
   null,
   { key: "enabled", label: "Status" },
-  null,
+  { key: "id", label: "ID", placeholder: "gw_…" },
 ];
+
+// Which column each header sorts by, and the direction its data suggests.
+const SORTS = { created_at: "desc", updated_at: "desc", name: "asc", slug: "asc" };
+
+// The key handed out when the tenant was created, if this tab still has it.
+function takeNewConsole() {
+  const raw = sessionStorage.getItem("omg.new_console");
+  if (!raw) return null;
+  sessionStorage.removeItem("omg.new_console");
+  const gateway = JSON.parse(raw);
+  return { ...gateway, endpoint: `${window.location.origin}/g/${gateway.slug}/mcp` };
+}
 
 export function Gateways({ me }) {
   const canEdit = can(me, "gateways:write");
@@ -26,12 +39,14 @@ export function Gateways({ me }) {
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [filters, setFilters] = useState({});
+  const [newConsole, setNewConsole] = useState(takeNewConsole);
+  const [sort, setSort] = useSort("created_at", SORTS);
   const { items: gateways, next, busy, more, error: listError } = usePagedList(
-    async ({ limit, before, ...fields }) => {
-      const page = await api.gateways({ limit, before, ...fields });
+    async ({ limit, before, ...query }) => {
+      const page = await api.gateways({ limit, before, ...query });
       return { items: page.gateways, next: page.next };
     },
-    filters,
+    { ...filters, ...sort },
   );
 
   useEffect(() => {
@@ -63,6 +78,31 @@ export function Gateways({ me }) {
       </div>
 
       <Notice kind="err">{error || listError}</Notice>
+
+      {newConsole && (
+        <Card
+          title="Your tenant's console gateway"
+          actions={
+            <button className="ghost sm" onClick={() => setNewConsole(null)}>
+              Dismiss
+            </button>
+          }
+        >
+          <p className="sub" style={{ marginBottom: 12 }}>
+            Every tenant ships with a gateway to this deployment's own read-only
+            MCP — gateways, traffic, audit log and this manual. Point an agent at
+            it and ask what the deployment is doing. The key is shown once.
+          </p>
+          <div className="field">
+            <div className="hint">Endpoint</div>
+            <Endpoint value={newConsole.endpoint} />
+          </div>
+          <div className="field">
+            <div className="hint">API key</div>
+            <Endpoint value={newConsole.api_key} />
+          </div>
+        </Card>
+      )}
 
       {open.length > 0 && (
         <Notice kind="info">
@@ -127,12 +167,18 @@ export function Gateways({ me }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Name</th>
+                    <SortHeader field="name" label="Name" sort={sort} onSort={setSort} />
                     <th>Endpoint</th>
                     <th>Auth</th>
                     <th className="num">Limit</th>
                     <th>Status</th>
-                    <th className="num">Updated</th>
+                    <SortHeader
+                      field="updated_at"
+                      label="Updated"
+                      sort={sort}
+                      onSort={setSort}
+                      className="num"
+                    />
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>

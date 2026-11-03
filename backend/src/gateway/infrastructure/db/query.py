@@ -16,27 +16,32 @@ from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.sql import Select
 
 from gateway.domain.filters import Clause
-from gateway.domain.paging import Window
+from gateway.domain.paging import Sort, Window
 from gateway.infrastructure.db.tables import rm_gateways
 
 
 def predicates(table: Any, items: Iterable[Clause]) -> list[ColumnElement[bool]]:
-    """One SQL predicate per filter clause, against `table`'s columns."""
+    """One SQL predicate per filter clause, against `table`'s columns.
+
+    A clause may name several columns: one search box per table is what a reader
+    wants, and "the name or the id" is a single question with one input.
+    """
     result: list[ColumnElement[bool]] = []
     for clause in items:
-        column = table.c[clause.column]
-        value = _coerced(column, clause.value)
+        columns = [table.c[name] for name in clause.columns]
+        value = _coerced(columns[0], clause.value)
         match clause.op:
             case "contains":
-                result.append(column.ilike(f"%{value}%"))
+                pattern = f"%{value}%"
+                result.append(or_(*(column.ilike(pattern) for column in columns)))
             case "gte":
-                result.append(column >= value)
+                result.append(columns[0] >= value)
             case "lte":
-                result.append(column <= value)
+                result.append(columns[0] <= value)
             case "gateway":
-                result.append(column.in_(_gateway_ids(value)))
+                result.append(columns[0].in_(_gateway_ids(value)))
             case _:
-                result.append(column == value)
+                result.append(columns[0] == value)
     return result
 
 
@@ -81,23 +86,29 @@ def paged(
     query: Select[Any],
     table: Any,
     window: Window,
+    sort: Sort,
     *,
-    at: str,
     id: str,
 ) -> Select[Any]:
     """A cursor, the tiebreaker, and one row more than the page.
 
     The extra row is how "is there a next page" is answered without a
     `count(*)`: `cut()` drops it and reads the cursor off the last row kept.
+
+    The comparison follows the direction too: "after row X" is smaller under
+    `desc` and larger under `asc`, and getting that wrong pages backwards.
     """
+    column = table.c[sort.column]
+    tie = table.c[id]
     if window.before is not None:
+        same = column == window.before.at
         query = query.where(
-            (table.c[at] < window.before.at)
-            | ((table.c[at] == window.before.at) & (table.c[id] < window.before.id))
+            (column < window.before.at) | (same & (tie < window.before.id))
+            if sort.desc
+            else (column > window.before.at) | (same & (tie > window.before.id))
         )
-    return query.order_by(table.c[at].desc(), table.c[id].desc()).limit(
-        window.limit + 1
-    )
+    direction = (lambda c: c.desc()) if sort.desc else (lambda c: c.asc())
+    return query.order_by(direction(column), direction(tie)).limit(window.limit + 1)
 
 
 __all__ = ["paged", "predicates"]

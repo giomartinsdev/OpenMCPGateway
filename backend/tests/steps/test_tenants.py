@@ -192,11 +192,25 @@ def lone_creates_gateway(account: dict) -> httpx.Response:
     )
 
 
+def _own_gateways(browser) -> list[str]:
+    """Everything but the gateway every tenant ships with.
+
+    The seeded `console` gateway is a platform default, not something the tenant
+    made, so a test about what a tenant created must exclude it or assert on it
+    by name.
+    """
+    response = browser.get("/api/gateways")
+    assert response.status_code == 200, response.text
+    return [
+        gw["slug"]
+        for gw in response.json()["gateways"]
+        if not gw["slug"].startswith("console")
+    ]
+
+
 @when("Alice lists her gateways", target_fixture="listing")
 def alice_lists(alice: dict) -> list[str]:
-    response = alice["browser"].get("/api/gateways")
-    assert response.status_code == 200, response.text
-    return [gw["slug"] for gw in response.json()["gateways"]]
+    return _own_gateways(alice["browser"])
 
 
 @when("Alice lists her members", target_fixture="members")
@@ -297,9 +311,7 @@ def alice_sees(listing: list[str], slug: str) -> None:
 
 @then(parsers.parse('Bob sees only "{slug}"'))
 def bob_sees(bob: dict, slug: str) -> None:
-    response = bob["browser"].get("/api/gateways")
-    assert response.status_code == 200, response.text
-    assert [gw["slug"] for gw in response.json()["gateways"]] == [slug], response.text
+    assert _own_gateways(bob["browser"]) == [slug]
 
 
 @then("Alice sees only herself")

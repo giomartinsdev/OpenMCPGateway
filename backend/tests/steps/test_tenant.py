@@ -112,7 +112,11 @@ def member_is_not_admin(member_created: dict) -> None:
 def member_lists(member_created: dict) -> None:
     response = member_created["browser"].get("/api/gateways")
     assert response.status_code == 200, response.text
-    assert [g["slug"] for g in response.json()["gateways"]] == ["demo"], response.text
+    # Plus the gateway every tenant ships with — a member must see it too, since
+    # it is how they ask the deployment a question.
+    assert [g["slug"] for g in response.json()["gateways"]] == ["demo", "console"], (
+        response.text
+    )
 
 @then("the member cannot create a gateway")
 def member_cannot_create(member_created: dict) -> None:

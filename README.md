@@ -91,7 +91,9 @@ The first thing an account sees after signing up is not the panel but a choice:
 **create a tenant** or **join one with a code**.
 
 * Creating a tenant makes the account its `owner`. It is the only path that grants
-  ownership, and it needs no permission because the account has none yet.
+  ownership, and it needs no permission because the account has none yet. The
+  tenant also arrives with one gateway already configured — `console`, pointing
+  at this deployment's own read-only MCP (`/mcp`) — and its API key, shown once.
 * Joining needs the tenant's **join code** — eight characters, no `O/0` or `I/1`,
   shown under **Members**. Joining lands on `viewer`. There is no email delivery
   in this process, so a code the owner can paste into chat is the whole invitation
@@ -207,6 +209,25 @@ The gateway is a normal MCP server, so any client works:
 With `auth: api_key`, add `"headers": {"Authorization": "Bearer omg_..."}`.
 With `auth: oauth`, add nothing: the client reads the 401 challenge, finds the
 metadata at the well-known URL, registers itself, and opens a browser.
+
+A tenant never starts empty: the `console` gateway created with it points at this
+deployment's own read-only MCP, so an agent can be asked "what broke in the last
+hour" before anyone configures an upstream:
+
+```jsonc
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/console/mcp",
+      "headers": { "Authorization": "Bearer omgc_..." }
+    }
+  }
+}
+```
+
+Delete it if you would rather point agents at `/mcp` directly; the slug is global,
+so a second tenant's seeded gateway becomes `console-2`.
 
 Each gateway's page in the panel carries a **Test this gateway** card with the
 exact requests for its auth mode, as `curl` or Python. A public gateway is one

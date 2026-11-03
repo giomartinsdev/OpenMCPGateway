@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
+import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Card, Chart, Empty, Notice, Skeleton, SAMPLE_REQUESTS,
   SAMPLE_STATS, Stat, outcomeKind, relative,
@@ -22,20 +22,23 @@ const OUTCOME_LABEL = {
 
 // One filter per column, under the column's own label.
 const FIELDS = [
-  null, // when: the window selector above already says it
+  { key: "id", label: "When", placeholder: "call id" },
   { key: "gateway", label: "Gateway" },
   { key: "subject", label: "Subject" },
   { key: "outcome", label: "Outcome" },
   { key: "status", label: "Status" },
-  null, // latency is shown, but nobody filters a log by milliseconds
+  null, // latency is a number, and nobody sorts a log by typing milliseconds
   { key: "tool", label: "Tool" },
   { key: "ip", label: "IP" },
 ];
+
+const SORTS = { occurred_at: "desc", duration_ms: "desc", status: "asc", subject: "asc" };
 
 export function Traffic() {
   const [minutes, setMinutes] = useState(60);
   const [stats, setStats] = useState(null);
   const [filters, setFilters] = useState({});
+  const [sort, setSort] = useSort("occurred_at", SORTS);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -54,11 +57,11 @@ export function Traffic() {
   }, [minutes]);
 
   const { items: requests, next, error: listError, busy, more } = usePagedList(
-    async ({ limit, before, ...fields }) => {
-      const page = await api.requests({ limit, before, ...fields });
+    async ({ limit, before, ...query }) => {
+      const page = await api.requests({ limit, before, ...query });
       return { items: page.requests, next: page.next };
     },
-    filters,
+    { ...filters, ...sort },
   );
 
   const rejected =
@@ -179,12 +182,34 @@ export function Traffic() {
               <table>
                 <thead>
                   <tr>
-                    <th>When</th>
+                    <SortHeader
+                      field="occurred_at"
+                      label="When"
+                      sort={sort}
+                      onSort={setSort}
+                    />
                     <th>Gateway</th>
-                    <th>Subject</th>
+                    <SortHeader
+                      field="subject"
+                      label="Subject"
+                      sort={sort}
+                      onSort={setSort}
+                    />
                     <th>Outcome</th>
-                    <th className="num">Status</th>
-                    <th className="num">Latency</th>
+                    <SortHeader
+                      field="status"
+                      label="Status"
+                      sort={sort}
+                      onSort={setSort}
+                      className="num"
+                    />
+                    <SortHeader
+                      field="duration_ms"
+                      label="Latency"
+                      sort={sort}
+                      onSort={setSort}
+                      className="num"
+                    />
                     <th>Tool</th>
                     <th>IP</th>
                   </tr>

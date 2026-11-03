@@ -16,22 +16,30 @@ from gateway.application.services.observability import owned_aggregates
 from gateway.application.services.roles import RoleCatalog
 from gateway.domain.filters import (
     EVENT_FILTERS,
+    EVENT_SORTS,
     GATEWAY_FILTERS,
+    GATEWAY_SORTS,
     MEMBER_FILTERS,
+    MEMBER_SORTS,
     REQUEST_FILTERS,
+    REQUEST_SORTS,
     ROLE_FILTERS,
+    ROLE_SORTS,
     Clause,
+    Sorts,
     parse,
 )
-from gateway.domain.paging import Page, Window
+from gateway.domain.paging import Page, Sort, Window, same_order
 
 
 async def gateways(
     container: Container, caller: Caller, *, window: Window,
-    filters: dict[str, Any],
+    filters: dict[str, Any], sort: str | None = None, order: str | None = None,
 ) -> Page:
     rows, next_cursor = await container.read_models.page_gateways(
-        caller.tenant, window=window, clauses=_clauses(GATEWAY_FILTERS, filters)
+        caller.tenant, window=window,
+        clauses=_clauses(GATEWAY_FILTERS, filters),
+        sort=_order(window, GATEWAY_SORTS, sort, order),
     )
     return Page(
         items=[gateway_service.public(container, row) for row in rows],
@@ -40,12 +48,13 @@ async def gateways(
 
 async def requests(
     container: Container, caller: Caller, *, window: Window,
-    filters: dict[str, Any],
+    filters: dict[str, Any], sort: str | None = None, order: str | None = None,
 ) -> Page:
     """The traffic log, narrowed by any of its labelled columns."""
     rows, next_cursor = await container.read_models.page_requests(
         None, window, tenant_id=caller.tenant,
         clauses=_clauses(REQUEST_FILTERS, filters),
+        sort=_order(window, REQUEST_SORTS, sort, order),
     )
     # The log stores `gateway_id`; every reader wants the slug it can recognise.
     names = await _gateway_names(container, caller)
@@ -55,22 +64,25 @@ async def requests(
 
 async def events(
     container: Container, caller: Caller, *, window: Window,
-    filters: dict[str, Any],
+    filters: dict[str, Any], sort: str | None = None, order: str | None = None,
 ) -> Page:
     rows, next_cursor = await container.store.page_events(
         window,
         aggregate_ids=await owned_aggregates(container, caller),
         clauses=_clauses(EVENT_FILTERS, filters),
+        sort=_order(window, EVENT_SORTS, sort, order),
     )
     return Page(items=rows, next=next_cursor)
 
 async def members(
     container: Container, caller: Caller, *, window: Window,
-    filters: dict[str, Any],
+    filters: dict[str, Any], sort: str | None = None, order: str | None = None,
 ) -> Page:
     """The address book, paged, with role names resolved for display."""
     rows, next_cursor = await container.read_models.page_operators(
-        caller.tenant, window=window, clauses=_clauses(MEMBER_FILTERS, filters)
+        caller.tenant, window=window,
+        clauses=_clauses(MEMBER_FILTERS, filters),
+        sort=_order(window, MEMBER_SORTS, sort, order),
     )
     names = {
         role["id"]: role["name"]
@@ -87,7 +99,7 @@ async def members(
 
 async def roles(
     container: Container, caller: Caller, *, window: Window,
-    filters: dict[str, Any],
+    filters: dict[str, Any], sort: str | None = None, order: str | None = None,
 ) -> Page:
     """The tenant's own roles, paged.
 
@@ -95,7 +107,9 @@ async def roles(
     top of every page, and a cursor over a constant list is noise.
     """
     rows, next_cursor = await container.read_models.page_roles(
-        caller.tenant, window=window, clauses=_clauses(ROLE_FILTERS, filters)
+        caller.tenant, window=window,
+        clauses=_clauses(ROLE_FILTERS, filters),
+        sort=_order(window, ROLE_SORTS, sort, order),
     )
     # Holder counts come along because the panel shows them next to the delete
     # button: "why can I not delete this" answered where the question is asked.
@@ -111,6 +125,15 @@ async def roles(
 
 def _clauses(catalog: dict[str, Any], filters: dict[str, Any]) -> list[Clause]:
     return parse(catalog, filters)
+
+
+def _order(
+    window: Window, catalog: Sorts, sort: str | None, order: str | None
+) -> Sort:
+    """The order to read in, refusing a cursor minted under a different one."""
+    result = catalog.resolve(sort, order)
+    same_order(window, result)
+    return result
 
 async def _gateway_names(
     container: Container, caller: Caller

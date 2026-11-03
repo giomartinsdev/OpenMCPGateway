@@ -13,8 +13,14 @@ from typing import Any
 from sqlalchemy import func, select, update
 
 from gateway.domain.events import OperatorRegistered
-from gateway.domain.filters import Clause
-from gateway.domain.paging import Window, cut
+from gateway.domain.filters import (
+    GATEWAY_SORTS,
+    MEMBER_SORTS,
+    REQUEST_SORTS,
+    ROLE_SORTS,
+    Clause,
+)
+from gateway.domain.paging import Sort, Window, cut
 from gateway.domain.permissions import DEFAULT_ROLE_IDS, OWNER_ROLE
 from gateway.domain.readmodels import (
     ApiKeyRow,
@@ -89,6 +95,7 @@ class ReadModels:
         *,
         window: Window | None = None,
         clauses: Iterable[Clause] = (),
+        sort: Sort | None = None,
     ) -> tuple[list[GatewayRow], str | None]:
         """A page of this tenant's gateways, newest first, plus the next cursor.
 
@@ -97,15 +104,16 @@ class ReadModels:
         normal case for a config apply.
         """
         page = window or Window.parse(None)
+        order = sort or GATEWAY_SORTS.resolve(None)
         query = select(rm_gateways).where(
             (rm_gateways.c.tenant_id == tenant_id) & rm_gateways.c.deleted.is_(False)
         )
         for predicate in predicates(rm_gateways, clauses):
             query = query.where(predicate)
-        query = paged(query, rm_gateways, page, at="created_at", id="id")
+        query = paged(query, rm_gateways, page, order, id="id")
         async with self._db.session() as session:
             rows = [dict(row) for row in (await session.execute(query)).mappings()]
-        items, next_cursor = cut(rows, page, at="created_at", id="id")
+        items, next_cursor = cut(rows, page, order, id="id")
         return [GatewayRow.model_validate(item) for item in items], next_cursor
 
     async def all_gateways(self) -> list[GatewayRow]:
@@ -257,6 +265,7 @@ class ReadModels:
         *,
         tenant_id: str | None = None,
         clauses: Iterable[Clause] = (),
+        sort: Sort | None = None,
     ) -> tuple[list[RequestRow], str | None]:
         """A page of the request log, newest first, plus the next cursor.
 
@@ -286,10 +295,11 @@ class ReadModels:
             )
         for predicate in predicates(rm_requests_tail, clauses):
             query = query.where(predicate)
-        query = paged(query, rm_requests_tail, page, at="occurred_at", id="event_id")
+        order = sort or REQUEST_SORTS.resolve(None)
+        query = paged(query, rm_requests_tail, page, order, id="event_id")
         async with self._db.session() as session:
             rows = [dict(row) for row in (await session.execute(query)).mappings()]
-        items, next_cursor = cut(rows, page, at="occurred_at", id="event_id")
+        items, next_cursor = cut(rows, page, order, id="event_id")
         return [RequestRow.model_validate(item) for item in items], next_cursor
 
     async def page_operators(
@@ -298,6 +308,7 @@ class ReadModels:
         *,
         window: Window,
         clauses: Iterable[Clause] = (),
+        sort: Sort | None = None,
     ) -> tuple[list[OperatorRow], str | None]:
         """A page of the address book, ordered by email.
 
@@ -315,10 +326,11 @@ class ReadModels:
         ).where(rm_operators.c.tenant_id == tenant_id)
         for predicate in predicates(rm_operators, clauses):
             query = query.where(predicate)
-        query = paged(query, rm_operators, window, at="email", id="id")
+        order = sort or MEMBER_SORTS.resolve(None)
+        query = paged(query, rm_operators, window, order, id="id")
         async with self._db.session() as session:
             rows = [dict(row) for row in (await session.execute(query)).mappings()]
-        items, next_cursor = cut(rows, window, at="email", id="id")
+        items, next_cursor = cut(rows, window, order, id="id")
         return [_operator(row) for row in items], next_cursor
 
     async def list_roles(self, tenant_id: str) -> list[RoleRow]:
@@ -342,6 +354,7 @@ class ReadModels:
         *,
         window: Window,
         clauses: Iterable[Clause] = (),
+        sort: Sort | None = None,
     ) -> tuple[list[RoleRow], str | None]:
         """A page of this tenant's custom roles, ordered by name."""
         query = select(rm_roles).where(
@@ -349,10 +362,11 @@ class ReadModels:
         )
         for predicate in predicates(rm_roles, clauses):
             query = query.where(predicate)
-        query = paged(query, rm_roles, window, at="name", id="id")
+        order = sort or ROLE_SORTS.resolve(None)
+        query = paged(query, rm_roles, window, order, id="id")
         async with self._db.session() as session:
             rows = [dict(row) for row in (await session.execute(query)).mappings()]
-        items, next_cursor = cut(rows, window, at="name", id="id")
+        items, next_cursor = cut(rows, window, order, id="id")
         return [RoleRow.model_validate(row) for row in items], next_cursor
 
     async def role_permissions(

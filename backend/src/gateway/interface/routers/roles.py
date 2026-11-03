@@ -34,6 +34,8 @@ async def list_roles(
         principal.caller,
         window=page.window,
         filters=filters(request, ROLE_FILTERS),
+        sort=page.sort,
+        order=page.order,
     )
     builtin = [role for role in await RoleCatalog(container).all(
         principal.caller.tenant_id) if role["builtin"]]

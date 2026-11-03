@@ -28,7 +28,7 @@ from gateway.application.services import listing, observability
 from gateway.console.tokens import BadToken
 from gateway.console.tokens import read as read_token
 from gateway.docs_content import search as search_docs_content
-from gateway.domain.filters import EVENT_FILTERS, parse
+from gateway.domain.filters import EVENT_FILTERS, EVENT_SORTS, parse
 from gateway.domain.paging import Window
 
 
@@ -54,7 +54,9 @@ class ConsoleVerifier(TokenVerifier):
             token=token,
             client_id="console",
             scopes=["console:read"],
-            expires_at=console.expires_at,
+            # `None` for a service token: FastMCP would otherwise treat 0 as
+            # "expired at the epoch" and refuse every call.
+            expires_at=console.expires_at or None,
             subject=console.operator_id,
             claims={"email": console.email},
         )
@@ -101,15 +103,32 @@ def build_console(container: Container, secret: str) -> FastMCP:
 
     @server.tool
     async def list_gateways(
-        slug: str = "", name: str = "", auth_mode: str = "", limit: int = 50
+        slug: str = "",
+        name: str = "",
+        auth_mode: str = "",
+        gateway_id: str = "",
+        sort: str = "",
+        order: str = "",
+        limit: int = 50,
     ) -> dict[str, Any]:
-        """Gateways in this tenant. Filter by `slug`, `name` or `auth_mode`."""
+        """Gateways in this tenant.
+
+        Filter by `slug`, `name`, `auth_mode` or `gateway_id`; sort by
+        `created_at`, `updated_at`, `name` or `slug`.
+        """
         who = await caller()
         result = await listing.gateways(
             container,
             who,
             window=Window.parse(limit),
-            filters={"slug": slug, "name": name, "auth_mode": auth_mode},
+            filters={
+                "slug": slug,
+                "name": name,
+                "auth_mode": auth_mode,
+                "id": gateway_id,
+            },
+            sort=sort or None,
+            order=order or None,
         )
         return result.model_dump()
 
@@ -137,6 +156,9 @@ def build_console(container: Container, secret: str) -> FastMCP:
         tool: str = "",
         status: int | None = None,
         ip: str = "",
+        request_id: str = "",
+        sort: str = "",
+        order: str = "",
         limit: int = 50,
         before: str = "",
     ) -> dict[str, Any]:
@@ -157,7 +179,10 @@ def build_console(container: Container, secret: str) -> FastMCP:
                 "tool": tool,
                 "status": status,
                 "ip": ip,
+                "id": request_id,
             },
+            sort=sort or None,
+            order=order or None,
         )
         return result.model_dump()
 
@@ -168,6 +193,9 @@ def build_console(container: Container, secret: str) -> FastMCP:
         actor: str = "",
         since: str = "",
         until: str = "",
+        event_id: str = "",
+        sort: str = "",
+        order: str = "",
         limit: int = 50,
         before: str = "",
     ) -> dict[str, Any]:
@@ -188,12 +216,14 @@ def build_console(container: Container, secret: str) -> FastMCP:
                 "actor": actor,
                 "since": _when(since),
                 "until": _when(until),
+                "id": event_id,
             },
         )
         rows, next_cursor = await container.store.page_events(
             Window.parse(limit, before or None),
             aggregate_ids=await observability.owned_aggregates(container, who),
             clauses=clauses,
+            sort=EVENT_SORTS.resolve(sort or None, order or None),
         )
         return {"items": rows, "next": next_cursor}
 

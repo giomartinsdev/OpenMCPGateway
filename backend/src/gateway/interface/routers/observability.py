@@ -48,6 +48,8 @@ async def requests(
         principal.caller,
         window=page.window,
         filters=filters(request, REQUEST_FILTERS),
+        sort=page.sort,
+        order=page.order,
     )
     return {"requests": result.items, "next": result.next}
 
@@ -67,6 +69,8 @@ async def events(
         principal.caller,
         window=page.window,
         filters=filters(request, EVENT_FILTERS),
+        sort=page.sort,
+        order=page.order,
     )
     return {"events": result.items, "next": result.next}
 

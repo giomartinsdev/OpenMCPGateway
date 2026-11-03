@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api.js";
-import { FilterRow, LoadMore, usePagedList } from "../paged.jsx";
+import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Card, Empty, Notice, Skeleton, SAMPLE_EVENTS, relative,
 } from "../ui.jsx";
@@ -8,21 +8,24 @@ import {
 // The filter fields are the table's own labels, in the table's own order, which
 // is why this is a list of objects and not a toolbar of inputs.
 const FIELDS = [
-  null, // the sequence number is not a filter
+  { key: "id", label: "#", placeholder: "event id" },
   { key: "type", label: "Type" },
   { key: "aggregate", label: "Aggregate" },
   { key: "actor", label: "Actor" },
-  null,
+  null, // when: `since`/`until` are a range, and a range is not a text box
 ];
+
+const SORTS = { occurred_at: "desc", actor: "asc", type: "asc" };
 
 export function Audit() {
   const [filters, setFilters] = useState({});
+  const [sort, setSort] = useSort("occurred_at", SORTS);
   const { items, next, error, busy, more } = usePagedList(
-    async ({ limit, before, ...fields }) => {
-      const page = await api.events({ limit, before, ...fields });
+    async ({ limit, before, ...query }) => {
+      const page = await api.events({ limit, before, ...query });
       return { items: page.events, next: page.next };
     },
-    filters,
+    { ...filters, ...sort },
   );
 
   return (
@@ -55,10 +58,26 @@ export function Audit() {
                 <thead>
                   <tr>
                     <th className="num">#</th>
-                    <th>Type</th>
+                    <SortHeader
+                      field="type"
+                      label="Type"
+                      sort={sort}
+                      onSort={setSort}
+                    />
                     <th>Aggregate</th>
-                    <th>Actor</th>
-                    <th className="num">When</th>
+                    <SortHeader
+                      field="actor"
+                      label="Actor"
+                      sort={sort}
+                      onSort={setSort}
+                    />
+                    <SortHeader
+                      field="occurred_at"
+                      label="When"
+                      sort={sort}
+                      onSort={setSort}
+                      className="num"
+                    />
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
