@@ -60,6 +60,22 @@ gateways:
     )
 
 
+@given("an invalid YAML document:", target_fixture="parse_error")
+def invalid_document_from_text(docstring=None, **kwargs) -> str:
+    text = docstring
+    if text is None:
+        text = next((v for v in kwargs.values() if isinstance(v, str)), None)
+    assert isinstance(text, str), "expected a YAML docstring on the step"
+    try:
+        parse_document(text)
+    except ConfigFileError as exc:
+        return str(exc)
+    return ""
+
+@then(parsers.parse('parsing fails naming "{fragment}"'))
+def parsing_fails_naming(parse_error: str, fragment: str) -> None:
+    assert fragment in parse_error, parse_error
+
 @given("a YAML document:", target_fixture="document")
 def document_from_text(datatable=None, docstring=None, **kwargs):
     """Accept the step's docstring as the YAML body.
@@ -180,37 +196,6 @@ def delete_gateway(container, runner, operator: str, slug: str) -> None:
 
     runner.run(remove())
 
-
-@when("the file is applied", target_fixture="apply_result")
-def apply_file(container, runner, operator: str, document) -> dict:
-    return runner.run(
-        apply_document(
-            document, container.commands, container.read_models,
-            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
-        )
-    )
-
-
-@when("the document is applied", target_fixture="apply_result")
-def apply_first(container, runner, operator: str, document) -> dict:
-    return runner.run(
-        apply_document(
-            document, container.commands, container.read_models,
-            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
-        )
-    )
-
-
-@when("the same document is applied again", target_fixture="reapply_result")
-def apply_again(container, runner, operator: str, document) -> dict:
-    return runner.run(
-        apply_document(
-            document, container.commands, container.read_models,
-            tenant_id=TENANT_OF_DEPLOYMENT, actor=operator,
-        )
-    )
-
-
 @when(
     parsers.parse('a document without "{slug}" is applied'),
     target_fixture="apply_result",
@@ -326,7 +311,13 @@ def exists_with_limit(container, runner, slug: str, limit: int) -> None:
 def nothing_changed(reapply_result: dict) -> None:
     assert reapply_result["created"] == []
     assert reapply_result["updated"] == []
-    assert reapply_result["unchanged"]
+    assert reapply_result["roles"]["created"] == []
+    assert reapply_result["roles"]["updated"] == []
+    assert reapply_result["members"]["created"] == []
+    assert reapply_result["members"]["updated"] == []
+    assert (reapply_result["unchanged"]
+            or reapply_result["roles"]["unchanged"]
+            or reapply_result["members"]["unchanged"])
 
 
 @then(parsers.parse('gateway "{slug}" still exists'))
@@ -377,3 +368,164 @@ def gateway_has_upstream_token(container, runner, slug: str) -> None:
         assert credentials.get("upstream_token") == "up-secret", credentials
 
     runner.run(check())
+
+# -- roles and members through the file ------------------------------------
+
+def _apply(container, runner, document, caller) -> dict:
+    return runner.run(
+        apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=OPERATOR_EMAIL, caller=caller,
+        )
+    )
+
+@pytest.fixture()
+def caller(operator: str) -> Any:
+    """The account applying the file: the owner of the deployment tenant.
+
+    The fixture operator registers as admin, which folds to the owner role, so
+    it holds the whole catalog. Built here instead of resolved through the read
+    models because what matters to `apply_document` is only the permission set.
+    """
+    from gateway.application.principal import Caller
+    from gateway.domain.permissions import PERMISSIONS
+
+    return Caller(
+        operator_id="op_owner",
+        email=operator,
+        is_admin=True,
+        tenant_id=TENANT_OF_DEPLOYMENT,
+        permissions=frozenset(PERMISSIONS),
+    )
+
+@given(
+    parsers.parse('a YAML document defining "{name}" with "{permissions}"'),
+    target_fixture="document",
+)
+def document_defining_role(name: str, permissions: str) -> Any:
+    return parse_document(
+        f"""
+roles:
+  - name: {name}
+    permissions: [{permissions}]
+"""
+    )
+
+@when("a document without members is applied with prune enabled",
+      target_fixture="apply_result")
+def apply_prune_without_members(container, runner, caller) -> dict:
+    return _apply(
+        container, runner,
+        parse_document("prune: true\ngateways: []\n"),
+        caller,
+    )
+
+@when("the file is applied", target_fixture="apply_result")
+def apply_file_with_caller(container, runner, caller, document) -> dict:
+    return _apply(container, runner, document, caller)
+
+@when("the document is applied", target_fixture="apply_result")
+def apply_document_with_caller(container, runner, caller, document) -> dict:
+    return _apply(container, runner, document, caller)
+
+@when("the same document is applied again", target_fixture="reapply_result")
+def reapply_document(container, runner, caller, document) -> dict:
+    return _apply(container, runner, document, caller)
+
+@when("the file is applied again with:", target_fixture="apply_result")
+def apply_again_with(container, runner, caller, docstring=None, **kwargs) -> dict:
+    text = docstring
+    if text is None:
+        text = next((v for v in kwargs.values() if isinstance(v, str)), None)
+    assert isinstance(text, str), "expected a YAML docstring on the step"
+    return _apply(container, runner, parse_document(text), caller)
+
+@when(parsers.parse('the document is applied by an account without "{permission}"'),
+      target_fixture="apply_result")
+def apply_without_permission(container, runner, operator: str, document,
+                             permission: str) -> dict:
+    from gateway.application.principal import Caller
+    from gateway.domain.permissions import PERMISSIONS
+
+    limited = Caller(
+        operator_id="op_limited",
+        email=operator,
+        tenant_id=TENANT_OF_DEPLOYMENT,
+        permissions=frozenset(p for p in PERMISSIONS if p != permission),
+    )
+    return _apply(container, runner, document, limited)
+
+@then(parsers.parse('the role "{name}" exists with permissions "{permissions}"'))
+def role_exists_with(container, runner, name: str, permissions: str) -> None:
+    from gateway.domain.permissions import BUILTIN_ROLES, normalise
+
+    async def check() -> tuple[str, ...]:
+        builtin = {rname: perms for _rid, (rname, perms) in BUILTIN_ROLES.items()}
+        if name in builtin:
+            return tuple(builtin[name])
+        for row in await container.read_models.list_roles(TENANT_OF_DEPLOYMENT):
+            if row["name"] == name:
+                return tuple(row["permissions"] or ())
+        raise AssertionError(f"role '{name}' not found")
+
+    assert runner.run(check()) == normalise(permissions.split(","))
+
+@then(parsers.parse('the member "{email}" has the role "{role}"'))
+def member_has_role(container, runner, email: str, role: str) -> None:
+    from gateway.domain.permissions import BUILTIN_ROLES
+
+    async def check() -> list[str]:
+        names = {rid: n for rid, (n, _p) in BUILTIN_ROLES.items()}
+        names.update(
+            {row["id"]: row["name"]
+             for row in await container.read_models.list_roles(TENANT_OF_DEPLOYMENT)}
+        )
+        for row in await container.read_models.list_operators(TENANT_OF_DEPLOYMENT):
+            if row["email"] == email.lower():
+                return [names.get(rid, rid) for rid in row["role_ids"]]
+        raise AssertionError(f"member '{email}' not found")
+
+    assert role in runner.run(check())
+
+@when("the tenant is exported and applied again", target_fixture="reapply_result")
+def export_and_reapply(container, runner, caller) -> dict:
+    from gateway.configexport import render_document
+
+    async def run() -> dict:
+        text = await render_document(
+            container.read_models, TENANT_OF_DEPLOYMENT
+        )
+        document = parse_document(text)
+        return await apply_document(
+            document, container.commands, container.read_models,
+            tenant_id=TENANT_OF_DEPLOYMENT, actor=OPERATOR_EMAIL, caller=caller,
+        )
+
+    return runner.run(run())
+
+
+@then(parsers.parse('the exported document declares role "{name}"'))
+def exported_declares_role(container, runner, name: str) -> None:
+    from gateway.configexport import render_document
+
+    async def export() -> str:
+        return await render_document(container.read_models, TENANT_OF_DEPLOYMENT)
+
+    assert f"name: '{name}'" in runner.run(export())
+
+
+@then(parsers.parse('the member "{email}" still exists'))
+def member_still_exists(container, runner, email: str) -> None:
+    async def check() -> list[str]:
+        return [
+            row["email"]
+            for row in await container.read_models.list_operators(TENANT_OF_DEPLOYMENT)
+        ]
+
+    assert email in runner.run(check())
+
+@then(parsers.parse('applying fails naming "{fragment}"'))
+def apply_failed_naming(apply_result: dict, fragment: str) -> None:
+    assert apply_result["errors"], "expected an error, got none"
+    joined = " ".join(apply_result["errors"])
+    assert fragment in joined, joined

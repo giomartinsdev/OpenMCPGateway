@@ -26,6 +26,8 @@ async def validate_config(payload: ConfigFileRequest, session: CanReadConfig,
     document = parse_document(text)
     return {
         "gateways": [spec.slug for spec in document.gateways],
+        "roles": [spec.name for spec in document.roles],
+        "members": [spec.email for spec in document.members],
         "prune": document.prune,
     }
 
@@ -42,6 +44,7 @@ async def apply_config(payload: ConfigFileRequest, session: CanWriteConfig,
         container.read_models,
         tenant_id=principal.tenant,
         actor=session.email,
+        caller=principal.caller,
     )
     await container.refresh_router()
     return result

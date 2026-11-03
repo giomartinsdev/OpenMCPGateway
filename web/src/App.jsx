@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { can } from "./ui.jsx";
+import { Icon } from "./icons.jsx";
+import { Mark } from "./Mark.jsx";
 import { Landing } from "./pages/Landing.jsx";
 import { Gateways } from "./pages/Gateways.jsx";
 import { GatewayDetail } from "./pages/GatewayDetail.jsx";
@@ -10,6 +12,7 @@ import { Audit } from "./pages/Audit.jsx";
 import { Members } from "./pages/Members.jsx";
 import { Roles } from "./pages/Roles.jsx";
 import { Onboarding } from "./pages/Onboarding.jsx";
+import { Docs } from "./pages/Docs.jsx";
 import { Bone } from "./ui.jsx";
 
 // Hash routing: 15 lines instead of a router dependency, and it survives being
@@ -32,42 +35,87 @@ export function navigate(to) {
 // `read` is the permission that makes the entry useful: a page you cannot read
 // is a page that renders a 403, so it is not offered. The server decides on the
 // click regardless.
+//
+// Three groups, in the order an operator asks the questions: what am I routing,
+// what is happening, how is it governed. `docs` is the only entry with no
+// permission — it is the manual, and a manual behind a login is a manual nobody
+// reads before asking for access.
 const NAV = [
-  { to: "/", label: "Gateways", read: "gateways:read", group: "Operate" },
-  { to: "/traffic", label: "Traffic", read: "traffic:read" },
-  { to: "/audit", label: "Audit log", read: "audit:read" },
-  { to: "/config", label: "Config as code", read: "config:read", group: "Settings" },
-  { to: "/members", label: "Members", read: "members:read" },
-  { to: "/roles", label: "Roles", read: "roles:read" },
+  {
+    group: "Gateway",
+    items: [
+      { to: "/", label: "Gateways", read: "gateways:read", icon: "gateway" },
+    ],
+  },
+  {
+    group: "Traffic & Logs",
+    items: [
+      { to: "/traffic", label: "Traffic", read: "traffic:read", icon: "pulse" },
+      { to: "/audit", label: "Audit log", read: "audit:read", icon: "logs" },
+    ],
+  },
+  {
+    group: "Settings",
+    items: [
+      // RBAC first, then the file that can rewrite it: the forms and the YAML
+      // edit the same state, and reading them in that order says so.
+      { to: "/members", label: "Members", read: "members:read", icon: "users" },
+      { to: "/roles", label: "Roles", read: "roles:read", icon: "shield" },
+      { to: "/config", label: "Config as code", read: "config:read", icon: "code", divider: true },
+    ],
+  },
+  {
+    group: "Help",
+    items: [{ to: "/docs", label: "Documentation", icon: "book" }],
+  },
 ];
+
+function useVisibleNav(me) {
+  return NAV
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.read || can(me, item.read)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
 
 /** The frame every signed-in page renders inside. */
 function Frame({ me, page, path, isDetail, onSignOut }) {
+  const groups = useVisibleNav(me);
   return (
     <div className="frame">
       <aside className="rail">
-        <div className="logo">
-          <div className="logo-mark" />
+        <a className="logo" href="#/" aria-label="OpenMCPGateway home">
+          <Mark size={34} />
           <div className="logo-text">
             OpenMCP<span>Gateway</span>
           </div>
-        </div>
-        <nav className="nav">
-          {NAV.filter((item) => can(me, item.read)).map((item) => {
-            const active =
-              item.to === "/"
-                ? !isDetail && path === "/"
-                : path.startsWith(item.to);
-            return (
-              <div key={item.to} style={{ display: "contents" }}>
-                {item.group ? <div className="nav-label">{item.group}</div> : null}
-                <a href={`#${item.to}`} className={active ? "active" : ""}>
-                  <span className="dot" />
-                  {item.label}
-                </a>
-              </div>
-            );
-          })}
+        </a>
+        <nav className="nav" aria-label="Main">
+          {groups.map((group) => (
+            <div className="nav-group" key={group.group}>
+              <div className="nav-label">{group.group}</div>
+              {group.items.map((item) => {
+                const active =
+                  item.to === "/"
+                    ? !isDetail && path === "/"
+                    : path.startsWith(item.to);
+                return (
+                  <a
+                    key={item.to}
+                    href={`#${item.to}`}
+                    className={[active && "active", item.divider && "divided"]
+                      .filter(Boolean)
+                      .join(" ")}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <Icon name={item.icon} size={15} />
+                    <span>{item.label}</span>
+                  </a>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="rail-foot">
           <div className="who">
@@ -146,6 +194,41 @@ export function App() {
 
   // Signed out: the landing page *is* the sign-in page. A separate /login route
   // would be a second front door to keep painted.
+  //
+  // `/docs` is checked first, and for both states: the manual is what someone
+  // reads *before* deciding to sign in, and it is the one page here that has no
+  // permission attached.
+  if (path.startsWith("/docs")) {
+    const docs = <Docs signedIn={me !== null} />;
+    // Signed out, the manual stands alone: no rail, because there is nothing to
+    // navigate to yet, and it is the page a stranger reads before signing up.
+    if (me === null) {
+      return (
+        <div className="docs-shell">
+          <a className="logo docs-logo" href="#/" aria-label="OpenMCPGateway home">
+            <Mark size={34} />
+            <div className="logo-text">
+              OpenMCP<span>Gateway</span>
+            </div>
+          </a>
+          {docs}
+        </div>
+      );
+    }
+    return (
+      <Frame
+        me={me}
+        page={docs}
+        path={path}
+        isDetail={false}
+        onSignOut={async () => {
+          await api.logout();
+          setMe(null);
+        }}
+      />
+    );
+  }
+
   if (me === null) {
     return <Landing onLogin={setMe} />;
   }

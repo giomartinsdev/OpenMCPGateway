@@ -232,14 +232,56 @@ caveat. See `ponytail:` comments in `backend/src/gateway/proxy/rate_limit.py`.
 
 ## Configuration as code
 
-The UI and a file are equivalent — both reach the same command handler.
+The UI and a file are equivalent — both reach the same command handler. The file
+declares **gateways, roles and members**, so a tenant can be rebuilt from a commit
+or managed only by IaC.
+
+```yaml
+gateways:
+  - slug: rancher
+    name: Rancher cluster
+    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp
+    auth:
+      mode: oauth
+      idp: github
+      client_id: ${GITHUB_CLIENT_ID}
+      client_secret: ${GITHUB_CLIENT_SECRET}
+      upstream_token: ${RANCHER_MCP_TOKEN}
+    rate_limit: 120
+    allow: [giomartinsdev]
+
+roles:
+  - name: Auditor
+    permissions: [gateways:read, traffic:read, audit:read]
+
+members:
+  - email: auditor@example.com
+    password: ${MEMBER_PASSWORD}   # only used when the account is new
+    roles: [Auditor]
+
+prune: false
+```
 
 ```bash
 omg export --tenant tn_local > gateways.yaml   # never includes secrets
 omg apply gateways.yaml --tenant tn_local      # reconcile; prints new keys
 ```
 
+Merge semantics: the file is authoritative for what it declares. A gateway left
+out survives, so a typo cannot delete production; `prune: true` opts into
+deletion, and it applies to gateways only — members are never pruned by
+omission. Built-in roles (`owner`, `viewer`) may be named but not redefined.
+Applying the file obeys the same delegation rule as the panel: nobody grants a
+permission it does not hold itself.
+
 `/config` in the UI does the same with a diff-free "validate, then apply".
+
+## Documentation
+
+`/#/docs` serves the full manual from the running deployment — concepts, every
+gateway field, auth modes, the config-as-code schema, the HTTP API, environment
+variables and a troubleshooting table. It is reachable signed out, and linked
+from the landing page.
 
 ## Architecture
 

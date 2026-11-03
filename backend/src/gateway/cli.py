@@ -89,6 +89,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
             for key in ("created", "updated", "unchanged", "pruned"):
                 if result[key]:
                     print(f"{key}: {', '.join(result[key])}")
+            for section in ("roles", "members"):
+                for key in ("created", "updated"):
+                    if result[section][key]:
+                        print(f"{key} {section}: {', '.join(result[section][key])}")
             # Newly issued keys are shown once — capture them now or never.
             for entry in result["api_keys"]:
                 print(f"api key [{entry['gateway']}/{entry['label']}]: {entry['key']}")

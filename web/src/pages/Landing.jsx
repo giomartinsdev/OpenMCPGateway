@@ -75,6 +75,9 @@ export function Landing({ onLogin }) {
         <div className="links">
           <a href="#how">How it works</a>
           <a href="#features">Features</a>
+          {/* `#/docs` is a route, not an anchor: the manual is a page of the app,
+              reachable signed out, so the pitch and the reference cannot drift. */}
+          <a href="#/docs">Docs</a>
           <a href="https://github.com/giomartinsdev/OpenMCPGateway" target="_blank" rel="noreferrer">
             GitHub
           </a>
@@ -97,8 +100,8 @@ export function Landing({ onLogin }) {
           </p>
           <div className="cta">
             <a className="cta-primary" href="#signin">Open the panel</a>
-            <a className="cta-secondary" href="https://github.com/giomartinsdev/OpenMCPGateway" target="_blank" rel="noreferrer">
-              Read the source
+            <a className="cta-secondary" href="#/docs">
+              Read the docs
             </a>
           </div>
           <p className="fineprint">
@@ -175,11 +178,47 @@ export function Landing({ onLogin }) {
         </div>
       </section>
 
+      <section className="band" id="docs">
+        <header>
+          <h2>The manual is in the product</h2>
+          <p>
+            Not a README on another tab: the same deployment serves the reference, so
+            what you read is the version you are running.
+          </p>
+        </header>
+        <div className="docs-band">
+          <a className="docs-card" href="#/docs">
+            <span className="eyebrow">Reference</span>
+            <h3>Gateways, auth, limits, logs</h3>
+            <p>
+              How a request gets through, what each auth mode costs you, and every field
+              on a gateway.
+            </p>
+          </a>
+          <a className="docs-card" href="#/docs">
+            <span className="eyebrow">Operations</span>
+            <h3>Config as code, roles and members</h3>
+            <p>
+              The full YAML schema — gateways, roles and members — with the merge and
+              prune semantics spelled out.
+            </p>
+          </a>
+          <a className="docs-card" href="#/docs">
+            <span className="eyebrow">Troubleshooting</span>
+            <h3>503, 401, 403, 429</h3>
+            <p>
+              What each refusal means, and the ingress setting that makes an MCP stream
+              look like a hang.
+            </p>
+          </a>
+        </div>
+      </section>
+
       <footer className="landing-foot">
         <span>OpenMCPGateway · Apache-2.0</span>
         <div className="row">
           <a href="https://github.com/giomartinsdev/OpenMCPGateway">Source</a>
-          <a href="https://github.com/giomartinsdev/OpenMCPGateway#readme">Docs</a>
+          <a href="#/docs">Docs</a>
           <a href="#signin">Sign in</a>
         </div>
       </footer>

@@ -248,7 +248,7 @@ function CreateGateway({ onCancel, onCreated }) {
                 <option value="">Choose…</option>
                 <option value="github">GitHub</option>
                 <option value="google">Google</option>
-                <option value="microsoft">Microsoft</option>
+                <option value="azure">Microsoft</option>
                 <option value="oidc">Custom OIDC</option>
               </select>
             </div>
