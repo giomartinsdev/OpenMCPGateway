@@ -242,18 +242,122 @@ def read_history(owner: dict, gateway: dict) -> list[dict]:
     assert response.status_code == 200, response.text
     return response.json()["history"]
 
-@then(parsers.parse("the answer is {status:d}"))
-def restore_status(restore: dict, status: int) -> None:
-    assert restore["status"] == status, restore
+@when(
+    parsers.parse('the operator reads the history filtered by "{field}" "{value}"'),
+    target_fixture="history",
+)
+def read_history_filtered(owner: dict, gateway: dict, field: str,
+                          value: str) -> list[dict]:
+    """The same filter vocabulary as `/events`, read through the gateway scope.
+
+    Returns the list for a legal filter and the error body for an illegal one;
+    the "then" step decides which it expected.
+    """
+    response = owner["browser"].get(
+        f"/api/gateways/{gateway['id']}/history", params={field: value}
+    )
+    if response.status_code != 200:
+        raise AssertionError(response.text)
+    return response.json()["history"]
+
+@when(parsers.parse('the operator reads the history asking for filter "{field}"'),
+      target_fixture="history_response")
+def read_history_unknown_filter(owner: dict, gateway: dict,
+                                field: str) -> dict[str, Any]:
+    response = owner["browser"].get(
+        f"/api/gateways/{gateway['id']}/history", params={field: "allowed"}
+    )
+    return {"status": response.status_code, "body": response.text}
+
+@when("the operator pages through the history one row at a time",
+      target_fixture="pages")
+def page_history(owner: dict, gateway: dict) -> list[dict]:
+    """Follow `next` exactly as the panel's Load more does."""
+    pages: list[dict] = []
+    before = None
+    for _ in range(10):
+        params: dict[str, Any] = {"limit": 1}
+        if before:
+            params["before"] = before
+        response = owner["browser"].get(
+            f"/api/gateways/{gateway['id']}/history", params=params
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        pages.append(body)
+        before = body["next"]
+        if not before:
+            break
+    return pages
+
+@given("the operator configures auth with a client secret")
+def configure_auth(owner: dict, gateway: dict) -> None:
+    response = owner["browser"].put(
+        f"/api/gateways/{gateway['id']}/auth",
+        json={
+            "auth_mode": "oauth",
+            "idp": "github",
+            "client_id": "Ov23liHistoryTest",
+            "client_secret": "history-client-secret-32-bytes",
+        },
+    )
+    assert response.status_code == 200, response.text
 
 @then("the history has a version for every change")
 def history_versions(history: list[dict]) -> None:
     assert len(history) == 3, history
-    assert [entry["sequence"] for entry in history] == [1, 2, 3], history
+    # Newest first, like every other list in the panel.
+    assert [entry["sequence"] for entry in history] == [3, 2, 1], history
 
-@then("the last entry's actor is the operator who made it")
+@then("the first entry's actor is the operator who made it")
 def history_actor(history: list[dict]) -> None:
-    assert history[-1]["actor"] == OWNER, history[-1]
+    assert history[0]["actor"] == OWNER, history[0]
+
+@then("only the first entry is marked current")
+def history_current(history: list[dict]) -> None:
+    assert [entry["current"] for entry in history] == [True, False, False], history
+
+@then("the history has 2 entries")
+def history_two(history: list[dict]) -> None:
+    assert len(history) == 2, history
+
+@then("the history is empty")
+def history_empty(history: list[dict]) -> None:
+    assert history == [], history
+
+@then("the pages hold 3 entries in total")
+def pages_total(pages: list[dict]) -> None:
+    assert sum(len(page["history"]) for page in pages) == 3, pages
+
+@then("no entry appears twice")
+def pages_disjoint(pages: list[dict]) -> None:
+    sequences = [
+        entry["sequence"] for page in pages for entry in page["history"]
+    ]
+    assert len(sequences) == len(set(sequences)), sequences
+
+@then("no history entry carries a secret")
+def history_redacted(history: list[dict]) -> None:
+    assert any(entry["event_type"] == "gateway.auth_configured" for entry in history), [
+        entry["event_type"] for entry in history
+    ]
+    body = repr(history)
+    assert "history-client-secret-32-bytes" not in body, body[:400]
+    # The key stays, so a reader can see that the field changed; the value does
+    # not. A hash would still be a fingerprint of a live credential.
+    assert "***" in body, body[:400]
+
+@then(parsers.parse("the answer is {status:d}"))
+def restore_status(restore: dict, status: int) -> None:
+    assert restore["status"] == status, restore
+
+@then("the history filter is refused as 422")
+def history_filter_refused(history_response: dict) -> None:
+    assert history_response["status"] == 422, history_response
+
+@then(parsers.parse('the refusal names "{field}"'))
+def refusal_names(history_response: dict, field: str) -> None:
+    assert field in history_response["body"], history_response["body"][:300]
 
 @when(parsers.parse("the operator restores the gateway to version {version:d}"),
        target_fixture="restore")

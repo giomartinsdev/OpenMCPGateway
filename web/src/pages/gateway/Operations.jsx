@@ -1,106 +1,152 @@
-// Three things an operator does to a gateway they already own, side by side on
-// the detail page: roll the configuration back, run one tool by hand, and push
-// the traffic log somewhere else.
+// Two things an operator does to a gateway they already own, side by side on the
+// detail page: roll the configuration back, and push the traffic log somewhere
+// else.
 //
-// They share a file because they share a rule: none of them is a new kind of
-// write. A restore appends one event, a playground call is an ordinary proxied
-// call with the operator as the subject, and a webhook is configuration the log
-// already records.
+// They share a file because they share a rule: neither is a new kind of write.
+// A restore appends one event, and a webhook is configuration the log already
+// records.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api.js";
 import { useT } from "../../i18n.jsx";
+import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../../paged.jsx";
 import {
-  Badge, Bone, Details, Drawer, Empty, Notice, outcomeLabel, relative,
+  Badge, Bone, Details, Drawer, Empty, NoMatches, Notice, Skeleton,
+  outcomeLabel, relative,
 } from "../../ui.jsx";
 
-/** "v7 · gateway.updated · 3 days ago", one line per fact. */
+// One filter per column, matching the audit page's vocabulary: it is the same
+// stream, read through a narrower scope.
+const HISTORY_FIELDS = [
+  null, // version: a number is a sort key, not a search box
+  { key: "type", label: "Change" },
+  { key: "actor", label: "Actor" },
+  null, // when: `since`/`until` are a range, and a range is not a text box
+  null, // actions
+];
+
+const HISTORY_SORTS = { occurred_at: "desc", actor: "asc", type: "asc" };
+
+/** What a history row looks like before the real one arrives. */
+const SAMPLE_HISTORY = [
+  { sequence: 3, event_type: "gateway.updated", actor: "someone@example.com", occurred_at: new Date().toISOString(), current: true },
+  { sequence: 2, event_type: "gateway.auth_configured", actor: "someone@example.com", occurred_at: new Date().toISOString(), current: false },
+  { sequence: 1, event_type: "gateway.created", actor: "someone@example.com", occurred_at: new Date().toISOString(), current: false },
+];
+
+/**
+ * The gateway's own stream, with the same affordances as every other list in the
+ * panel: a cursor, a filter under the columns that take one, sortable headers,
+ * and a drawer for "what did version 2 actually hold".
+ *
+ * Newest first, like `/events`: the change someone is looking for is almost
+ * always the one that just happened.
+ */
 export function HistoryPanel({ gateway, onRestored }) {
   const t = useT();
-  const [history, setHistory] = useState(null);
+  const [filters, setFilters] = useState({});
+  const [sort, setSort] = useSort("occurred_at", HISTORY_SORTS);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load() {
-    try {
-      const data = await api.history(gateway.id);
-      setHistory(data.history);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const { items, next, error: listError, busy: loading, more, reload } = usePagedList(
+    async ({ limit, before, ...query }) => {
+      const page = await api.history(gateway.id, { limit, before, ...query });
+      return { items: page.history, next: page.next };
+    },
+    { ...filters, ...sort },
+  );
 
-  useEffect(() => {
-    load();
-  }, [gateway.id]);
-
-  async function restore(version) {
-    setBusy(true);
-    setError("");
-    try {
-      await api.restore(gateway.id, version);
-      setPreview(null);
-      await load();
-      onRestored?.();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const restore = useCallback(
+    async (version) => {
+      setBusy(true);
+      setError("");
+      try {
+        await api.restore(gateway.id, version);
+        setPreview(null);
+        reload();
+        onRestored?.();
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [gateway.id, reload, onRestored],
+  );
 
   return (
     <>
-      <Notice kind="err">{error}</Notice>
-      {history === null ? (
-        <Bone height={120} radius={10} />
-      ) : history.length === 0 ? (
-        <Empty title={t("No history yet")}>{t("Every change to this gateway lands here.")}</Empty>
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>{t("Version")}</th>
-                <th>{t("Change")}</th>
-                <th>{t("Actor")}</th>
-                <th className="num">{t("When")}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {[...history].reverse().map((entry) => (
-                <tr key={entry.sequence}>
-                  <td className="num mono">{entry.sequence}</td>
-                  <td className="mono">{entry.event_type}</td>
-                  <td className="hint mono">{entry.actor || t("system")}</td>
-                  <td className="num hint">{relative(entry.occurred_at)}</td>
-                  <td className="actions">
-                    {/* The newest version is what the page already shows, so a
-                        "roll back to here" button on it would only ever 422. */}
-                    {entry.sequence !== history[history.length - 1].sequence && (
-                      <button
-                        className="ghost sm"
-                        disabled={busy}
-                        onClick={async () => {
-                          try {
-                            setPreview(await api.snapshot(gateway.id, entry.sequence));
-                          } catch (err) {
-                            setError(err.message);
-                          }
-                        }}
-                      >
-                        {t("preview")}
-                      </button>
-                    )}
-                  </td>
+      <Notice kind="err">{error || listError}</Notice>
+      <Skeleton
+        data={items}
+        sample={SAMPLE_HISTORY}
+        label={t("Loading the history")}
+        empty={items?.length === 0}
+        emptyMessage={
+          <NoMatches
+            filters={filters}
+            onClear={() => setFilters({})}
+            title={t("No history yet")}
+          >
+            {t("Every change to this gateway lands here.")}
+          </NoMatches>
+        }
+      >
+        {(rows) => (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th className="num">{t("Version")}</th>
+                  <SortHeader field="type" label="Change" sort={sort} onSort={setSort} />
+                  <SortHeader field="actor" label="Actor" sort={sort} onSort={setSort} />
+                  <SortHeader
+                    field="occurred_at"
+                    label="When"
+                    sort={sort}
+                    onSort={setSort}
+                    className="num"
+                  />
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                <FilterRow fields={HISTORY_FIELDS} value={filters} onChange={setFilters} />
+              </thead>
+              <tbody>
+                {rows.map((entry) => (
+                  <tr key={entry.sequence}>
+                    <td className="num mono">{entry.sequence}</td>
+                    <td className="mono">{entry.event_type}</td>
+                    <td className="hint mono">{entry.actor || t("system")}</td>
+                    <td className="num hint">{relative(entry.occurred_at)}</td>
+                    <td className="actions">
+                      {/* The current version is what the page already shows, so a
+                          "roll back to here" button on it would only ever 422. */}
+                      {entry.current ? null : (
+                        <button
+                          className="ghost sm"
+                          disabled={busy}
+                          onClick={async () => {
+                            try {
+                              setPreview(await api.snapshot(gateway.id, entry.sequence));
+                            } catch (err) {
+                              setError(err.message);
+                            }
+                          }}
+                        >
+                          {t("preview")}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Skeleton>
+      <LoadMore next={next} busy={loading} onClick={more} />
 
       {preview && (
         <Drawer
@@ -133,94 +179,6 @@ export function HistoryPanel({ gateway, onRestored }) {
           />
         </Drawer>
       )}
-    </>
-  );
-}
-
-export function PlaygroundPanel({ gateway, onCalled }) {
-  const t = useT();
-  // The allowlist is the right list to offer: a tool outside it is refused
-  // before the upstream sees it, so a picker built from the upstream catalog
-  // would mostly offer buttons that 403.
-  const tools = gateway.tools ?? [];
-  const [tool, setTool] = useState(tools[0] ?? "echo");
-  const [args, setArgs] = useState("{}");
-  const [result, setResult] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setTool(tools[0] ?? "echo");
-  }, [gateway.id]);
-
-  async function run() {
-    setBusy(true);
-    setResult(null);
-    try {
-      let parsed = {};
-      try {
-        parsed = args.trim() ? JSON.parse(args) : {};
-      } catch {
-        // A 422 is the server's answer, and it names the field. Sending the raw
-        // string would let the upstream explain a JSON error instead.
-        setResult({ ok: false, status: 422, error: t("Arguments must be a JSON object.") });
-        return;
-      }
-      setResult(await api.callTool(gateway.id, tool, parsed));
-      onCalled?.();
-    } catch (err) {
-      setResult({ ok: false, status: 0, error: err.message });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="row" style={{ gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div className="field inline">
-          <label htmlFor="playground-tool">{t("Tool")}</label>
-          <input
-            id="playground-tool"
-            className="mono"
-            list="playground-tools"
-            value={tool}
-            onChange={(event) => setTool(event.target.value)}
-          />
-          <datalist id="playground-tools">
-            {tools.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-        </div>
-        <button className="primary sm" disabled={busy} onClick={run}>
-          {busy ? t("Calling…") : t("Call tool")}
-        </button>
-      </div>
-      <div className="field" style={{ marginTop: 8 }}>
-        <label htmlFor="playground-args">{t("Arguments (JSON)")}</label>
-        <textarea
-          id="playground-args"
-          className="mono"
-          rows={4}
-          value={args}
-          onChange={(event) => setArgs(event.target.value)}
-        />
-      </div>
-      {result && (
-        <div style={{ marginTop: 10 }}>
-          <Badge kind={result.ok ? "ok" : "err"}>
-            {result.ok
-              ? t("Answered in {ms} ms", { ms: result.duration_ms })
-              : `${result.status} · ${result.reason ?? t("error")}`}
-          </Badge>
-          <pre className="mono" style={{ marginTop: 8, overflowX: "auto" }}>
-            {result.ok ? JSON.stringify(result.result, null, 2) : result.error}
-          </pre>
-        </div>
-      )}
-      <p className="hint" style={{ marginBottom: 0 }}>
-        {t("This runs the tool on the upstream with the gateway's own credential, and the call appears in the traffic log under your account. Rate limits, the allowlist and the audit trail all apply.")}
-      </p>
     </>
   );
 }

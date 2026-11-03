@@ -251,9 +251,13 @@ version in the stream, a preview of what an older one held, and a rollback that
 appends one `gateway.restored` fact rather than replaying the commands it undid.
 Keys and credentials are not restored: a revoked key must stay revoked.
 
-The page's second half is for looking rather than deciding. **Playground** runs
-one tool with the gateway's own upstream credential and records the call under
-the operator's account, so a manual invocation is never a mystery row.
+The page's second half is for looking rather than deciding. The **Activity** card
+holds two tabs with the same affordances as every other list — a cursor, a filter
+under each column that takes one, sortable headers: **Requests** is this
+gateway's slice of the traffic log, and **History** is its own stream, newest
+first, with a preview of what an older version held and a rollback. There is no
+way to run a tool from the panel: an operator's session is not a credential the
+proxy accepts, and a call that skips the guard is a call the log cannot explain.
 **Webhooks** registers a URL that receives every observation the guard records,
 signed with an HMAC-SHA256 of the body; the deliveries table is where "the hook is
 silent" turns into either "no matching event" or "every POST failed".

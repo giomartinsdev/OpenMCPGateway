@@ -78,7 +78,7 @@ test("a refused call names the reason in the drawer", async ({ page }) => {
 
   await page.goto(`/#/gateways/${ids.refused}`);
   const card = page
-    .locator(".card", { has: page.getByRole("heading", { name: "Recent requests" }) });
+    .locator(".card", { has: page.getByRole("heading", { name: "Activity", exact: true }) });
   const row = card.getByRole("row").filter({ has: page.getByRole("cell") }).first();
   await expect(row).toBeVisible();
   await row.click();

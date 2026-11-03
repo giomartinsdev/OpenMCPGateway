@@ -186,7 +186,7 @@
         "El orden es `?sort=<column>&order=asc|desc`. Las columnas ordenables son un conjunto cerrado por lista: gateways por `created_at`, `updated_at`, `name` o `slug`; traffic por `occurred_at`, `duration_ms`, `status` o `subject`; el registro de auditoría por `occurred_at`, `actor` o `type`; members por `email` y `created_at`; roles por `name` y `created_at`. Una clave desconocida es un 422 que enumera las legales.",
         "Un cursor significa *después de esta fila, en este orden*, así que está ligado al orden con el que se emitió. Cambie `sort` u `order` y empiece por la primera página: reutilizar el cursor antiguo es un 422, no una lista con agujeros silenciosos.",
         "Dos endpoints no encajan en la forma CRUD y vale la pena conocerlos: `POST /api/gateways/<id>/keys/<key_id>/reveal` devuelve el texto plano sellado una vez y `409` después, y `GET /api/gateways/<id>/upstream-tools` pregunta al upstream qué sirve para que la lista se marque en vez de escribirse. `PUT /api/gateways/<id>/tools` reemplaza la lista. `GET /api/requests.csv` responde a los mismos filtros de `/requests`, como archivo; `POST /api/config/plan` dice qué cambiaría un apply sin cambiar nada, y `POST /api/gateways/<id>/test` sondea el upstream con un handshake MCP real.",
-        "Cinco endpoints responden preguntas que la forma CRUD no responde: `GET /api/gateways/<id>/history` es el flujo de eventos de ese gateway, del más antiguo al más nuevo, con los valores secretos ocultos; `POST /api/gateways/<id>/restore` reaplica la configuración de una versión y anexa un hecho `gateway.restored` — las credenciales y las claves no se restauran, porque una clave revocada debe seguir revocada; `POST /api/gateways/<id>/call` ejecuta una herramienta con la credencial de upstream del propio gateway y registra la llamada con el operador como subject; `GET /api/events.csv` es el registro de auditoría como archivo, con los mismos filtros y el mismo alcance de tenant; y `/api/gateways/<id>/webhooks` registra una URL que recibe cada observación que graba el guard, firmada con un HMAC-SHA256 del cuerpo."
+        "Cuatro endpoints responden preguntas que la forma CRUD no responde: `GET /api/gateways/<id>/history` es el flujo de eventos de ese gateway, del más nuevo al más antiguo, paginado y filtrado con el vocabulario del registro de auditoría y con los valores secretos ocultos; `POST /api/gateways/<id>/restore` reaplica la configuración de una versión y anexa un hecho `gateway.restored` — las credenciales y las claves no se restauran, porque una clave revocada debe seguir revocada; `GET /api/events.csv` es el registro de auditoría como archivo, con los mismos filtros y el mismo alcance de tenant; y `/api/gateways/<id>/webhooks` registra una URL que recibe cada observación que graba el guard, firmada con un HMAC-SHA256 del cuerpo."
       ],
       "table": {
         "head": [
@@ -272,7 +272,7 @@
           ],
           [
             "GET /api/gateways/{id}/history",
-            "El flujo de eventos de ese gateway, desde el más antiguo, con secretos ocultos"
+            "El flujo de eventos de ese gateway, del más nuevo al más antiguo, filtrable y ordenable como el registro de auditoría"
           ],
           [
             "POST /api/gateways/{id}/restore",
@@ -281,10 +281,6 @@
           [
             "PUT /api/gateways/{id}/quota",
             "Tope mensual de llamadas (0 = ninguno), aparte del límite por minuto"
-          ],
-          [
-            "POST /api/gateways/{id}/call",
-            "Ejecuta una herramienta desde el panel; queda en el registro de tráfico"
           ],
           [
             "GET|POST /api/gateways/{id}/webhooks",

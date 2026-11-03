@@ -1,10 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // The v0.23 features as an operator meets them: the latency tail, a rollback,
-// the playground, webhooks, the audit export, and offboarding a member.
-//
-// The seeded `console` gateway is the upstream for the playground — it points at
-// the deployment's own `/mcp`, so a call is real instead of mocked.
+// webhooks, the audit export, and offboarding a member.
 const OWNER = { email: "insight@e2e.test", password: "insight-password-123" };
 const MEMBER = { email: "leaver@e2e.test", password: "leaver-password-123" };
 
@@ -105,9 +102,12 @@ test("a gateway can be rolled back to an earlier version", async ({ page }) => {
   }, ids.drift);
 
   await page.goto(`/#/gateways/${ids.drift}`);
+  // Requests and history share one card, so the reader is not asked to scroll
+  // past a log to reach the versions it came from.
   const card = page.locator(".card", {
-    has: page.getByRole("heading", { name: "History", exact: true }),
+    has: page.getByRole("heading", { name: "Activity", exact: true }),
   });
+  await card.getByRole("tab", { name: "History", exact: true }).click();
   await expect(card.getByRole("cell", { name: "gateway.updated" }).first()).toBeVisible();
 
   // v2 is the rename to "first"; v3 is the newest and has no button.
@@ -125,28 +125,40 @@ test("a gateway can be rolled back to an earlier version", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "first", level: 1 })).toBeVisible();
 });
 
-test("the playground runs a real tool and the call appears in the log", async ({
-  page,
-}) => {
+test("the activity card switches between requests and history", async ({ page }) => {
   await signIn(page);
   await page.goto(`/#/gateways/${ids.console}`);
 
   const card = page.locator(".card", {
-    has: page.getByRole("heading", { name: "Playground", exact: true }),
+    has: page.getByRole("heading", { name: "Activity", exact: true }),
   });
-  await card.getByLabel("Tool").fill("list_gateways");
-  await card.getByLabel("Arguments (JSON)").fill("{}");
-  await card.getByRole("button", { name: "Call tool" }).click();
+  const requests = card.getByRole("tab", { name: "Requests", exact: true });
+  const history = card.getByRole("tab", { name: "History", exact: true });
 
-  await expect(card.getByText(/Answered in \d+ ms/)).toBeVisible({ timeout: 20_000 });
+  // Requests is the tab the page opens on: it answers "is it working".
+  await expect(requests).toHaveAttribute("aria-selected", "true");
+  // The filter-under-every-column shape is `paging.spec.js`'s subject; here the
+  // point is that there is no playground left to run a tool on the operator's
+  // behalf, and that both lists share one card.
+  await expect(page.getByRole("heading", { name: "Playground" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Recent requests" })).toHaveCount(0);
 
-  // A playground call is not a side channel: it lands in the traffic log with
-  // the operator as the subject.
-  await page.reload();
-  const requests = page.locator(".card", {
-    has: page.getByRole("heading", { name: "Recent requests" }),
-  });
-  await expect(requests.locator("tbody tr").first()).toContainText("list_gateways");
+  // History is the same table, with the same filter-under-the-column shape.
+  await history.click();
+  await expect(history).toHaveAttribute("aria-selected", "true");
+  await expect(
+    card.getByRole("textbox", { name: "Filter by Change" }),
+  ).toBeVisible();
+  const change = card.getByRole("textbox", { name: "Filter by Change" });
+  await change.fill("gateway.created");
+  const rows = card.getByRole("row").filter({ has: page.getByRole("cell") });
+  await expect(rows.first()).toContainText("gateway.created");
+  await expect(rows.filter({ hasNotText: "gateway.created" })).toHaveCount(0);
+
+  // The newest version is the one the page already shows, so it has no rollback
+  // button; "restore to where it already is" is a 422 with a button on it.
+  await change.fill("");
+  await expect(rows.first().getByRole("button", { name: "preview" })).toHaveCount(0);
 });
 
 test("a webhook is registered and its deliveries are readable", async ({ page }) => {

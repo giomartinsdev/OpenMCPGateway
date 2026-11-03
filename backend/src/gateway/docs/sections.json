@@ -186,7 +186,7 @@
         "Ordering is `?sort=<column>&order=asc|desc`. The sortable columns are a closed set per list: gateways by `created_at`, `updated_at`, `name` or `slug`; traffic by `occurred_at`, `duration_ms`, `status` or `subject`; the audit log by `occurred_at`, `actor` or `type`; members by `email` and `created_at`; roles by `name` and `created_at`. An unknown key is a 422 that lists the legal ones.",
         "A cursor means *after this row, in this order*, so it is bound to the sort it was minted under. Change `sort` or `order` and start from the first page: reusing the old cursor is a 422, not a silently holed list.",
         "Two endpoints do not fit the CRUD shape and are worth knowing: `POST /api/gateways/<id>/keys/<key_id>/reveal` answers the sealed plaintext once and `409` afterwards, and `GET /api/gateways/<id>/upstream-tools` asks the upstream what it serves so the allowlist can be ticked rather than typed. `PUT /api/gateways/<id>/tools` replaces the list. `GET /api/requests.csv` answers the same filters as `/requests`, as a file; `POST /api/config/plan` says what an apply would change without changing it, and `POST /api/gateways/<id>/test` probes the upstream with a real MCP handshake.",
-        "Five endpoints answer questions the CRUD shape cannot: `GET /api/gateways/<id>/history` is that gateway's own event stream, oldest first, with secret values redacted; `POST /api/gateways/<id>/restore` re-applies the configuration at a version and appends one `gateway.restored` fact — credentials and keys are not restored, because a revoked key must stay revoked; `POST /api/gateways/<id>/call` runs one tool with the gateway's own upstream credential and records the call with the operator as the subject; `GET /api/events.csv` is the audit log as a file with the same filters and the same tenant scope; and `/api/gateways/<id>/webhooks` registers a URL that receives every observation the guard records, signed with an HMAC-SHA256 of the body."
+        "Four endpoints answer questions the CRUD shape cannot: `GET /api/gateways/<id>/history` is that gateway's own event stream, newest first, paged and filtered with the audit log's own vocabulary and with secret values redacted; `POST /api/gateways/<id>/restore` re-applies the configuration at a version and appends one `gateway.restored` fact — credentials and keys are not restored, because a revoked key must stay revoked; `GET /api/events.csv` is the audit log as a file with the same filters and the same tenant scope; and `/api/gateways/<id>/webhooks` registers a URL that receives every observation the guard records, signed with an HMAC-SHA256 of the body."
       ],
       "table": {
         "head": [
@@ -272,7 +272,7 @@
           ],
           [
             "GET /api/gateways/{id}/history",
-            "That gateway's own event stream, oldest first, secrets redacted"
+            "That gateway's own event stream, newest first, filterable and sortable like the audit log"
           ],
           [
             "POST /api/gateways/{id}/restore",
@@ -281,10 +281,6 @@
           [
             "PUT /api/gateways/{id}/quota",
             "Monthly call ceiling (0 = none), separate from the per-minute limit"
-          ],
-          [
-            "POST /api/gateways/{id}/call",
-            "Run one tool from the panel; recorded in the traffic log"
           ],
           [
             "GET|POST /api/gateways/{id}/webhooks",

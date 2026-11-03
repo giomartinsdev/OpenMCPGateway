@@ -72,13 +72,55 @@ Feature: What the log can tell you after the fact
   # "Who changed this target_url, and what was it before" is one aggregate's
   # stream, not a needle in the global list.
 
-  Scenario: A gateway's history lists its versions oldest first
+  Scenario: A gateway's history lists its versions newest first
+    # Newest first, like every other list in the panel: the change someone is
+    # looking for is almost always the one that just happened, and a table whose
+    # only affordance is scrolling to the bottom is a table nobody sorts.
     Given a gateway "demo" pointing at "http://127.0.0.1:9/mcp"
     And the operator renames it to "first"
     And the operator renames it to "second"
     When the operator reads the gateway's history
     Then the history has a version for every change
-    And the last entry's actor is the operator who made it
+    And the first entry's actor is the operator who made it
+    And only the first entry is marked current
+
+  Scenario: The history is narrowed by the same vocabulary as the audit log
+    # Same filters as the audit page, because it is the same stream read through
+    # a narrower scope: one gateway's events, not the tenant's. A filter that
+    # matches nothing has to come back empty, not "everything".
+    Given a gateway "demo" pointing at "http://127.0.0.1:9/mcp"
+    And the operator renames it to "first"
+    And the operator renames it to "second"
+    When the operator reads the history filtered by "type" "gateway.updated"
+    Then the history has 2 entries
+    When the operator reads the history filtered by "actor" "nobody@example.dev"
+    Then the history is empty
+
+  Scenario: A history filter nobody declared is refused, naming the ones that exist
+    Given a gateway "demo" pointing at "http://127.0.0.1:9/mcp"
+    When the operator reads the history asking for filter "outcame"
+    Then the history filter is refused as 422
+    And the refusal names "outcame"
+
+  Scenario: The history pages with a cursor and the sort survives it
+    # Three versions fit in one page only by accident. Asking for one row at a
+    # time is the honest test that the cursor is minted under the sort it was
+    # read under, instead of a second page that silently repeats row one.
+    Given a gateway "demo" pointing at "http://127.0.0.1:9/mcp"
+    And the operator renames it to "first"
+    And the operator renames it to "second"
+    When the operator pages through the history one row at a time
+    Then the pages hold 3 entries in total
+    And no entry appears twice
+
+  Scenario: The history never carries a credential
+    # `gateway.auth.configured` holds the OAuth client secret. The panel needs
+    # the event; it never needs the value, and a read endpoint that echoes it is
+    # a credential in an HTTP response.
+    Given a gateway "demo" pointing at "http://127.0.0.1:9/mcp"
+    And the operator configures auth with a client secret
+    When the operator reads the gateway's history
+    Then no history entry carries a secret
 
   Scenario: Restoring an earlier version brings the field back
     Given a gateway "demo" pointing at "http://127.0.0.1:9/mcp"
@@ -87,7 +129,6 @@ Feature: What the log can tell you after the fact
     When the operator restores the gateway to version 2
     Then the gateway is named "first"
     And the restore is recorded as its own event
-
   Scenario: Restoring a version that does not exist is refused
     Given a gateway "demo" pointing at "http://127.0.0.1:9/mcp"
     When the operator restores the gateway to version 999

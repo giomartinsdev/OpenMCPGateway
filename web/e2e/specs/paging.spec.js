@@ -261,7 +261,7 @@ test("the gateway page lists its own calls, filterable and openable", async ({ p
   // The page's own table, not a link to /traffic: same cursor, same filter under
   // every column, same drawer as every other list.
   const card = page.locator(".card", {
-    has: page.getByRole("heading", { name: "Recent requests", exact: true }),
+    has: page.getByRole("heading", { name: "Activity", exact: true }),
   });
   await expect(card.getByRole("textbox", { name: "Filter by Outcome" })).toBeVisible();
 

@@ -8,7 +8,7 @@ import { navigate } from "../App.jsx";
 import { ConnectGuide } from "./gateway/ConnectGuide.jsx";
 import { ToolsPanel } from "./gateway/ToolsPanel.jsx";
 import { AuthForm, QuotaForm, RateLimitForm, Requests, Traffic } from "./gateway/Panels.jsx";
-import { HistoryPanel, PlaygroundPanel, WebhooksPanel } from "./gateway/Operations.jsx";
+import { HistoryPanel, WebhooksPanel } from "./gateway/Operations.jsx";
 
 // Placeholder for the detail page: one object with the shape the page reads, so
 // the skeleton is the page's own layout rather than a grey rectangle.
@@ -125,6 +125,9 @@ export function GatewayDetail({ id, me }) {
   // Which key's plaintext is on screen, and why one cannot be shown. The eye is
   // per row: a revealed key is a fact about that key, not about the page.
   const [shownKey, setShownKey] = useState("");
+  // Requests or history in the Activity card. Requests is the tab an operator
+  // opens the page for; history is the one they come back to.
+  const [tab, setTab] = useState("requests");
 
   async function load() {
     try {
@@ -585,14 +588,6 @@ export function GatewayDetail({ id, me }) {
 
       <Traffic stats={stats} />
 
-      <Card title={t("Playground")}>
-        {gateway ? (
-          <PlaygroundPanel gateway={gateway} onCalled={load} />
-        ) : (
-          <Bone height={120} radius={10} />
-        )}
-      </Card>
-
       <Card title={t("Webhooks")}>
         {gateway ? (
           <WebhooksPanel gateway={gateway} />
@@ -601,17 +596,37 @@ export function GatewayDetail({ id, me }) {
         )}
       </Card>
 
-      <Card title={t("History")}>
+      {/* One card, two tabs: the two lists answer "what happened here", and
+          stacked they pushed the danger zone a full screen down. */}
+      <Card
+        title={t("Activity")}
+        actions={
+          <div className="seg" role="tablist" aria-label={t("Activity")}>
+            <button
+              role="tab"
+              aria-selected={tab === "requests"}
+              className={tab === "requests" ? "active" : ""}
+              onClick={() => setTab("requests")}
+            >
+              {t("Requests")}
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "history"}
+              className={tab === "history" ? "active" : ""}
+              onClick={() => setTab("history")}
+            >
+              {t("History")}
+            </button>
+          </div>
+        }
+      >
         {gateway ? (
-          <HistoryPanel gateway={gateway} onRestored={load} />
-        ) : (
-          <Bone height={120} radius={10} />
-        )}
-      </Card>
-
-      <Card title={t("Recent requests")}>
-        {gateway ? (
-          <Requests gateway={gateway} />
+          tab === "requests" ? (
+            <Requests gateway={gateway} />
+          ) : (
+            <HistoryPanel gateway={gateway} onRestored={load} />
+          )
         ) : (
           <Bone height={140} radius={10} />
         )}

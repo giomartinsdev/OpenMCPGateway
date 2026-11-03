@@ -4,10 +4,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
 
 from gateway.application.services import connect, gateways, inspect, listing
-from gateway.domain.filters import GATEWAY_FILTERS
+from gateway.domain.filters import EVENT_FILTERS, GATEWAY_FILTERS
 from gateway.interface.dependencies import (
     CanReadGateways,
     CanReadKeys,
@@ -20,7 +19,6 @@ from gateway.interface.listing import PageQuery, filters
 from gateway.interface.schemas import (
     ApiKeyRequest,
     AuthConfigRequest,
-    CallToolRequest,
     GatewayCreateRequest,
     GatewayToolsRequest,
     GatewayUpdateRequest,
@@ -214,13 +212,29 @@ async def set_quota(gateway_id: str, payload: QuotaRequest,
 # -- history ---------------------------------------------------------------
 
 @router.get("/gateways/{gateway_id}/history")
-async def gateway_history(gateway_id: str, session: CanReadGateways,
-                          principal: PrincipalDep,
-                          container: ContainerDep) -> dict[str, Any]:
-    """This gateway's own stream, oldest first. Secrets are redacted."""
+async def gateway_history(
+    gateway_id: str,
+    request: Request,
+    page: Annotated[PageQuery, Depends()],
+    session: CanReadGateways, principal: PrincipalDep,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    """This gateway's own stream, newest first, paged. Secrets are redacted.
+
+    Same filters and sorts as `/events`, narrowed to one aggregate: "why did this
+    one change" is a question about a stream, and the audit feed is the wrong
+    scope for it.
+    """
     del session
     gateway = await gateways.owned(container, principal.caller, gateway_id)
-    return {"history": await inspect.history(container, gateway)}
+    result = await inspect.history(
+        container, gateway,
+        window=page.window,
+        filters=filters(request, EVENT_FILTERS),
+        sort=page.sort,
+        order=page.order,
+    )
+    return {"history": result.items, "next": result.next}
 
 @router.get("/gateways/{gateway_id}/history/{version}")
 async def gateway_snapshot(gateway_id: str, version: int,
@@ -242,31 +256,6 @@ async def restore_gateway(gateway_id: str, payload: RestoreRequest,
     )
     await container.refresh_router()
     return {"status": "restored", "version": payload.version}
-
-# -- playground ------------------------------------------------------------
-
-@router.post("/gateways/{gateway_id}/call")
-async def call_tool(gateway_id: str, payload: CallToolRequest,
-                    session: CanWriteGateways, principal: PrincipalDep,
-                    container: ContainerDep) -> Response:
-    """Run one tool from the panel, through the gateway's own credential.
-
-    Write permission: it executes a side effect on a server the operator only
-    indirectly owns. The call is recorded in the traffic log with the operator as
-    the subject, so a playground invocation is never a mystery row.
-    """
-    gateway = await gateways.owned(container, principal.caller, gateway_id)
-    # A copy with the key list, because the row is a frozen read model: the
-    # playground asks "does this gateway have a key", and mutating the row to
-    # carry the answer would be the caller editing a projection.
-    config = {**gateway, "api_keys": await container.read_models.api_keys(gateway["id"])}
-    result = await inspect.call_tool(
-        container, config, tool=payload.tool, arguments=payload.arguments,
-        actor=session.email,
-    )
-    # The HTTP status is the outcome's, not always 200: a panel that renders a
-    # 403 body from a 200 response teaches the operator to ignore status codes.
-    return JSONResponse(content=result, status_code=int(result["status"]))
 
 @router.post("/gateways/{gateway_id}/disable")
 async def disable_gateway(gateway_id: str, session: CanWriteGateways,

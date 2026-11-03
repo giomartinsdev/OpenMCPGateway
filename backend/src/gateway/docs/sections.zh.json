@@ -186,7 +186,7 @@
         "排序是 `?sort=<column>&order=asc|desc`。可排序列对每个列表是封闭集合：网关按 `created_at`、`updated_at`、`name` 或 `slug`；流量按 `occurred_at`、`duration_ms`、`status` 或 `subject`；审计日志按 `occurred_at`、`actor` 或 `type`；成员按 `email` 和 `created_at`；角色按 `name` 和 `created_at`。未知的键会返回 422 并列出合法的键。",
         "游标意味着*在此行之后，按此顺序*，因此它绑定于签发它的排序。更改 `sort` 或 `order` 后请从第一页开始：复用旧游标会得到 422，而不是一个静默有洞的列表。",
         "有两个端点不合 CRUD 的形状，值得了解：`POST /api/gateways/<id>/keys/<key_id>/reveal` 返回一次封存的明文，之后是 `409`；`GET /api/gateways/<id>/upstream-tools` 向上游询问它提供什么，好让清单被勾选而不是手打。`PUT /api/gateways/<id>/tools` 替换清单。 `GET /api/requests.csv` 以文件形式响应与 `/requests` 相同的筛选条件；`POST /api/config/plan` 说明 apply 会改什么而不改动任何东西；`POST /api/gateways/<id>/test` 用真实的 MCP handshake 探测上游。",
-        "有五个端点回答 CRUD 形状无法回答的问题：`GET /api/gateways/<id>/history` 是该网关自己的事件流，从旧到新，敏感值已脱敏；`POST /api/gateways/<id>/restore` 重新应用某个版本的配置，并追加一条 `gateway.restored` 事实——凭据和密钥不会被恢复，因为已撤销的密钥必须保持撤销；`POST /api/gateways/<id>/call` 使用网关自身的上游凭据执行一个工具，并以操作员作为 subject 记录这次调用；`GET /api/events.csv` 是以文件形式导出的审计日志，过滤条件和租户范围相同；`/api/gateways/<id>/webhooks` 注册一个 URL，接收 guard 记录的每一条观测，并用请求体的 HMAC-SHA256 签名。"
+        "有四个端点回答 CRUD 形状无法回答的问题：`GET /api/gateways/<id>/history` 是该网关自己的事件流，从新到旧，按审计日志的词汇分页和过滤，敏感值已脱敏；`POST /api/gateways/<id>/restore` 重新应用某个版本的配置，并追加一条 `gateway.restored` 事实——凭据和密钥不会被恢复，因为已撤销的密钥必须保持撤销；`GET /api/events.csv` 是以文件形式导出的审计日志，过滤条件和租户范围相同；`/api/gateways/<id>/webhooks` 注册一个 URL，接收 guard 记录的每一条观测，并用请求体的 HMAC-SHA256 签名。"
       ],
       "table": {
         "head": [
@@ -272,7 +272,7 @@
           ],
           [
             "GET /api/gateways/{id}/history",
-            "该网关自身的事件流，从旧到新，敏感值已脱敏"
+            "该网关自己的事件流，从新到旧，可像审计日志一样过滤和排序"
           ],
           [
             "POST /api/gateways/{id}/restore",
@@ -281,10 +281,6 @@
           [
             "PUT /api/gateways/{id}/quota",
             "每月调用上限（0 = 不限），与每分钟限制分开"
-          ],
-          [
-            "POST /api/gateways/{id}/call",
-            "从面板执行一个工具；记录到流量日志"
           ],
           [
             "GET|POST /api/gateways/{id}/webhooks",

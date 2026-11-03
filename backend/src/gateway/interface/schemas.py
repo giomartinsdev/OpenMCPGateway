@@ -7,7 +7,7 @@ email already taken" is a domain rule and lives in the command handler.
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from gateway.domain.events import AuthMode, IdentityProvider, VerifierSpec
 
@@ -110,31 +110,6 @@ class WebhookRequest(BaseModel):
     #: Empty means every outcome. The names are the guard's own: allowed,
     #: unauthenticated, forbidden, rate_limited, error.
     outcomes: list[str] = Field(default_factory=list)
-
-
-class CallToolRequest(BaseModel):
-    """One tool call, typed by the operator in the panel.
-
-    `arguments` is `Any` on purpose: a tool's schema is the upstream's, and a
-    closed model here would reject the second tool anybody adds.
-    """
-
-    tool: str = Field(min_length=1, max_length=128)
-    arguments: Any = None
-
-    @field_validator("arguments")
-    @classmethod
-    def _object_arguments(cls, value: Any) -> Any:
-        """Arguments are a JSON object, or nothing.
-
-        The panel sends text; a value that is not an object means the operator
-        typed something the upstream cannot read. Refusing it here names the
-        field, instead of letting the upstream answer with a schema error the
-        operator will read as "the tool is broken".
-        """
-        if value is None or isinstance(value, dict):
-            return value
-        raise ValueError("arguments must be a JSON object")
 
 
 class ConfigFileRequest(BaseModel):

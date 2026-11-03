@@ -114,15 +114,12 @@ export const api = {
   setGatewayTools: (id, tools) =>
     call("PUT", `/gateways/${id}/tools`, { tools }),
 
-  // The gateway's own stream, oldest first, with secrets redacted server-side.
-  history: (id) => call("GET", `/gateways/${id}/history`),
+  // The gateway's own stream, newest first, paged and filtered like `/events`,
+  // with secrets redacted server-side.
+  history: (id, params) => call("GET", `/gateways/${id}/history?${query(params)}`),
   snapshot: (id, version) => call("GET", `/gateways/${id}/history/${version}`),
   // One fact, not a replay: the log says "rolled back to version N".
   restore: (id, version) => call("POST", `/gateways/${id}/restore`, { version }),
-  // Runs one tool with the gateway's own upstream credential. Recorded in the
-  // traffic log like any other call, with the operator as the subject.
-  callTool: (id, tool, args) =>
-    call("POST", `/gateways/${id}/call`, { tool, arguments: args }),
 
   webhooks: (id) => call("GET", `/gateways/${id}/webhooks`),
   addWebhook: (id, payload) => call("POST", `/gateways/${id}/webhooks`, payload),
