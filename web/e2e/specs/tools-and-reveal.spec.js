@@ -20,8 +20,9 @@ async function openConsole(page) {
   await page.getByRole("button", { name: "Create tenant" }).click();
 
   await page.goto("/#/gateways");
+  // The row is the link: the gateways table has no drawer, because the gateway
+  // already has a page of its own and a drawer was a second, worse copy of it.
   await page.locator("tbody tr", { hasText: "console" }).first().click();
-  await page.getByRole("button", { name: "Open full page" }).click();
   await expect(page.getByRole("heading", { name: "API keys" })).toBeVisible();
 }
 
@@ -59,8 +60,9 @@ test("the eye reveals a key once, then it is gone", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Gateways", level: 1 })).toBeVisible();
 
   await page.goto("/#/gateways");
+  // The row is the link: the gateways table has no drawer, because the gateway
+  // already has a page of its own and a drawer was a second, worse copy of it.
   await page.locator("tbody tr", { hasText: "console" }).first().click();
-  await page.getByRole("button", { name: "Open full page" }).click();
 
   const card = page.locator(".card", { has: page.getByRole("heading", { name: "API keys" }) });
   const row = card.locator("tbody tr").first();

@@ -96,6 +96,19 @@ class Gateway(Filter):
     match = "gateway"
 
 
+class GatewayId(Filter):
+    """One gateway's own id, matched exactly.
+
+    The gateway's page shows *that* gateway's calls; the `gateway` filter above
+    is a substring match on slug and name, which is right for a search box and
+    wrong for a page scope — a gateway named "console" would otherwise pull in
+    "console-2".
+    """
+
+    name = "gateway_id"
+    column = "gateway_id"
+
+
 class Subject(Filter):
     name = "subject"
     column = "subject"
@@ -169,7 +182,9 @@ class Until(Filter):
 
 #: Field name -> spec. `GET /requests?unknown=1` is refused against this.
 REQUEST_FILTERS: dict[str, type[Filter]] = {
-    f.name: f for f in (EventId, Gateway, Subject, Outcome, Status, Method, Tool, Ip)
+    f.name: f for f in (
+        EventId, Gateway, GatewayId, Subject, Outcome, Status, Method, Tool, Ip
+    )
 }
 EVENT_FILTERS: dict[str, type[Filter]] = {
     f.name: f for f in (EventId, EventType, Aggregate, Actor, Since, Until)

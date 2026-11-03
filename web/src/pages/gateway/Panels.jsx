@@ -1,22 +1,28 @@
 // The gateway detail page's pieces. Kept out of the page file so each one is a
-// single concern: auth, rate limit, the traffic tables, and the copy-paste guide.
+// single concern: auth, the traffic tables, and the copy-paste guide.
 
 import { useState } from "react";
 import { api } from "../../api.js";
-import { useT } from "../../i18n.jsx";
+import { useI18n, useT } from "../../i18n.jsx";
+import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../../paged.jsx";
 import {
-  Badge, Card, Chart, Empty, Skeleton, SAMPLE_REQUESTS, SAMPLE_STATS,
-  outcomeKind, relative,
+  Badge, Card, Chart, Details, Drawer, Empty, NoMatches, Skeleton,
+  SAMPLE_REQUESTS, SAMPLE_STATS, outcomeKind, outcomeLabel, relative,
 } from "../../ui.jsx";
 
-// Translated at the point of render: the key is the English phrase, so a locale
-// only has to supply the sentence, not a second naming scheme.
-export const OUTCOME_LABEL = {
-  allowed: "allowed",
-  unauthenticated: "401 unauthenticated",
-  forbidden: "403 forbidden",
-  rate_limited: "429 rate limited",
-};
+// One filter per column, under the column's own label. The gateway is fixed by
+// the page, so it is not a column and not a filter here.
+const FIELDS = [
+  null, // when: the table is newest-first until you sort it
+  { key: "subject", label: "Subject" },
+  { key: "outcome", label: "Outcome" },
+  { key: "status", label: "Status" },
+  null, // latency is a number, and nobody filters a log by milliseconds
+  { key: "tool", label: "Tool" },
+  { key: "ip", label: "IP" },
+];
+
+const SORTS = { occurred_at: "desc", duration_ms: "desc", status: "asc", subject: "asc" };
 
 export function AuthForm({ gateway, onSaved }) {
   const t = useT();
@@ -116,13 +122,20 @@ export function AuthForm({ gateway, onSaved }) {
       </div>
       <div className="form-actions">
         <button className="primary" disabled={busy}>
-          {busy ? t("Saving…") : t("Save")}
+          {busy ? t("Saving…") : t("Save auth")}
         </button>
       </div>
     </form>
   );
 }
 
+/**
+ * The limit, inline in the endpoint card.
+ *
+ * It was a card of its own, with one number in it — a whole surface for a value
+ * that belongs to the same sentence as "what this gateway accepts". Here it is a
+ * field, and the hint that explains what a request costs sits beside it.
+ */
 export function RateLimitForm({ gateway, onSaved }) {
   const t = useT();
   const [value, setValue] = useState(gateway.requests_per_minute ?? 0);
@@ -130,8 +143,7 @@ export function RateLimitForm({ gateway, onSaved }) {
 
   return (
     <form
-      className="row"
-      style={{ alignItems: "flex-end" }}
+      className="limit-form"
       onSubmit={async (event) => {
         event.preventDefault();
         setBusy(true);
@@ -143,66 +155,169 @@ export function RateLimitForm({ gateway, onSaved }) {
         }
       }}
     >
-      <div className="field inline" style={{ width: 180 }}>
+      <div className="field inline">
         <label htmlFor="rate-limit">{t("Requests / minute")}</label>
         <input id="rate-limit" type="number" min="0" value={value}
-               onChange={(e) => setValue(e.target.value)} />
+               onChange={(event) => setValue(event.target.value)} />
       </div>
-      <button className="primary" disabled={busy}>
-        {busy ? t("Saving…") : t("Save")}
+      <button className="primary sm" disabled={busy}>
+        {busy ? t("Saving…") : t("Save limit")}
       </button>
-      <p className="hint" style={{ margin: 0, flex: 1, minWidth: 240 }}>
+      <p className="hint">
         {t("0 means no limit. Each subject gets its own budget, and only JSON-RPC requests count — handshakes and notifications are free.")}
       </p>
     </form>
   );
 }
 
-export function RecentRequests({ requests }) {
+/**
+ * This gateway's slice of the request log, with the same affordances as the
+ * global one: a cursor, a filter under every column, sortable headers, and a
+ * drawer for the row that needs more than a line.
+ *
+ * A separate table rather than a link to `/traffic`: the question "what did this
+ * gateway just do" is asked *here*, and sending the reader to another page to
+ * retype the filter is how a detail page stops being a page.
+ */
+export function Requests({ gateway }) {
   const t = useT();
+  const { locale } = useI18n();
+  const [filters, setFilters] = useState({});
+  const [sort, setSort] = useSort("occurred_at", SORTS);
+  const [open, setOpen] = useState(null);
+
+  const { items, next, error, busy, more } = usePagedList(
+    async ({ limit, before, ...query }) => {
+      const page = await api.requests({ limit, before, gateway_id: gateway.id, ...query });
+      return { items: page.requests, next: page.next };
+    },
+    { ...filters, ...sort },
+  );
+
   return (
-    <Skeleton
-      data={requests}
-      sample={SAMPLE_REQUESTS}
-      label={t("Loading recent requests")}
-      empty={requests?.length === 0}
-      emptyMessage={
-        <Empty title={t("No calls yet")}>{t("Requests appear here as they arrive.")}</Empty>
-      }
-    >
-      {(rows) => (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>{t("When")}</th>
-                <th>{t("Subject")}</th>
-                <th>{t("Outcome")}</th>
-                <th className="num">{t("Status")}</th>
-                <th className="num">{t("Latency")}</th>
-                <th>{t("IP")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((request, index) => (
-                <tr key={`${request.occurred_at}-${index}`}>
-                  <td className="hint nowrap">{relative(request.occurred_at)}</td>
-                  <td className="mono">{request.subject ?? "—"}</td>
-                  <td>
-                    <Badge kind={outcomeKind(request.outcome)}>
-                      {t(OUTCOME_LABEL[request.outcome] ?? request.outcome)}
-                    </Badge>
-                  </td>
-                  <td className="num">{request.status}</td>
-                  <td className="num">{request.duration_ms} ms</td>
-                  <td className="mono hint">{request.ip || "—"}</td>
+    <>
+      <Skeleton
+        data={items}
+        sample={SAMPLE_REQUESTS}
+        label={t("Loading recent requests")}
+        empty={items?.length === 0}
+        emptyMessage={
+          <NoMatches
+            filters={filters}
+            onClear={() => setFilters({})}
+            title={t("No calls yet")}
+          >
+            {t("Requests appear here as they arrive.")}
+          </NoMatches>
+        }
+      >
+        {(rows) => (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <SortHeader
+                    field="occurred_at"
+                    label="When"
+                    sort={sort}
+                    onSort={setSort}
+                  />
+                  <SortHeader
+                    field="subject"
+                    label="Subject"
+                    sort={sort}
+                    onSort={setSort}
+                  />
+                  <th>{t("Outcome")}</th>
+                  <SortHeader
+                    field="status"
+                    label="Status"
+                    sort={sort}
+                    onSort={setSort}
+                    className="num"
+                  />
+                  <SortHeader
+                    field="duration_ms"
+                    label="Latency"
+                    sort={sort}
+                    onSort={setSort}
+                    className="num"
+                  />
+                  <th>{t("Tool")}</th>
+                  <th>{t("IP")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
+              </thead>
+              <tbody>
+                {rows.map((request) => (
+                  <tr
+                    key={request.event_id}
+                    className="clickable"
+                    tabIndex={0}
+                    onClick={() => setOpen(request)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") setOpen(request);
+                    }}
+                  >
+                    <td className="hint nowrap">{relative(request.occurred_at)}</td>
+                    <td className="mono">{request.subject ?? "—"}</td>
+                    <td>
+                      <Badge kind={outcomeKind(request.outcome)}>
+                        {outcomeLabel(t, request.outcome)}
+                      </Badge>
+                    </td>
+                    <td className="num">{request.status}</td>
+                    <td className="num">{request.duration_ms} ms</td>
+                    <td className="mono hint">{request.tool || "—"}</td>
+                    <td className="mono hint">{request.ip || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Skeleton>
+      <LoadMore next={next} busy={busy} onClick={more} />
+      {error ? <p className="hint" style={{ marginBottom: 0 }}>{error}</p> : null}
+
+      {open && (
+        <Drawer
+          title={outcomeLabel(t, open.outcome)}
+          sub={open.event_id}
+          onClose={() => setOpen(null)}
+          actions={
+            <button className="ghost sm" onClick={() => setOpen(null)}>
+              {t("Close")}
+            </button>
+          }
+        >
+          <Details
+            rows={[
+              [t("When"), new Date(open.occurred_at).toLocaleString(locale)],
+              [t("Seen"), relative(open.occurred_at)],
+              [t("Subject"), <span className="mono">{open.subject ?? t("anonymous")}</span>],
+              [
+                t("Outcome"),
+                <Badge kind={outcomeKind(open.outcome)}>
+                  {outcomeLabel(t, open.outcome)}
+                </Badge>,
+              ],
+              [t("Status"), open.status],
+              [t("Latency"), `${open.duration_ms} ms`],
+              [t("Method"), <span className="mono">{open.method}</span>],
+              [t("Tool"), <span className="mono">{open.tool || "—"}</span>],
+              [t("IP"), <span className="mono">{open.ip || "—"}</span>],
+              [t("Event id"), <span className="mono">{open.event_id}</span>],
+            ]}
+          />
+          <p className="hint" style={{ marginBottom: 0 }}>
+            {open.outcome === "allowed"
+              ? t("The guard admitted this call and the proxy forwarded it upstream.")
+              : t("The guard refused this call before it reached the upstream server, so nothing was forwarded.")}
+          </p>
+        </Drawer>
       )}
-    </Skeleton>
+    </>
   );
 }
 
@@ -230,7 +345,7 @@ export function Traffic({ stats }) {
                     <tr key={outcome}>
                       <td>
                         <Badge kind={outcomeKind(outcome)}>
-                          {t(OUTCOME_LABEL[outcome] ?? outcome)}
+                          {outcomeLabel(t, outcome)}
                         </Badge>
                       </td>
                       <td className="num">{count}</td>

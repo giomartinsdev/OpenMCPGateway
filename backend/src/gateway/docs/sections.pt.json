@@ -228,7 +228,7 @@
             "Totais da janela e da janela igual anterior, por desfecho, IP do chamador e slug do gateway, o minuto mais movimentado e a série"
           ],
           [
-            "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
+            "GET /api/requests?gateway=&gateway_id=&subject=&outcome=&status=&method=&tool=&ip=",
             "Uma página do log de requisições; toda coluna com caixa de filtro o estreita"
           ],
           [

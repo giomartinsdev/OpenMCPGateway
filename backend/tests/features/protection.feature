@@ -51,6 +51,17 @@ Feature: Rate limiting and traffic accounting
     When a caller with the issued key calls it 2 times
     Then the stats name the busiest minute, and it is one of the series points
 
+  Scenario: The stats break each gateway down by outcome
+    # Two independent totals — traffic per gateway and traffic per outcome — fit
+    # both a healthy deployment and a broken one. The flow chart that shows where
+    # requests go needs the pair: "this gateway is refusing everybody" is only
+    # visible when the gateway and the outcome are in the same row.
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When a caller with the issued key calls it 2 times
+    Then the stats break gateway "demo" down by outcome "allowed"
+    And the per-outcome counts for "demo" add up to its total
+
   Scenario: A window is compared against the one before it
     # "12 rejected" says nothing on its own; "12 rejected, up from 3" is the
     # sentence an operator is looking for. The previous window is the same

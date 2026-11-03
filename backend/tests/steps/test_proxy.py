@@ -451,6 +451,30 @@ def stats_previous(container, runner, gateway: dict) -> None:
     stats = runner.run(check())
     assert stats["previous_requests"] == 0, stats
 
+@then(parsers.parse('the stats break gateway "{slug}" down by outcome "{outcome}"'))
+def stats_gateway_outcome(container, runner, gateway: dict, slug: str,
+                          outcome: str) -> None:
+    async def check() -> dict:
+        return await container.read_models.stats(gateway["id"], 60)
+
+    stats = runner.run(check())
+    assert slug in stats["by_gateway_outcome"], stats
+    assert outcome in stats["by_gateway_outcome"][slug], stats
+
+@then(parsers.parse('the per-outcome counts for "{slug}" add up to its total'))
+def stats_gateway_outcome_total(container, runner, gateway: dict, slug: str) -> None:
+    """The two views are one query, so they cannot disagree.
+
+    A flow chart whose links do not add up to the node it leaves is a chart that
+    lies quietly; this is the assertion that keeps them derived from the same
+    loop.
+    """
+    async def check() -> dict:
+        return await container.read_models.stats(gateway["id"], 60)
+
+    stats = runner.run(check())
+    assert sum(stats["by_gateway_outcome"][slug].values()) == stats["by_gateway"][slug], stats
+
 
 # -- helpers ---------------------------------------------------------------
 

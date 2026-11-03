@@ -1,13 +1,17 @@
 // The tool allowlist: a second gate on *which* tools, not just who.
 //
-// Two sources of truth sit side by side on purpose. The left column is what the
-// upstream serves right now; the right is what the gateway forwards. Showing
+// Two sources of truth sit side by side on purpose. The catalog is what the
+// upstream serves right now; the checkbox is what the gateway forwards. Showing
 // only the checkboxes would let an operator tick a tool that was renamed
 // upstream and never learn that nothing matches it.
 //
 // The catalog is fetched from the upstream through the panel, not through the
 // gateway: asking the proxy would answer with the filter it is applying, which
 // is exactly the thing being edited.
+//
+// Laid out as tiles in a responsive grid rather than a vertical list: three tools
+// and three hundred use the same component, and a grid of short names says "this
+// is a set you tick" where a list says "read every line".
 
 import { useEffect, useState } from "react";
 import { api } from "../../api.js";
@@ -53,6 +57,7 @@ export function ToolsPanel({ gateway, me, onSaved }) {
     name.toLowerCase().includes(query.trim().toLowerCase()),
   );
   const all = selected.length === 0;
+  const dirty = JSON.stringify([...selected].sort()) !== JSON.stringify([...(gateway.tools ?? [])].sort());
 
   function toggle(name) {
     setSelected((current) =>
@@ -75,6 +80,13 @@ export function ToolsPanel({ gateway, me, onSaved }) {
     }
   }
 
+  // "All" means the empty list, but ticking a box out of "all" has to start from
+  // the full list, or the first click would mean "only this one".
+  function tick(name, on) {
+    const base = all ? names : selected;
+    setSelected(on ? [...base, name] : base.filter((entry) => entry !== name));
+  }
+
   return (
     <div className="tools">
       <div className="tools-head">
@@ -87,9 +99,13 @@ export function ToolsPanel({ gateway, me, onSaved }) {
                   total: rows.length,
                 })}
           </Badge>
-          {!all && (
-            <button className="ghost sm" disabled={busy || !canEdit}
-                    onClick={() => save([])}>
+          {canEdit && catalog?.available && rows.length > 0 && !all && (
+            <button
+              type="button"
+              className="ghost sm"
+              disabled={busy}
+              onClick={() => save([])}
+            >
               {t("Allow all")}
             </button>
           )}
@@ -131,47 +147,43 @@ export function ToolsPanel({ gateway, me, onSaved }) {
             const gone = !entry;
             return (
               <li key={name} className={gone ? "gone" : ""}>
-                <label>
+                <label title={entry?.description ?? undefined}>
                   <input
                     type="checkbox"
                     checked={on}
                     disabled={!canEdit || busy}
-                    onChange={() => {
-                      // Ticking one box out of "all" starts from the full list,
-                      // or the first click would mean "only this one" — which is
-                      // almost never what the operator meant.
-                      const base = all ? names : selected;
-                      setSelected(
-                        on
-                          ? base.filter((entryName) => entryName !== name)
-                          : [...base, name],
-                      );
-                    }}
+                    onChange={() => tick(name, !on)}
                   />
-                  <span className="mono">{name}</span>
+                  <span className="tool-name mono">{name}</span>
                   {gone && <Badge kind="warn">{t("not served upstream")}</Badge>}
+                  {entry?.description ? (
+                    <span className="tool-desc">{entry.description}</span>
+                  ) : null}
                 </label>
-                {entry?.description ? (
-                  <p className="hint">{entry.description}</p>
-                ) : null}
               </li>
             );
           })}
         </ul>
       )}
 
+      {visible.length === 0 && rows.length > 0 ? (
+        <Empty title={t("No tool matches {query}", { query })}>
+          {t("Clear the search box to see the whole catalog.")}
+        </Empty>
+      ) : null}
+
       {canEdit ? (
-        <div className="row" style={{ marginTop: 10 }}>
+        <div className="tools-foot">
+          <span className="hint">
+            {t("A tool outside the list is refused with 403, and disappears from tools/list.")}
+          </span>
           <button
             className="primary sm"
-            disabled={busy || all}
+            disabled={busy || !dirty}
             onClick={() => save(selected)}
           >
             {busy ? t("Saving…") : t("Save allowlist")}
           </button>
-          <span className="hint">
-            {t("A tool outside the list is refused with 403, and disappears from tools/list.")}
-          </span>
         </div>
       ) : (
         <Notice kind="info">

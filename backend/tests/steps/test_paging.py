@@ -366,6 +366,19 @@ def request_list_count(listing: dict, count: int) -> None:
     assert len(listing["requests"]) == count, listing
 
 
+@when("the owner lists requests of the first gateway by its id",
+      target_fixture="listing")
+def requests_of_one_gateway(account: dict, gateways: list[dict]) -> dict:
+    response = account["browser"].get(f"/api/requests?gateway_id={gateways[0]['id']}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@then("every row belongs to that gateway")
+def every_row_is_of_the_gateway(listing: dict, gateways: list[dict]) -> None:
+    assert {row["gateway_id"] for row in listing["requests"]} == {gateways[0]["id"]}, listing
+
+
 @then(parsers.parse('every row is "{value}"'))
 def every_row_is(listing: dict, value: str) -> None:
     assert {row["outcome"] for row in listing["requests"]} == {value}, listing

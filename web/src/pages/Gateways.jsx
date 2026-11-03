@@ -3,9 +3,10 @@ import { api } from "../api.js";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import { useT } from "../i18n.jsx";
 import {
-  Badge, Card, Details, Drawer, Endpoint, NoMatches, Notice, Skeleton,
+  Badge, Card, Drawer, Endpoint, NoMatches, Notice, Skeleton,
   SAMPLE_GATEWAYS, SAMPLE_STATS, Stat, can, relative,
 } from "../ui.jsx";
+import { Flow } from "../Sankey.jsx";
 import { navigate } from "../App.jsx";
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
@@ -30,6 +31,15 @@ const FIELDS = [
 // Which column each header sorts by, and the direction its data suggests.
 const SORTS = { created_at: "desc", updated_at: "desc", name: "asc", slug: "asc" };
 
+// The flow's window. Same four the traffic page offers, so "1 hour" means one
+// thing in the panel.
+const WINDOWS = [
+  [60, "1 hour"],
+  [360, "6 hours"],
+  [1440, "24 hours"],
+  [10080, "7 days"],
+];
+
 // The key handed out when the tenant was created, if this tab still has it.
 function takeNewConsole() {
   const raw = sessionStorage.getItem("omg.new_console");
@@ -43,11 +53,11 @@ export function Gateways({ me }) {
   const t = useT();
   const canEdit = can(me, "gateways:write");
   const [stats, setStats] = useState(null);
+  const [minutes, setMinutes] = useState(60);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [filters, setFilters] = useState({});
   const [newConsole, setNewConsole] = useState(takeNewConsole);
-  const [selected, setSelected] = useState(null);
   const [sort, setSort] = useSort("created_at", SORTS);
   const { items: gateways, next, busy, more, error: listError } = usePagedList(
     async ({ limit, before, ...query }) => {
@@ -58,8 +68,8 @@ export function Gateways({ me }) {
   );
 
   useEffect(() => {
-    api.stats(null, 60).then(setStats, (err) => setError(err.message));
-  }, []);
+    api.stats(null, minutes).then(setStats, (err) => setError(err.message));
+  }, [minutes]);
 
   const unauthenticated = (gateways ?? []).filter((g) => g.auth_mode === "none");
   const rejected =
@@ -156,6 +166,32 @@ export function Gateways({ me }) {
         </Skeleton>
       </div>
 
+      {/* The flow, not another row of numbers: which gateway the traffic enters
+          through and which outcome it leaves by, in one picture. The window is
+          the reader's choice because "now" is the wrong answer when a gateway
+          stopped answering an hour ago. */}
+      <Card
+        title={t("Request flow")}
+        aside={t("Where requests came in, and how they left.")}
+        actions={
+          <div className="seg">
+            {WINDOWS.map(([value, label]) => (
+              <button
+                key={value}
+                className={minutes === value ? "active" : ""}
+                onClick={() => setMinutes(value)}
+              >
+                {t(label)}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading the flow")}>
+          {(data) => <Flow stats={data} />}
+        </Skeleton>
+      </Card>
+
       {creating && (
         <Drawer title={t("New gateway")} onClose={() => setCreating(false)}>
           <CreateGateway
@@ -220,8 +256,10 @@ export function Gateways({ me }) {
                       key={gateway.id}
                       className="clickable"
                       tabIndex={0}
-                      onClick={() => setSelected(gateway)}
-                      onKeyDown={(e) => { if (e.key === "Enter") setSelected(gateway); }}
+                      onClick={() => navigate(`/gateways/${gateway.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") navigate(`/gateways/${gateway.id}`);
+                      }}
                     >
                       <td className="strong nowrap">
                         {gateway.name}
@@ -256,59 +294,6 @@ export function Gateways({ me }) {
         <LoadMore next={next} busy={busy} onClick={more} />
       </Card>
 
-      {selected && (
-        <Drawer
-          title={selected.name}
-          sub={selected.slug}
-          onClose={() => setSelected(null)}
-          actions={
-            <button
-              className="ghost sm"
-              onClick={() => { setSelected(null); navigate(`/gateways/${selected.id}`); }}
-            >
-              {t("Open full page")}
-            </button>
-          }
-        >
-          <div className="field">
-            <div className="hint">{t("Endpoint")}</div>
-            <Endpoint value={selected.endpoint} />
-          </div>
-          <Details
-            rows={[
-              [t("Name"), selected.name],
-              [t("Slug"), <span className="mono">{selected.slug}</span>],
-              [t("Upstream"), <span className="mono">{selected.target_url}</span>],
-              [
-                t("Auth"),
-                <Badge kind={selected.auth_mode === "none" ? "warn" : "info"}>
-                  {authLabel(t, selected.auth_mode)}
-                  {selected.idp ? ` · ${selected.idp}` : ""}
-                </Badge>,
-              ],
-              [
-                t("Rate limit"),
-                selected.requests_per_minute
-                  ? `${selected.requests_per_minute}/min`
-                  : t("none"),
-              ],
-              [
-                t("Status"),
-                <Badge kind={selected.enabled ? "ok" : "mute"}>
-                  {selected.enabled ? t("enabled") : t("disabled")}
-                </Badge>,
-              ],
-              [t("Description"), selected.description || "—"],
-              [t("Created"), new Date(selected.created_at).toLocaleString()],
-              [t("Updated"), relative(selected.updated_at)],
-              [t("Gateway id"), <span className="mono">{selected.id}</span>],
-            ]}
-          />
-          <p className="hint" style={{ marginBottom: 0 }}>
-            {t("Keys, the upstream credential and the connect guide live on the gateway's own page.")}
-          </p>
-        </Drawer>
-      )}
     </>
   );
 }

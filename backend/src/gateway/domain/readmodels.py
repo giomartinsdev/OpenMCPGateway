@@ -137,6 +137,10 @@ class TrafficStats(ReadRow):
     by_ip: dict[str, int]
     #: Keyed by gateway slug: the id is not what the panel prints.
     by_gateway: dict[str, int]
+    #: Slug -> outcome -> count. The two `by_*` maps above cannot answer "this
+    #: gateway is refusing everybody", because the same totals fit a healthy
+    #: gateway next to a broken one; the flow chart needs the pair.
+    by_gateway_outcome: dict[str, dict[str, int]] = {}
     series: list[SeriesPoint]
     #: The minute with the most requests, and how many: a spike is easier to
     #: spot in a sentence than in a bar chart.

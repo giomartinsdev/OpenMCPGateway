@@ -4,7 +4,7 @@ import { useI18n, useT } from "../i18n.jsx";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Bars, Card, Chart, Details, Drawer, NoMatches, Notice, Skeleton,
-  SAMPLE_REQUESTS, SAMPLE_STATS, Stat, outcomeKind, relative,
+  SAMPLE_REQUESTS, SAMPLE_STATS, Stat, outcomeKind, outcomeLabel, relative,
 } from "../ui.jsx";
 
 const WINDOWS = [
@@ -13,13 +13,6 @@ const WINDOWS = [
   [1440, "24 hours"],
   [10080, "7 days"],
 ];
-
-const OUTCOME_LABEL = {
-  allowed: "allowed",
-  unauthenticated: "401 unauthenticated",
-  forbidden: "403 forbidden",
-  rate_limited: "429 rate limited",
-};
 
 // One filter per column, under the column's own label.
 const FIELDS = [
@@ -190,7 +183,7 @@ export function Traffic() {
                 total={data.requests}
                 data={Object.fromEntries(
                   Object.entries(data.by_outcome ?? {}).map(([outcome, count]) => [
-                    OUTCOME_LABEL[outcome] ?? outcome,
+                    outcomeLabel(t, outcome),
                     count,
                   ]),
                 )}
@@ -292,7 +285,7 @@ export function Traffic() {
                       <td className="mono">{request.subject ?? "—"}</td>
                       <td>
                         <Badge kind={outcomeKind(request.outcome)}>
-                          {t(OUTCOME_LABEL[request.outcome] ?? request.outcome)}
+                          {outcomeLabel(t, request.outcome)}
                         </Badge>
                       </td>
                       <td className="num">{request.status}</td>
@@ -312,7 +305,7 @@ export function Traffic() {
 
       {open && (
         <Drawer
-          title={t(OUTCOME_LABEL[open.outcome] ?? open.outcome)}
+          title={outcomeLabel(t, open.outcome)}
           sub={open.event_id}
           onClose={() => setOpen(null)}
           actions={
@@ -336,7 +329,7 @@ export function Traffic() {
               [
                 t("Outcome"),
                 <Badge kind={outcomeKind(open.outcome)}>
-                  {t(OUTCOME_LABEL[open.outcome] ?? open.outcome)}
+                  {outcomeLabel(t, open.outcome)}
                 </Badge>,
               ],
               [t("Status"), open.status],

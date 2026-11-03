@@ -34,8 +34,11 @@ test("a public gateway shows one curl request against its endpoint", async ({ pa
   await signupOwner(page);
   await createGateway(page, "public-mcp");
 
+  // The guide is an accordion, closed by default: six code blocks are read once,
+  // when the gateway is wired up, and never again.
   const guide = page.getByRole("heading", { name: "Test this gateway" });
   await expect(guide).toBeVisible();
+  await guide.click();
 
   const code = page.locator("pre.code").first();
   await expect(code).toContainText("/g/public-mcp/mcp");
@@ -62,9 +65,10 @@ test("an OAuth gateway shows the token flow before the call", async ({ page }) =
   await page.getByLabel("Identity provider").selectOption("github");
   await page.getByLabel("Client ID").fill("Ov23liTestClientId");
   await page.getByLabel("Client secret").fill("test-client-secret-value-32-bytes");
-  await page.getByRole("button", { name: /^save$/i }).first().click();
+  await page.getByRole("button", { name: "Save auth" }).click();
   await expect(page.getByText("Auth configuration saved.")).toBeVisible();
 
+  await page.getByRole("heading", { name: "Test this gateway" }).click();
   const steps = page.locator(".snippet");
   // Six: challenge, discovery, register, authorize, token, authenticated call.
   await expect(steps).toHaveCount(6);

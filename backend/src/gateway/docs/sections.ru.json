@@ -228,7 +228,7 @@
             "Итоги за окно и равное окно до него, по outcome, IP вызывающего и slug шлюза, самая загруженная минута и серия"
           ],
           [
-            "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
+            "GET /api/requests?gateway=&gateway_id=&subject=&outcome=&status=&method=&tool=&ip=",
             "Страница лога запросов; каждая колонка с полем-фильтром сужает его"
           ],
           [

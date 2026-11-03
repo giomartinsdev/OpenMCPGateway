@@ -79,6 +79,16 @@ Feature: Cursor pagination and filtering on every list
     Then the request list has 2 rows
     And every row is "forbidden"
 
+  Scenario: The request log scopes to one gateway by its id
+    # The gateway's own page shows that gateway's calls. The `gateway` filter is
+    # a substring match on slug and name — right for a search box, wrong for a
+    # page scope, because "console" would also match "console-2".
+    Given the owner has 3 gateways
+    And 5 requests were recorded, 2 of them refused
+    When the owner lists requests of the first gateway by its id
+    Then the request list has 5 rows
+    And every row belongs to that gateway
+
   Scenario: The audit log filters by event type
     Given the owner has 3 gateways
     When the owner lists events filtered by type "gateway.created"

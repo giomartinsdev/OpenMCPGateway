@@ -180,18 +180,14 @@ test("a filter that matches nothing offers to clear itself", async ({ page }) =>
   await expect(page.getByRole("textbox", { name: "Filter by Name" })).toHaveValue("");
 });
 
-test("clicking a gateway row expands it in a drawer", async ({ page }) => {
+test("clicking a gateway row opens the gateway's own page", async ({ page }) => {
   await signIn(page);
   await page.getByRole("row", { name: /Rancher cluster/ }).click();
 
-  const drawer = page.getByRole("dialog", { name: "Rancher cluster" });
-  await expect(drawer).toBeVisible();
-  await expect(drawer).toContainText("/g/rancher/mcp");
-  await expect(drawer).toContainText("Gateway id");
-
-  // Escape closes it: a drawer with no keyboard exit traps anyone without a mouse.
-  await page.keyboard.press("Escape");
-  await expect(drawer).toHaveCount(0);
+  // No drawer: the gateway already has a page, and a drawer that repeated half of
+  // it was a second place for the same facts to go stale.
+  await expect(page.getByRole("heading", { name: "Rancher cluster", level: 1 })).toBeVisible();
+  await expect(page.locator(".endpoint")).toContainText("/g/rancher/mcp");
 });
 
 test("clicking a request expands it in a drawer with the whole row", async ({ page }) => {
@@ -246,6 +242,50 @@ test("clicking a request expands it in a drawer with the whole row", async ({ pa
   await expect(drawer).toContainText("Event id");
   await expect(drawer).toContainText("before it reached the upstream server");
   await expect(drawer.getByRole("button", { name: "Filter this gateway" })).toBeVisible();
+});
+
+test("the gateway page lists its own calls, filterable and openable", async ({ page }) => {
+  await signIn(page);
+
+  const id = await page.evaluate(async () => {
+    const response = await fetch("/api/gateways?slug=refusing", {
+      credentials: "same-origin",
+    });
+    const body = await response.json();
+    return body.gateways[0].id;
+  });
+
+  await page.goto(`/#/gateways/${id}`);
+  await expect(page.getByRole("heading", { name: "Refusing", level: 1 })).toBeVisible();
+
+  // The page's own table, not a link to /traffic: same cursor, same filter under
+  // every column, same drawer as every other list.
+  const card = page.locator(".card", {
+    has: page.getByRole("heading", { name: "Recent requests", exact: true }),
+  });
+  await expect(card.getByRole("textbox", { name: "Filter by Outcome" })).toBeVisible();
+
+  await card.getByRole("textbox", { name: "Filter by Outcome" }).fill("unauthenticated");
+  const row = card.getByRole("row").filter({ has: page.getByRole("cell") }).first();
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByRole("dialog", { name: /401 unauthenticated/ })).toContainText(
+    "Event id",
+  );
+});
+
+test("the home page draws the request flow per gateway", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/#/");
+
+  const card = page.locator(".card", {
+    has: page.getByRole("heading", { name: "Request flow", exact: true }),
+  });
+  await expect(card).toBeVisible();
+  // The flow is built from the same window as the numbers above it; a gateway
+  // that stopped answering an hour ago is what the window picker is for.
+  await expect(card.locator(".sankey svg")).toBeVisible();
+  await expect(card.locator(".sankey text").first()).toBeVisible();
 });
 
 test("clicking an audit event expands the payload in a drawer", async ({ page }) => {

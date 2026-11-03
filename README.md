@@ -198,9 +198,22 @@ the button that clears it — an empty table plus a header row is a dead end.
 
 A row is a summary. Click any row in any table and it opens a drawer with the
 whole row: a request's subject, tool, IP, event id and gateway id; an audit
-event's payload; a member's roles and join date; a gateway's upstream and
-policy; a role's permissions. The list stays behind it, so closing the drawer
-returns to the same scroll position.
+event's payload; a member's roles and join date; a role's permissions. The list
+stays behind it, so closing the drawer returns to the same scroll position. A
+gateway row is the exception: it goes straight to the gateway's own page, because
+that page is the whole row and more, and a drawer would be a second copy of it.
+
+The home screen opens with the request flow — a Sankey where every request enters
+through a gateway and leaves through an outcome, in the same window as the totals
+above it. Two independent breakdowns cannot answer "which gateway is refusing
+everybody"; the pair can.
+
+A gateway's page puts what it exposes in one place: the endpoint, its rate limit
+and the tool allowlist, then the auth, the keys and the allowlisted subjects. The
+allowlist is a grid of tiles with a search box — three tools and three hundred use
+the same component — and the connect guide is an accordion, closed by default,
+because six code blocks are read once. Under it, that gateway's own request log
+pages, filters, sorts and opens in a drawer exactly like the Traffic screen.
 
 The Traffic screen is the dashboard: totals with the change against the equal
 window before, latency, rejection rate, distinct callers, a volume chart with the
@@ -278,7 +291,7 @@ because `/g/<slug>/mcp` is a public URL, so the first tenant on a deployment get
 `console` and later ones get `console-<tenant id>` — named after the tenant rather
 than numbered, so the address still says whose gateway it is.
 
-Each gateway's page in the panel carries a **Test this gateway** card with the
+Each gateway's page in the panel carries a **Test this gateway** accordion with the
 exact requests for its auth mode, as `curl` or Python. A public gateway is one
 request; an API-key gateway adds the bearer header; an OAuth gateway shows the
 whole chain — the 401 that starts it, discovery, client registration, the

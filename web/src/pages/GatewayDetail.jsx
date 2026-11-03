@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { useI18n, useT } from "../i18n.jsx";
+import { useT } from "../i18n.jsx";
 import {
   Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, Stat, can, relative,
 } from "../ui.jsx";
 import { navigate } from "../App.jsx";
 import { ConnectGuide } from "./gateway/ConnectGuide.jsx";
 import { ToolsPanel } from "./gateway/ToolsPanel.jsx";
-import {
-  AuthForm, RateLimitForm, RecentRequests, Traffic,
-} from "./gateway/Panels.jsx";
+import { AuthForm, RateLimitForm, Requests, Traffic } from "./gateway/Panels.jsx";
 
 // Placeholder for the detail page: one object with the shape the page reads, so
 // the skeleton is the page's own layout rather than a grey rectangle.
@@ -26,11 +24,25 @@ const SAMPLE = {
   requests_per_minute: 120,
   client_id: "…apps.googleusercontent.com",
   principals: [{ subject: "someone@example.com", added_at: new Date().toISOString() }],
-  api_keys: [{ label: "default", key_id: "key_0000", issued_at: new Date().toISOString() }],
+  api_keys: [
+    {
+      key_id: "key_0000",
+      label: "default",
+      issued_at: new Date().toISOString(),
+      revealed_at: null,
+      revealed_by: null,
+      recoverable: true,
+    },
+  ],
   tools: [],
-  requests: [],
-  stats: { requests: 0, previous_requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, by_gateway: {}, series: [], busiest: null },
+  stats: { requests: 0, previous_requests: 0, avg_duration_ms: 0, max_duration_ms: 0, by_ip: {}, by_outcome: {}, by_gateway: {}, by_gateway_outcome: {}, series: [], busiest: null },
 };
+
+const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
+
+function authLabel(t, mode) {
+  return mode ? t(AUTH_LABEL[mode] ?? mode) : mode;
+}
 
 /** The eye: one click, one plaintext, one time. */
 function EyeIcon() {
@@ -48,7 +60,6 @@ function EyeIcon() {
 
 export function GatewayDetail({ id, me }) {
   const t = useT();
-  const { locale } = useI18n();
   // Two separate permissions: managing a gateway is not the same as minting a
   // credential for it, and the server checks them separately.
   const canEdit = can(me, "gateways:write");
@@ -70,7 +81,7 @@ export function GatewayDetail({ id, me }) {
     }
   }
 
-  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [id]);
+  useEffect(() => { load(); const timer = setInterval(load, 10000); return () => clearInterval(timer); }, [id]);
 
   if (error) return <Notice kind="err">{error}</Notice>;
 
@@ -143,82 +154,40 @@ export function GatewayDetail({ id, me }) {
         </Skeleton>
       </div>
 
-      <Card title={t("Endpoint")}>
+      {/* Endpoint, the limit and the tool list are one decision — "what this
+          gateway accepts and what it forwards" — so they sit together instead of
+          in three cards the reader has to join by scrolling. */}
+      <Card title={t("Endpoint and limits")}>
         {gateway ? (
           <>
             <Endpoint value={gateway.endpoint} />
-            <p className="hint" style={{ marginTop: 10 }}>
+            <p className="hint" style={{ margin: "10px 0 0" }}>
               {t("Point an MCP client here. Upstream stays private at")}{" "}
               <span className="mono">{gateway.target_url}</span>.
             </p>
+            <div className="limit-row">
+              {canEdit ? (
+                <RateLimitForm gateway={gateway} onSaved={load} />
+              ) : (
+                <div className="row">
+                  <Badge kind={gateway.requests_per_minute ? "info" : "mute"}>
+                    {gateway.requests_per_minute
+                      ? `${gateway.requests_per_minute} ${t("requests / minute")}`
+                      : t("No limit")}
+                  </Badge>
+                  <span className="hint">
+                    {t("0 means no limit. Each subject gets its own budget, and only JSON-RPC requests count — handshakes and notifications are free.")}
+                  </span>
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
             <Bone height={38} radius={6} />
             <Bone height={12} width="70%" />
+            <Bone height={34} width={320} />
           </div>
-        )}
-      </Card>
-
-      {gateway ? <ConnectGuide gateway={gateway} /> : null}
-
-      <Card title={t("Auth")}>
-        <div className="grid-2">
-          <div>
-            <div className="row" style={{ gap: 24, marginBottom: 12 }}>
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Mode")}</div>
-                <Badge kind={header.auth_mode === "none" ? "warn" : "info"}>
-                  {header.auth_mode}
-                  {header.idp ? ` · ${header.idp}` : ""}
-                </Badge>
-              </div>
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Allowlist")}</div>
-                <Badge kind={header.principals.length ? "ok" : "mute"}>
-                  {header.principals.length
-                    ? t("{count} principals", { count: header.principals.length })
-                    : t("any authenticated subject")}
-                </Badge>
-              </div>
-            </div>
-            <p className="hint" style={{ margin: 0 }}>
-              {t("An allowlist is a second gate: a valid token still has to belong to a listed subject. Empty means \"anyone who authenticates\".")}
-            </p>
-          </div>
-          {gateway ? (
-            canEdit ? (
-              <AuthForm gateway={gateway} onSaved={(msg) => { setBanner(msg); load(); }} />
-            ) : (
-              <Notice kind="info">
-                {t("Read-only: an administrator of this tenant changes the auth.")}
-              </Notice>
-            )
-          ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              <Bone height={34} />
-              <Bone height={34} />
-              <Bone height={34} />
-            </div>
-          )}
-        </div>
-      </Card>
-
-      <Card title={t("Rate limit")}>
-        {gateway ? (
-          canEdit ? (
-            <RateLimitForm gateway={gateway} onSaved={load} />
-          ) : (
-            <Notice kind="info">
-              {gateway.requests_per_minute
-                ? t("{count} requests per minute per caller.", {
-                    count: gateway.requests_per_minute,
-                  })
-                : t("No limit. Each caller gets its own budget.")}
-            </Notice>
-          )
-        ) : (
-          <Bone height={34} width={320} />
         )}
       </Card>
 
@@ -230,7 +199,48 @@ export function GatewayDetail({ id, me }) {
         )}
       </Card>
 
-      <div className="grid-2" style={{ marginTop: 12 }}>
+      <Card title={t("Auth")}>
+        {gateway ? (
+          <>
+            <div className="row" style={{ gap: 24, marginBottom: 12 }}>
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Mode")}</div>
+                <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
+                  {authLabel(t, gateway.auth_mode)}
+                  {gateway.idp ? ` · ${gateway.idp}` : ""}
+                </Badge>
+              </div>
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Allowlist")}</div>
+                <Badge kind={gateway.principals.length ? "ok" : "mute"}>
+                  {gateway.principals.length
+                    ? t("{count} principals", { count: gateway.principals.length })
+                    : t("any authenticated subject")}
+                </Badge>
+              </div>
+            </div>
+            <p className="hint" style={{ margin: "0 0 14px" }}>
+              {t("An allowlist is a second gate: a valid token still has to belong to a listed subject. Empty means \"anyone who authenticates\".")}
+            </p>
+            {canEdit ? (
+              <AuthForm gateway={gateway} onSaved={(msg) => { setBanner(msg); load(); }} />
+            ) : (
+              <Notice kind="info">
+                {t("Read-only: an administrator of this tenant changes the auth.")}
+              </Notice>
+            )}
+          </>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            <Bone height={22} width={260} />
+            <Bone height={34} />
+            <Bone height={34} />
+            <Bone height={34} />
+          </div>
+        )}
+      </Card>
+
+      <div className="grid-2">
         <Card
           title={t("Allowed subjects")}
           actions={gateway && canEdit && (
@@ -440,10 +450,16 @@ export function GatewayDetail({ id, me }) {
         </Card>
       </div>
 
+      {gateway ? <ConnectGuide gateway={gateway} /> : null}
+
       <Traffic stats={stats} />
 
       <Card title={t("Recent requests")}>
-        <RecentRequests requests={gateway ? gateway.requests : null} />
+        {gateway ? (
+          <Requests gateway={gateway} />
+        ) : (
+          <Bone height={140} radius={10} />
+        )}
       </Card>
 
       {gateway && canEdit && (

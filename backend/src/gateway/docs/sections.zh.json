@@ -228,7 +228,7 @@
             "该窗口及前一个等长窗口的总量，按结果、调用方 IP 和网关 slug、最忙的一分钟以及时间序列"
           ],
           [
-            "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
+            "GET /api/requests?gateway=&gateway_id=&subject=&outcome=&status=&method=&tool=&ip=",
             "一页请求日志；每个带过滤框的列都会收窄它"
           ],
           [

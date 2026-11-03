@@ -228,7 +228,7 @@
             "Totals for the window and the equal window before it, by outcome, caller IP and gateway slug, the busiest minute, and the series"
           ],
           [
-            "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
+            "GET /api/requests?gateway=&gateway_id=&subject=&outcome=&status=&method=&tool=&ip=",
             "A page of the request log; every column with a filter box narrows it"
           ],
           [

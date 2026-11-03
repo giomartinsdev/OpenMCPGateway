@@ -1372,6 +1372,10 @@ pre.code.docs-code {
 
 /* -- tool allowlist ------------------------------------------------------ */
 
+/* Tiles, not a list: three tools and three hundred use the same component, and a
+   grid of short names reads as "a set you tick" where a column of lines reads as
+   a document. The height is bounded so a large catalog does not push the page
+   down; scrolling here beats a second page of controls. */
 .tools-head {
   display: flex;
   align-items: center;
@@ -1380,6 +1384,7 @@ pre.code.docs-code {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
+.tools-head .row { flex: 1 1 auto; }
 .tools-search {
   flex: 0 1 240px;
   height: 32px;
@@ -1395,26 +1400,165 @@ pre.code.docs-code {
   list-style: none;
   margin: 0;
   padding: 0;
-  /* Bounded so a 200-tool server does not push the rest of the page below the
-     fold; scrolling here is cheaper than a second page of controls. */
-  max-height: 320px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 6px;
+  max-height: 292px;
   overflow-y: auto;
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px var(--line-2);
 }
-.tools-list li {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line-2);
-}
-.tools-list li:last-child { border-bottom: 0; }
+.tools-list li { min-width: 0; }
 .tools-list label {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  align-items: center;
+  gap: 4px 8px;
+  height: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg-2);
+  font: 400 var(--t-label) / 1.3 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition: box-shadow var(--hover) var(--ease), background-color var(--hover) var(--ease);
+}
+.tools-list label:hover { box-shadow: inset 0 0 0 1px var(--line-3); }
+.tools-list label:has(input:checked) {
+  background: rgba(var(--ok-rgb), 0.07);
+  box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.42);
+}
+.tools-list input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  box-shadow: none;
+  background: none;
+  accent-color: var(--apur);
+}
+.tools-list input[type="checkbox"]:hover,
+.tools-list input[type="checkbox"]:focus { box-shadow: none; }
+.tools-list .tool-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+/* The description is the second line of the tile, clamped: a good MCP server
+   writes a paragraph per tool, and a paragraph per tile is a wall. The full text
+   is the tile's `title`, and the search box is how you narrow. */
+.tools-list .tool-desc {
+  grid-column: 2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--fg-4);
+  font-size: var(--t-micro);
+}
+.tools-list li.gone label { box-shadow: inset 0 0 0 1px rgba(var(--warn-rgb), 0.36); }
+.tools-list li.gone .tool-name { color: var(--fg-3); }
+.tools-list .badge { grid-column: 2; justify-self: start; height: 18px; font-size: var(--t-micro); }
+
+.tools-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  box-shadow: inset 0 1px 0 var(--line);
 }
-.tools-list input[type="checkbox"] { accent-color: var(--apur); }
-.tools-list .hint { margin: 2px 0 0 24px; }
-/* A configured tool the upstream no longer serves: still listed, visibly apart,
-   because dropping it silently would erase a decision on the next save. */
-.tools-list li.gone .mono { color: var(--mute); }
+.tools-foot .hint { flex: 1 1 auto; max-width: 60ch; margin: 0; }
+
+/* -- accordion ----------------------------------------------------------- */
+
+/* Native `<details>`: open/closed, keyboard and screen reader come free, and a
+   collapsed section is still in the DOM for find-on-page. */
+.accordion {
+  margin-top: var(--s3);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.accordion > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s4);
+  border-radius: var(--radius);
+  cursor: pointer;
+  list-style: none;
+}
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary:hover { background: rgba(var(--tint), 0.02); }
+.accordion > summary:focus-visible { outline: 2px solid var(--fg-3); outline-offset: -2px; }
+.accordion > summary h2 { margin: 0; flex: 0 0 auto; }
+.accordion > summary .hint { flex: 1 1 auto; margin: 0; }
+.accordion > summary .chevron {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-right: 1.5px solid var(--fg-4);
+  border-bottom: 1.5px solid var(--fg-4);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform var(--hover) var(--ease);
+}
+.accordion[open] > summary .chevron { transform: rotate(225deg) translate(-2px, -2px); }
+.accordion-body { padding: 0 var(--s4) var(--s4); }
+
+/* -- limits, inline in the endpoint card ---------------------------------- */
+
+.limit-form {
+  display: grid;
+  grid-template-columns: 150px auto;
+  align-items: end;
+  gap: 10px var(--s2);
+  margin-top: 14px;
+  padding-top: 14px;
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.limit-form .field { margin: 0; }
+.limit-form .field.inline { width: 100%; }
+.limit-form .hint { grid-column: 1 / -1; margin: 0; }
+.limit-row { margin-top: 14px; padding-top: 14px; box-shadow: inset 0 1px 0 var(--line); }
+
+/* -- sankey -------------------------------------------------------------- */
+
+/* One scale on both columns, so a link keeps its width from left to right: the
+   same requests, measured twice. */
+.sankey svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.sankey text {
+  fill: var(--fg-3);
+  font: 400 var(--t-micro) / 1 var(--mono);
+  dominant-baseline: middle;
+}
+.sankey-node { fill: var(--fg-4); }
+.sankey-node.allowed { fill: var(--apur); }
+.sankey-node.warn { fill: var(--warn); }
+.sankey-node.forbidden,
+.sankey-node.unauthenticated { fill: var(--danger); }
+.sankey-node.rate_limited { fill: var(--warn); }
+.sankey-link { stroke: none; fill: var(--purple-fg); opacity: 0.16; transition: opacity var(--hover) var(--ease); }
+.sankey-link.allowed { fill: var(--apur); }
+.sankey-link.forbidden,
+.sankey-link.unauthenticated { fill: var(--danger); }
+.sankey-link.rate_limited { fill: var(--warn); }
+.sankey-link:hover { opacity: 0.42; }
+
+@media (max-width: 860px) {
+  .sankey svg { min-width: 640px; }
+  .sankey { overflow-x: auto; }
+}

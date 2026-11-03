@@ -253,6 +253,7 @@ export const SAMPLE_STATS = {
   by_ip: {},
   by_outcome: {},
   by_gateway: {},
+  by_gateway_outcome: {},
   series: [],
   busiest: null,
 };
@@ -306,3 +307,17 @@ export function outcomeKind(outcome) {
   if (outcome === "unauthenticated") return "err";
   return "mute";
 }
+
+/** The four outcomes, named for a reader. Keyed by the API's own vocabulary. */
+export const OUTCOME_LABEL = {
+  allowed: "allowed",
+  unauthenticated: "401 unauthenticated",
+  forbidden: "403 forbidden",
+  rate_limited: "429 rate limited",
+};
+
+/** One place to translate an outcome, so the three tables cannot disagree. */
+export function outcomeLabel(t, outcome) {
+  return t(OUTCOME_LABEL[outcome] ?? outcome);
+}
+

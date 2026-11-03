@@ -228,7 +228,7 @@
             "Totales de la ventana y de la ventana igual anterior, por resultado, IP del llamante y slug de gateway, el minuto más cargado y la serie"
           ],
           [
-            "GET /api/requests?gateway=&subject=&outcome=&status=&method=&tool=&ip=",
+            "GET /api/requests?gateway=&gateway_id=&subject=&outcome=&status=&method=&tool=&ip=",
             "Una página del registro de peticiones; cada columna con caja de filtro lo estrecha"
           ],
           [

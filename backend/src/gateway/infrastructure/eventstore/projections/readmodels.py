@@ -605,6 +605,7 @@ class ReadModels:
             by_outcome: dict[str, int] = {}
             by_ip: dict[str, int] = {}
             by_gateway: dict[str, int] = {}
+            by_gateway_outcome: dict[str, dict[str, int]] = {}
             series: dict[str, int] = {}
             for row in rows:
                 count = int(row["count"])
@@ -619,6 +620,10 @@ class ReadModels:
                 by_ip[ip] = by_ip.get(ip, 0) + count
                 gateway = row["gateway_id"]
                 by_gateway[gateway] = by_gateway.get(gateway, 0) + count
+                # Keyed by id while the slug is still unknown; rewritten below
+                # together with `by_gateway`, so the two cannot disagree.
+                outcome_counts = by_gateway_outcome.setdefault(gateway, {})
+                outcome_counts[row["outcome"]] = outcome_counts.get(row["outcome"], 0) + count
                 bucket = row["bucket"].isoformat()
                 series[bucket] = series.get(bucket, 0) + count
 
@@ -647,6 +652,15 @@ class ReadModels:
             by_gateway={
                 slugs.get(gateway, gateway): count
                 for gateway, count in sorted(by_gateway.items(), key=lambda kv: -kv[1])
+            },
+            by_gateway_outcome={
+                slugs.get(gateway, gateway): dict(
+                    sorted(outcomes.items(), key=lambda kv: -kv[1])
+                )
+                for gateway, outcomes in sorted(
+                    by_gateway_outcome.items(),
+                    key=lambda kv: -sum(kv[1].values()),
+                )
             },
             series=points,
             busiest=busiest,
