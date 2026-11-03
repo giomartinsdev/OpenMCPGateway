@@ -54,6 +54,9 @@ class JsonFormatter(logging.Formatter):
             if key in _RESERVED or key in payload or key.startswith("_"):
                 continue
             payload[key] = value
+        # Fields the caller passed, merged as data. Not spread into the record:
+        # `logging` owns that namespace and raises on a collision.
+        payload.update(record.__dict__.get("_omg_fields") or {})
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str, separators=(",", ":"))
@@ -104,7 +107,12 @@ class JsonLogger:
     @staticmethod
     def _emit(writer: Any, event: str, fields: dict[str, Any]) -> None:
         with contextlib.suppress(Exception):
-            writer(event, extra={"event": event, **fields}, stacklevel=3)
+            # The fields travel as one dict rather than as `**fields`: `logging`
+            # refuses to overwrite a reserved record attribute (`name`, `msg`,
+            # `module`…) and raises `KeyError`, which `suppress` then swallows —
+            # the whole line disappears. The formatter merges the dict instead,
+            # where a field called `name` is just a key in the JSON object.
+            writer(event, extra={"event": event, "_omg_fields": fields}, stacklevel=3)
 
 
 def configure(level: str | None = None, *, stream: Any = None) -> None:

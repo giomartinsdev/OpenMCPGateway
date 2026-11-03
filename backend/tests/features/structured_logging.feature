@@ -17,3 +17,11 @@ Feature: Logs a dashboard can query
     When the application logs an event carrying an unserialisable value
     Then the call returns normally
     And the line still names the event "weird.value"
+
+  Scenario: A field named like a logging attribute still reaches the line
+    # `logging` raises `KeyError` for `name`, `msg` and friends, and the logger
+    # suppresses it so a log call can never break a request. The line then simply
+    # vanishes — a migration that ran with no record of it having run.
+    When the application logs an event carrying a field called "name"
+    Then the call returns normally
+    And the line has a "name" field with the value "readmodels_schema"

@@ -158,8 +158,10 @@ async def run(engine: AsyncEngine) -> list[Migration]:
                 {"v": migration.version, "n": migration.name},
             )
             applied.append(migration)
+            # Not `name=`: `logging` refuses to overwrite a reserved record
+            # attribute and `_emit` suppresses the error, so the line vanished.
             log.info(
-                "database.migration", version=migration.version, name=migration.name
+                "database.migration", version=migration.version, step=migration.name
             )
         # `DROP SCHEMA readmodels CASCADE` is the documented way to rebuild every
         # projection. History still says version 1 ran, so nothing would recreate

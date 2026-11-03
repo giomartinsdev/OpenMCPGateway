@@ -106,6 +106,19 @@ def line_names_event(output: io.StringIO, event: str) -> None:
     assert line["payload"] == "<opaque>", line
 
 
+@when(parsers.parse('the application logs an event carrying a field called "{field}"'))
+def log_reserved_field(logger: JsonLogger, field: str) -> None:
+    logger.info("database.migration", **{field: "readmodels_schema"})
+
+
+@then(parsers.parse('the line has a "{field}" field with the value "{value}"'))
+def line_has_field(output: io.StringIO, field: str, value: str) -> None:
+    lines = [line for line in output.getvalue().splitlines() if line.strip()]
+    assert lines, "the log line vanished instead of carrying the field"
+    line = json.loads(lines[-1])
+    assert line[field] == value, line
+
+
 @given("the logger is configured")
 def logger_configured(output: io.StringIO) -> None:
     configure("INFO", stream=output)
