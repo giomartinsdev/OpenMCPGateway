@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useT } from "../i18n.jsx";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Card, Details, Drawer, NoMatches, Notice, Skeleton, SAMPLE_ROLES, can,
@@ -9,6 +10,7 @@ import {
 // deployment that lost its log still has an owner. Everything else here is the
 // tenant's own.
 export function Roles({ me }) {
+  const t = useT();
   const canWrite = can(me, "roles:write");
   const [catalog, setCatalog] = useState([]);
   const [filters, setFilters] = useState({});
@@ -76,7 +78,10 @@ export function Roles({ me }) {
       if (editing.id) await api.updateRole(editing.id, editing.name, editing.permissions);
       else await api.defineRole(editing.name, editing.permissions);
       setDrawer(null);
-      setBanner({ kind: "ok", text: "Saved. Members holding this role see it on their next click." });
+      setBanner({
+        kind: "ok",
+        text: t("Saved. Members holding this role see it on their next click."),
+      });
       reload();
     } catch (err) {
       setBanner({ kind: "err", text: err.message });
@@ -90,7 +95,7 @@ export function Roles({ me }) {
     try {
       await api.deleteRole(role.id);
       setDrawer(null);
-      setBanner({ kind: "ok", text: `Deleted "${role.name}".` });
+      setBanner({ kind: "ok", text: t('Deleted "{name}".', { name: role.name }) });
       reload();
     } catch (err) {
       setBanner({ kind: "err", text: err.message });
@@ -103,15 +108,14 @@ export function Roles({ me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Roles</h1>
+          <h1>{t("Roles")}</h1>
           <div className="sub">
-            What a member may do. Permissions are checked on every request, so a
-            change lands on their next click — no re-login, no stale cookie.
+            {t("What a member may do. Permissions are checked on every request, so a change lands on their next click — no re-login, no stale cookie.")}
           </div>
         </div>
         {canWrite && (
           <div className="actions">
-            <button className="primary" onClick={startCreate}>New role</button>
+            <button className="primary" onClick={startCreate}>{t("New role")}</button>
           </div>
         )}
       </div>
@@ -119,24 +123,29 @@ export function Roles({ me }) {
       <Notice kind="err">{banner?.kind === "err" ? banner.text : ""}</Notice>
       <Notice kind="ok">{banner?.kind === "ok" ? banner.text : ""}</Notice>
 
-      <Card title="All roles" aside={roles ? `${roles.length} roles` : null}>
+      <Card
+        title={t("All roles")}
+        aside={roles ? t("{count} roles", { count: roles.length }) : null}
+      >
         <Skeleton
           data={roles}
           sample={SAMPLE_ROLES}
-          label="Loading roles"
+          label={t("Loading roles")}
           empty={roles?.length === 0}
           emptyMessage={
             <NoMatches
               filters={filters}
               onClear={() => setFilters({})}
-              title="No roles"
+              title={t("No roles")}
               action={
                 canWrite ? (
-                  <button className="sm" onClick={startCreate}>Define the first role</button>
+                  <button className="sm" onClick={startCreate}>
+                    {t("Define the first role")}
+                  </button>
                 ) : null
               }
             >
-              Define one to grant a narrow set of permissions.
+              {t("Define one to grant a narrow set of permissions.")}
             </NoMatches>
           }
         >
@@ -151,9 +160,9 @@ export function Roles({ me }) {
                       sort={sort}
                       onSort={setSort}
                     />
-                    <th>Permissions</th>
-                    <th className="num">Holders</th>
-                    <th>ID</th>
+                    <th>{t("Permissions")}</th>
+                    <th className="num">{t("Holders")}</th>
+                    <th>{t("ID")}</th>
                     <th />
                   </tr>
                   <FilterRow
@@ -183,7 +192,7 @@ export function Roles({ me }) {
                       <td>
                         <div className="row" style={{ gap: 4 }}>
                           {role.permissions.length === 0 ? (
-                            <span className="hint">none — can read nothing</span>
+                            <span className="hint">{t("none — can read nothing")}</span>
                           ) : (
                             role.permissions.map((permission) => (
                               <span key={permission} className="badge mute mono">
@@ -194,7 +203,7 @@ export function Roles({ me }) {
                         </div>
                       </td>
                       <td className="num">
-                        {role.builtin ? <Badge kind="purple">built-in</Badge> : role.holders}
+                        {role.builtin ? <Badge kind="purple">{t("built-in")}</Badge> : role.holders}
                       </td>
                       <td className="mono hint">{role.id}</td>
                       <td className="actions">
@@ -207,7 +216,7 @@ export function Roles({ me }) {
                                 startEdit(role);
                               }}
                             >
-                              Edit
+                              {t("Edit")}
                             </button>
                             <button
                               className="ghost sm danger"
@@ -216,7 +225,7 @@ export function Roles({ me }) {
                                 remove(role);
                               }}
                             >
-                              Delete
+                              {t("Delete")}
                             </button>
                           </>
                         )}
@@ -230,8 +239,7 @@ export function Roles({ me }) {
         </Skeleton>
         <LoadMore next={next} busy={listBusy} onClick={more} />
         <p className="hint" style={{ marginBottom: 0, marginTop: 12 }}>
-          A permission outside the catalog is refused when you save: a typo would
-          otherwise be a role that grants nothing and says nothing.
+          {t("A permission outside the catalog is refused when you save: a typo would otherwise be a role that grants nothing and says nothing.")}
         </p>
       </Card>
 
@@ -243,22 +251,36 @@ export function Roles({ me }) {
           actions={
             canWrite && !drawer.role.builtin ? (
               <button className="ghost sm" onClick={() => startEdit(drawer.role)}>
-                Edit
+                {t("Edit")}
               </button>
             ) : null
           }
         >
           <Details
             rows={[
-              ["Role", drawer.role.name],
-              ["Holders", drawer.role.builtin ? "built-in, held by anyone it is assigned to" : drawer.role.holders],
-              ["Kind", drawer.role.builtin ? <Badge kind="purple">built-in</Badge> : "this tenant's own"],
-              ["Permissions", drawer.role.permissions.length || "none"],
+              [t("Role"), drawer.role.name],
+              [
+                t("Holders"),
+                drawer.role.builtin
+                  ? t("built-in, held by anyone it is assigned to")
+                  : drawer.role.holders,
+              ],
+              [
+                t("Kind"),
+                drawer.role.builtin ? (
+                  <Badge kind="purple">{t("built-in")}</Badge>
+                ) : (
+                  t("this tenant's own")
+                ),
+              ],
+              [t("Permissions"), drawer.role.permissions.length || t("none")],
             ]}
           />
-          <div className="eyebrow" style={{ marginBottom: 8 }}>What it grants</div>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t("What it grants")}</div>
           {drawer.role.permissions.length === 0 ? (
-            <p className="hint">Nothing. A role with no permissions can read nothing.</p>
+            <p className="hint">
+              {t("Nothing. A role with no permissions can read nothing.")}
+            </p>
           ) : (
             <div className="permissions">
               {drawer.role.permissions.map((permission) => (
@@ -268,21 +290,25 @@ export function Roles({ me }) {
           )}
           <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
             {drawer.role.builtin
-              ? "Built-in roles are defined in code, so a deployment that lost its log still has an owner."
-              : "Editing this role changes what every holder may do on their next request."}
+              ? t("Built-in roles are defined in code, so a deployment that lost its log still has an owner.")
+              : t("Editing this role changes what every holder may do on their next request.")}
           </p>
         </Drawer>
       )}
 
       {drawer?.kind === "edit" && (
         <Drawer
-          title={drawer.editing.id ? `Edit "${drawer.editing.name}"` : "New role"}
+          title={
+            drawer.editing.id
+              ? t('Edit "{name}"', { name: drawer.editing.name })
+              : t("New role")
+          }
           sub={drawer.editing.id}
           onClose={() => setDrawer(null)}
         >
           <form onSubmit={save}>
             <div className="field">
-              <label htmlFor="role-name">Name</label>
+              <label htmlFor="role-name">{t("Name")}</label>
               <input
                 id="role-name"
                 value={drawer.editing.name}
@@ -296,7 +322,7 @@ export function Roles({ me }) {
                 required
               />
             </div>
-            <label>Permissions</label>
+            <label>{t("Permissions")}</label>
             <div className="permissions">
               {catalog.map((permission) => (
                 <label key={permission} className="permission">
@@ -311,7 +337,7 @@ export function Roles({ me }) {
             </div>
             <div className="form-actions">
               <button className="primary" disabled={busy}>
-                {busy ? "Saving…" : "Save role"}
+                {busy ? t("Saving…") : t("Save role")}
               </button>
             </div>
           </form>

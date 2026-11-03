@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api.js";
+import { useI18n, useT } from "../i18n.jsx";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Card, Details, Drawer, NoMatches, Notice, Skeleton, SAMPLE_EVENTS, relative,
@@ -19,6 +20,8 @@ const FIELDS = [
 const SORTS = { occurred_at: "desc", actor: "asc", type: "asc" };
 
 export function Audit() {
+  const t = useT();
+  const { locale } = useI18n();
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useSort("occurred_at", SORTS);
   const [open, setOpen] = useState(null);
@@ -34,31 +37,33 @@ export function Audit() {
     <>
       <div className="page-head">
         <div>
-          <h1>Audit log</h1>
+          <h1>{t("Audit log")}</h1>
           <div className="sub">
-            The append-only event log. Secret values are redacted before they are stored.
+            {t("The append-only event log. Secret values are redacted before they are stored.")}
           </div>
         </div>
         <div className="actions">
-          <Badge kind="info">{items ? `${items.length} events` : "loading"}</Badge>
+          <Badge kind="info">
+            {items ? t("{count} events", { count: items.length }) : t("loading")}
+          </Badge>
         </div>
       </div>
 
       <Notice kind="err">{error}</Notice>
 
-      <Card title="Events">
+      <Card title={t("Events")}>
         <Skeleton
           data={items}
           sample={SAMPLE_EVENTS}
-          label="Loading the audit log"
+          label={t("Loading the audit log")}
           empty={items?.length === 0}
           emptyMessage={
             <NoMatches
               filters={filters}
               onClear={() => setFilters({})}
-              title="No events yet"
+              title={t("No events yet")}
             >
-              Every change lands here.
+              {t("Every change lands here.")}
             </NoMatches>
           }
         >
@@ -74,7 +79,7 @@ export function Audit() {
                       sort={sort}
                       onSort={setSort}
                     />
-                    <th>Aggregate</th>
+                    <th>{t("Aggregate")}</th>
                     <SortHeader
                       field="actor"
                       label="Actor"
@@ -88,7 +93,7 @@ export function Audit() {
                       onSort={setSort}
                       className="num"
                     />
-                    <th>ID</th>
+                    <th>{t("ID")}</th>
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
@@ -125,19 +130,18 @@ export function Audit() {
         >
           <Details
             rows={[
-              ["Recorded", new Date(open.occurred_at).toLocaleString()],
-              ["Seen", relative(open.occurred_at)],
-              ["Sequence", `#${open.global_seq}`],
-              ["Stream", <span className="mono">{open.aggregate_id}</span>],
-              ["Stream seq", open.sequence],
-              ["Actor", open.actor || "system"],
+              [t("Recorded"), new Date(open.occurred_at).toLocaleString(locale)],
+              [t("Seen"), relative(open.occurred_at)],
+              [t("Sequence"), `#${open.global_seq}`],
+              [t("Stream"), <span className="mono">{open.aggregate_id}</span>],
+              [t("Stream seq"), open.sequence],
+              [t("Actor"), open.actor || t("system")],
             ]}
           />
-          <div className="eyebrow" style={{ marginBottom: 8 }}>Payload</div>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t("Payload")}</div>
           <pre className="payload">{JSON.stringify(open.payload, null, 2)}</pre>
           <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
-            This is the event as it was appended. Hashes and secrets are redacted
-            before the row is served, so a missing field here was never readable.
+            {t("This is the event as it was appended. Hashes and secrets are redacted before the row is served, so a missing field here was never readable.")}
           </p>
         </Drawer>
       )}

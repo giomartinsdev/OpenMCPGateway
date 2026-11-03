@@ -1,4 +1,7 @@
 import { AuthCard } from "./Login.jsx";
+import { LanguagePicker, useT } from "../i18n.jsx";
+import { Mark } from "../Mark.jsx";
+import { ThemeToggle, useTheme } from "../theme.jsx";
 
 // Copy lives here, not in the form: the landing is a pitch and the form is a
 // component, and mixing them is how a login page becomes a brochure.
@@ -68,52 +71,51 @@ const LOG = [
 ];
 
 export function Landing({ onLogin }) {
+  const t = useT();
+  const [theme, toggleTheme] = useTheme();
   return (
     <div className="landing">
       <nav className="landing-nav">
         <div className="logo">
-          <div className="logo-mark" />
+          <Mark size={28} />
           <div className="logo-text">
             OpenMCP<span>Gateway</span>
           </div>
         </div>
         <div className="links">
-          <a href="#how">How it works</a>
-          <a href="#features">Features</a>
+          <a href="#how">{t("How it works")}</a>
+          <a href="#features">{t("Features")}</a>
           {/* `#/docs` is a route, not an anchor: the manual is a page of the app,
               reachable signed out, so the pitch and the reference cannot drift. */}
-          <a href="#/docs">Docs</a>
+          <a href="#/docs">{t("Docs")}</a>
           <a href="https://github.com/giomartinsdev/OpenMCPGateway" target="_blank" rel="noreferrer">
             GitHub
           </a>
-          <a className="pill-btn" href="#signin">Sign in</a>
+          <LanguagePicker />
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <a className="pill-btn" href="#signin">{t("Sign in")}</a>
         </div>
       </nav>
 
       <header className="hero">
         <div>
           <span className="tag">
-            <span className="dot" /> Apache-2.0 · self-hosted
+            <span className="dot" /> {t("Apache-2.0 · self-hosted")}
           </span>
           <h1>
-            Auth, limits and logs in front of any <em>MCP server</em>.
+            {t("Auth, limits and logs in front of any")} <em>{t("MCP server")}</em>.
           </h1>
           <p className="lead">
-            One endpoint per server, an identity provider you already run, and a call
-            log that answers "who used this and what broke". No static token copied
-            into five laptops — and every new tenant starts with a gateway to the
-            deployment's own read-only console, so there is something to ask on day
-            one.
+            {t("One endpoint per server, an identity provider you already run, and a call log that answers \"who used this and what broke\". No static token copied into five laptops — and every new tenant starts with a gateway to the deployment's own read-only console, so there is something to ask on day one.")}
           </p>
           <div className="cta">
-            <a className="cta-primary" href="#signin">Open the panel</a>
+            <a className="cta-primary" href="#signin">{t("Open the panel")}</a>
             <a className="cta-secondary" href="#/docs">
-              Read the docs
+              {t("Read the docs")}
             </a>
           </div>
           <p className="fineprint">
-            No account to create here: the panel signs in against this deployment's own
-            identity provider.
+            {t("No account to create here: the panel signs in against this deployment's own identity provider.")}
           </p>
         </div>
 
@@ -138,10 +140,9 @@ export function Landing({ onLogin }) {
       <section className="band" id="signin">
         <div className="signin-band">
           <div>
-            <h2>Already have an account?</h2>
+            <h2>{t("Already have an account?")}</h2>
             <p>
-              Sign in to manage gateways, keys, roles and traffic. Signing up gives you an
-              identity and nothing else — you then create a tenant or join one with a code.
+              {t("Sign in to manage gateways, keys, roles and traffic. Signing up gives you an identity and nothing else — you then create a tenant or join one with a code.")}
             </p>
           </div>
           <AuthCard onLogin={onLogin} />
@@ -150,17 +151,16 @@ export function Landing({ onLogin }) {
 
       <section className="band" id="how">
         <header>
-          <h2>Three decisions, in this order</h2>
+          <h2>{t("Three decisions, in this order")}</h2>
           <p>
-            The gateway does not care what your MCP server does. It decides who reaches
-            it, how often, and leaves a record.
+            {t("The gateway does not care what your MCP server does. It decides who reaches it, how often, and leaves a record.")}
           </p>
         </header>
         <div className="steps">
           {STEPS.map((step) => (
             <div className="step" key={step.title}>
-              <h3>{step.title}</h3>
-              <p>{step.body}</p>
+              <h3>{t(step.title)}</h3>
+              <p>{t(step.body)}</p>
             </div>
           ))}
         </div>
@@ -168,18 +168,17 @@ export function Landing({ onLogin }) {
 
       <section className="band" id="features">
         <header>
-          <h2>What it does, and what it refuses</h2>
+          <h2>{t("What it does, and what it refuses")}</h2>
           <p>
-            Fail closed is the default: an OAuth gateway with no credentials answers 503,
-            never as an open proxy.
+            {t("Fail closed is the default: an OAuth gateway with no credentials answers 503, never as an open proxy.")}
           </p>
         </header>
         <div className="features">
           {FEATURES.map((feature) => (
             <div className="feature" key={feature.title}>
               <div className="ico">{feature.icon}</div>
-              <h3>{feature.title}</h3>
-              <p>{feature.body}</p>
+              <h3>{t(feature.title)}</h3>
+              <p>{t(feature.body)}</p>
             </div>
           ))}
         </div>
@@ -187,35 +186,31 @@ export function Landing({ onLogin }) {
 
       <section className="band" id="docs">
         <header>
-          <h2>The manual is in the product</h2>
+          <h2>{t("The manual is in the product")}</h2>
           <p>
-            Not a README on another tab: the same deployment serves the reference, so
-            what you read is the version you are running.
+            {t("Not a README on another tab: the same deployment serves the reference, so what you read is the version you are running.")}
           </p>
         </header>
         <div className="docs-band">
           <a className="docs-card" href="#/docs">
-            <span className="eyebrow">Reference</span>
-            <h3>Gateways, auth, limits, logs</h3>
+            <span className="eyebrow">{t("Reference")}</span>
+            <h3>{t("Gateways, auth, limits, logs")}</h3>
             <p>
-              How a request gets through, what each auth mode costs you, and every field
-              on a gateway.
+              {t("How a request gets through, what each auth mode costs you, and every field on a gateway.")}
             </p>
           </a>
           <a className="docs-card" href="#/docs">
-            <span className="eyebrow">Operations</span>
-            <h3>Config as code, roles and members</h3>
+            <span className="eyebrow">{t("Operations")}</span>
+            <h3>{t("Config as code, roles and members")}</h3>
             <p>
-              The full YAML schema — gateways, roles and members — with the merge and
-              prune semantics spelled out.
+              {t("The full YAML schema — gateways, roles and members — with the merge and prune semantics spelled out.")}
             </p>
           </a>
           <a className="docs-card" href="#/docs">
-            <span className="eyebrow">Troubleshooting</span>
+            <span className="eyebrow">{t("Troubleshooting")}</span>
             <h3>503, 401, 403, 429</h3>
             <p>
-              What each refusal means, and the ingress setting that makes an MCP stream
-              look like a hang.
+              {t("What each refusal means, and the ingress setting that makes an MCP stream look like a hang.")}
             </p>
           </a>
         </div>
@@ -224,9 +219,9 @@ export function Landing({ onLogin }) {
       <footer className="landing-foot">
         <span>OpenMCPGateway · Apache-2.0</span>
         <div className="row">
-          <a href="https://github.com/giomartinsdev/OpenMCPGateway">Source</a>
-          <a href="#/docs">Docs</a>
-          <a href="#signin">Sign in</a>
+          <a href="https://github.com/giomartinsdev/OpenMCPGateway">{t("Source")}</a>
+          <a href="#/docs">{t("Docs")}</a>
+          <a href="#signin">{t("Sign in")}</a>
         </div>
       </footer>
     </div>

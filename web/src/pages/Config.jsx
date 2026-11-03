@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useT } from "../i18n.jsx";
 import { Bone, Card, Notice, can } from "../ui.jsx";
 
 const SAMPLE = `gateways:
@@ -49,6 +50,7 @@ function summarize(result) {
 }
 
 export function ConfigPage({ me }) {
+  const t = useT();
   const canEdit = can(me, "config:write");
   const [yaml, setYaml] = useState(null);
   const [banner, setBanner] = useState(null);
@@ -67,12 +69,15 @@ export function ConfigPage({ me }) {
       const result = await action(yaml ?? "");
       setBanner({
         kind: result.errors?.length ? "err" : "ok",
-        text: action === api.validateConfig
-          ? `parsed — gateways: ${result.gateways?.join(", ") || "none"}` +
-            ` · roles: ${result.roles?.join(", ") || "none"}` +
-            ` · members: ${result.members?.join(", ") || "none"}` +
-            ` · prune: ${result.prune}`
-          : summarize(result),
+        text:
+          action === api.validateConfig
+            ? t("parsed — gateways: {gateways} · roles: {roles} · members: {members} · prune: {prune}", {
+                gateways: result.gateways?.join(", ") || t("none"),
+                roles: result.roles?.join(", ") || t("none"),
+                members: result.members?.join(", ") || t("none"),
+                prune: result.prune,
+              })
+            : summarize(result),
       });
       if (action === api.applyConfig) {
         const fresh = await api.exportConfig();
@@ -89,17 +94,21 @@ export function ConfigPage({ me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Config as code</h1>
+          <h1>{t("Config as code")}</h1>
           <div className="sub">
-            The same commands the UI issues, in a file you can commit and review.
+            {t("The same commands the UI issues, in a file you can commit and review.")}
           </div>
         </div>
         <div className="actions">
-          <button onClick={() => setYaml(SAMPLE)} disabled={busy}>Load example</button>
-          <button onClick={() => run(api.validateConfig)} disabled={busy}>Validate</button>
+          <button onClick={() => setYaml(SAMPLE)} disabled={busy}>
+            {t("Load example")}
+          </button>
+          <button onClick={() => run(api.validateConfig)} disabled={busy}>
+            {t("Validate")}
+          </button>
           {canEdit && (
             <button className="primary" onClick={() => run(api.applyConfig)} disabled={busy}>
-              {busy ? "Working…" : "Apply"}
+              {busy ? t("Working…") : t("Apply")}
             </button>
           )}
         </div>
@@ -107,10 +116,13 @@ export function ConfigPage({ me }) {
 
       <Notice kind={banner?.kind ?? "info"}>
         {banner?.text ||
-          "Validate parses and resolves placeholders without touching state. Apply runs the commands."}
+          t("Validate parses and resolves placeholders without touching state. Apply runs the commands.")}
       </Notice>
 
-      <Card title="gateways.yaml" aside={canEdit ? "applies on save" : "read-only"}>
+      <Card
+        title="gateways.yaml"
+        aside={canEdit ? t("applies on save") : t("read-only")}
+      >
         {yaml === null ? (
           <div style={{ display: "grid", gap: 8 }}>
             {[46, 32, 62, 24, 38, 54, 30, 44].map((width, i) => (
@@ -123,34 +135,34 @@ export function ConfigPage({ me }) {
             onChange={(event) => setYaml(event.target.value)}
             spellCheck={false}
             style={{ minHeight: 460 }}
-            aria-label="Gateway configuration"
+            aria-label={t("Gateway configuration")}
           />
         )}
       </Card>
 
       <div className="grid-2">
-        <Card title="What the file can declare">
+        <Card title={t("What the file can declare")}>
           <p className="hint" style={{ margin: 0 }}>
-            <span className="mono">gateways</span> — slug, target, auth, limits,
-            allowlist and API keys.
+            <span className="mono">gateways</span>{" "}
+            {t("— slug, target, auth, limits, allowlist and API keys.")}
             <br />
-            <span className="mono">roles</span> — a name and a permission list. Built-ins
-            (<span className="mono">owner</span>, <span className="mono">viewer</span>)
-            can be named but not redefined.
+            <span className="mono">roles</span>{" "}
+            {t("— a name and a permission list. Built-ins ({owner}, {viewer}) can be named but not redefined.", {
+              owner: "owner",
+              viewer: "viewer",
+            })}
             <br />
-            <span className="mono">members</span> — an email, the roles to hold, and a
-            password from <span className="mono">${"{ENV_VAR}"}</span> that is only used
-            when the account is new. A member whose roles already match is left alone.
+            <span className="mono">members</span>{" "}
+            {t("— an email, the roles to hold, and a password from {env} that is only used when the account is new. A member whose roles already match is left alone.", {
+              env: "${ENV_VAR}",
+            })}
           </p>
         </Card>
-        <Card title="How this stays honest">
+        <Card title={t("How this stays honest")}>
           <p className="hint" style={{ margin: 0 }}>
-            Both this file and the UI end up in the same command handler, so a gateway
-            created in the browser can be exported here, edited, and applied back. The
-            file is authoritative for what it declares: anything left out survives, so a
-            typo cannot delete production. <span className="mono">prune: true</span> opts
-            into deleting gateways the file omits — it never deletes members, because an
-            account missing from a file is far more likely to be a merge accident.
+            {t("Both this file and the UI end up in the same command handler, so a gateway created in the browser can be exported here, edited, and applied back. The file is authoritative for what it declares: anything left out survives, so a typo cannot delete production.")}{" "}
+            <span className="mono">prune: true</span>{" "}
+            {t("opts into deleting gateways the file omits — it never deletes members, because an account missing from a file is far more likely to be a merge accident.")}
           </p>
         </Card>
       </div>

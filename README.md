@@ -210,6 +210,25 @@ every ten seconds without a reload.
 Creation is a drawer too — gateway, member and role all open the same way from
 the button in the page header, so the form never pushes the list down the page.
 
+### Theme and language
+
+Two switches in the top bar — and in the landing nav, because the pitch is a
+page too. Light and dark are one set of CSS custom properties with two blocks
+under `[data-theme]`, so no component asks which palette is active. The choice
+is read by an inline script in `index.html` before the first paint, which is the
+only way to avoid a flash of the wrong one.
+
+The panel speaks Portuguese, English, Spanish, Chinese and Russian. The key *is*
+the English sentence (`t("Sign in")`), so a string nobody translated renders in
+English rather than blank, and there is no second naming scheme to keep in sync.
+`web/src/i18n.jsx` holds the runtime, `web/src/i18n/<code>.js` the catalogs, and
+`{name}` is the whole interpolation language. Dates go through `Intl`, so
+relative times and `toLocaleString` follow the same choice. The default is the
+browser's language, falling back to English.
+
+The manual itself stays in English: it is generated content served by the
+deployment (`sections.json`), not page chrome.
+
 ## Calling a gateway
 
 The gateway is a normal MCP server, so any client works:

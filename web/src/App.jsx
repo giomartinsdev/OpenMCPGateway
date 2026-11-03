@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { can } from "./ui.jsx";
 import { Icon } from "./icons.jsx";
+import { LanguagePicker, useT } from "./i18n.jsx";
 import { Mark } from "./Mark.jsx";
+import { ThemeToggle, useTheme } from "./theme.jsx";
 import { Landing } from "./pages/Landing.jsx";
 import { Gateways } from "./pages/Gateways.jsx";
 import { GatewayDetail } from "./pages/GatewayDetail.jsx";
@@ -87,18 +89,20 @@ function useVisibleNav(me) {
  * labels, and gives the width back.
  */
 function Frame({ me, page, path, isDetail, onSignOut }) {
+  const t = useT();
   const groups = useVisibleNav(me);
+  const [theme, toggleTheme] = useTheme();
   return (
     <div className="frame">
       <header className="topbar">
         <div className="topbar-inner">
-          <a className="logo" href="#/" aria-label="OpenMCPGateway home">
+          <a className="logo" href="#/" aria-label={t("OpenMCPGateway home")}>
             <Mark size={28} />
             <div className="logo-text">
               OpenMCP<span>Gateway</span>
             </div>
           </a>
-          <nav className="nav" aria-label="Main">
+          <nav className="nav" aria-label={t("Main")}>
             {groups.map((group) => (
               <div className="nav-group" key={group.group}>
                 {group.items.map((item) => {
@@ -114,7 +118,7 @@ function Frame({ me, page, path, isDetail, onSignOut }) {
                       aria-current={active ? "page" : undefined}
                     >
                       <Icon name={item.icon} size={14} />
-                      <span>{item.label}</span>
+                      <span>{t(item.label)}</span>
                     </a>
                   );
                 })}
@@ -129,12 +133,14 @@ function Frame({ me, page, path, isDetail, onSignOut }) {
               <div className="who-text">
                 <strong>{me.email}</strong>
                 <span>
-                  {me.tenant_name || "tenant"} · {(me.roles ?? []).join(", ") || "no role"}
+                  {me.tenant_name || t("tenant")} · {(me.roles ?? []).join(", ") || t("no role")}
                 </span>
               </div>
             </div>
+            <LanguagePicker />
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <button className="ghost sm" onClick={onSignOut}>
-              Sign out
+              {t("Sign out")}
             </button>
           </div>
         </div>
@@ -147,6 +153,8 @@ function Frame({ me, page, path, isDetail, onSignOut }) {
 }
 
 export function App() {
+  const t = useT();
+  const [theme, toggleTheme] = useTheme();
   const [me, setMe] = useState(undefined); // undefined = loading
   const path = useRoute();
 
@@ -162,7 +170,7 @@ export function App() {
         <header className="topbar">
           <div className="topbar-inner">
             <div className="logo">
-              <div className="logo-mark" />
+              <Mark size={28} />
               <div className="logo-text">
                 OpenMCP<span>Gateway</span>
               </div>
@@ -221,12 +229,18 @@ export function App() {
     if (me === null) {
       return (
         <div className="docs-shell">
-          <a className="logo docs-logo" href="#/" aria-label="OpenMCPGateway home">
-            <Mark size={34} />
-            <div className="logo-text">
-              OpenMCP<span>Gateway</span>
+          <div className="docs-top">
+            <a className="logo docs-logo" href="#/" aria-label={t("OpenMCPGateway home")}>
+              <Mark size={34} />
+              <div className="logo-text">
+                OpenMCP<span>Gateway</span>
+              </div>
+            </a>
+            <div className="row">
+              <LanguagePicker />
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
             </div>
-          </a>
+          </div>
           {docs}
         </div>
       );

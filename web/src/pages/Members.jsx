@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useI18n, useT } from "../i18n.jsx";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Bone, Card, Details, Drawer, Endpoint, NoMatches, Notice, Skeleton,
@@ -9,6 +10,8 @@ import {
 // People, not settings. Sign-in configuration is a property of the deployment, so
 // this screen is only who belongs to the tenant and what each of them may do.
 export function Members({ me }) {
+  const t = useT();
+  const { locale } = useI18n();
   const canWrite = can(me, "members:write");
   const canAssign = can(me, "roles:write");
   const [filters, setFilters] = useState({});
@@ -58,7 +61,7 @@ export function Members({ me }) {
       setDrawer(null);
       setBanner({
         kind: "ok",
-        text: "Member added. They sign in with that password and the role you chose.",
+        text: t("Member added. They sign in with that password and the role you chose."),
       });
       reload();
     } catch (err) {
@@ -77,7 +80,7 @@ export function Members({ me }) {
       setDrawer(null);
       setBanner({
         kind: "ok",
-        text: "Roles changed. The member's next request already uses them.",
+        text: t("Roles changed. The member's next request already uses them."),
       });
       reload();
     } catch (err) {
@@ -99,20 +102,21 @@ export function Members({ me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Members</h1>
+          <h1>{t("Members")}</h1>
           <div className="sub">
-            Everyone in this tenant shares its gateways and traffic. What each of them
-            may change comes from their roles.
+            {t("Everyone in this tenant shares its gateways and traffic. What each of them may change comes from their roles.")}
           </div>
         </div>
         <div className="actions">
-          <Badge kind="info">{operators ? `${operators.length} people` : "loading"}</Badge>
+          <Badge kind="info">
+            {operators ? t("{count} people", { count: operators.length }) : t("loading")}
+          </Badge>
           {canWrite && (
             <button
               className="primary"
               onClick={() => { setBanner(null); setDrawer({ kind: "new" }); }}
             >
-              Add member
+              {t("Add member")}
             </button>
           )}
         </div>
@@ -121,34 +125,38 @@ export function Members({ me }) {
       <Notice kind="err">{banner?.kind === "err" ? banner.text : listError}</Notice>
       <Notice kind="ok">{banner?.kind === "ok" ? banner.text : ""}</Notice>
 
-      <Card title="Join code">
+      <Card title={t("Join code")}>
         <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
-          Anyone with this code can join {tenant?.name ?? "this tenant"} as a viewer. Share it
-          with the people who should see these gateways.
+          {t("Anyone with this code can join {tenant} as a viewer. Share it with the people who should see these gateways.", {
+            tenant: tenant?.name ?? t("this tenant"),
+          })}
         </p>
         {tenant ? <Endpoint value={tenant.join_code} /> : <Bone height={38} radius={6} />}
       </Card>
 
-      <Card title="Who belongs to this tenant" aside={operators ? `${operators.length} people` : null}>
+      <Card
+        title={t("Who belongs to this tenant")}
+        aside={operators ? t("{count} people", { count: operators.length }) : null}
+      >
         <Skeleton
           data={operators}
           sample={SAMPLE_MEMBERS}
-          label="Loading members"
+          label={t("Loading members")}
           empty={operators?.length === 0}
           emptyMessage={
             <NoMatches
               filters={filters}
               onClear={() => setFilters({})}
-              title="No accounts yet"
+              title={t("No accounts yet")}
               action={
                 canWrite ? (
                   <button className="sm" onClick={() => setDrawer({ kind: "new" })}>
-                    Add the first member
+                    {t("Add the first member")}
                   </button>
                 ) : null
               }
             >
-              Add the first member.
+              {t("Add the first member.")}
             </NoMatches>
           }
         >
@@ -163,7 +171,7 @@ export function Members({ me }) {
                       sort={sort}
                       onSort={setSort}
                     />
-                    <th>Roles</th>
+                    <th>{t("Roles")}</th>
                     <SortHeader
                       field="created_at"
                       label="Joined"
@@ -171,7 +179,7 @@ export function Members({ me }) {
                       onSort={setSort}
                       className="num"
                     />
-                    <th>ID</th>
+                    <th>{t("ID")}</th>
                     <th />
                   </tr>
                   <FilterRow
@@ -221,7 +229,7 @@ export function Members({ me }) {
                               });
                             }}
                           >
-                            Change roles
+                            {t("Change roles")}
                           </button>
                         )}
                       </td>
@@ -236,11 +244,11 @@ export function Members({ me }) {
       </Card>
 
       {drawer?.kind === "new" && (
-        <Drawer title="Add a member" onClose={() => setDrawer(null)}>
+        <Drawer title={t("Add a member")} onClose={() => setDrawer(null)}>
           <form onSubmit={add}>
             <div className="field-row">
               <div className="field">
-                <label htmlFor="member-email">Email</label>
+                <label htmlFor="member-email">{t("Email")}</label>
                 <input
                   id="member-email"
                   type="email"
@@ -250,7 +258,7 @@ export function Members({ me }) {
                 />
               </div>
               <div className="field">
-                <label htmlFor="member-password">Initial password</label>
+                <label htmlFor="member-password">{t("Initial password")}</label>
                 <input
                   id="member-password"
                   type="password"
@@ -261,7 +269,7 @@ export function Members({ me }) {
                 />
               </div>
             </div>
-            <label>Roles</label>
+            <label>{t("Roles")}</label>
             <div className="permissions">
               {roles.map((role) => (
                 <label key={role.id} className="permission">
@@ -273,19 +281,21 @@ export function Members({ me }) {
                     }
                   />
                   <span>{role.name}</span>
-                  <span className="hint mono">{role.permissions.length} perms</span>
+                  <span className="hint mono">
+                    {t("{count} perms", { count: role.permissions.length })}
+                  </span>
                 </label>
               ))}
             </div>
             <div className="form-actions">
               <button className="primary" disabled={busy}>
-                {busy ? "Adding…" : "Save member"}
+                {busy ? t("Adding…") : t("Save member")}
               </button>
             </div>
             <p className="hint" style={{ marginBottom: 0 }}>
-              No role selected means {defaultRole?.name ?? "viewer"}: reads the gateways and
-              traffic, changes nothing. A colleague can also join by themselves with the
-              tenant's join code.
+              {t("No role selected means {role}: reads the gateways and traffic, changes nothing. A colleague can also join by themselves with the tenant's join code.", {
+                role: defaultRole?.name ?? "viewer",
+              })}
             </p>
           </form>
         </Drawer>
@@ -308,39 +318,38 @@ export function Members({ me }) {
                   })
                 }
               >
-                Change roles
+                {t("Change roles")}
               </button>
             ) : null
           }
         >
           <Details
             rows={[
-              ["Email", <span className="mono">{drawer.operator.email}</span>],
-              ["Joined", new Date(drawer.operator.created_at).toLocaleString()],
-              ["Seen", relative(drawer.operator.created_at)],
+              [t("Email"), <span className="mono">{drawer.operator.email}</span>],
+              [t("Joined"), new Date(drawer.operator.created_at).toLocaleString(locale)],
+              [t("Seen"), relative(drawer.operator.created_at)],
               [
-                "Roles",
+                t("Roles"),
                 <span className="row" style={{ gap: 4 }}>
                   {drawer.operator.roles.length === 0
-                    ? "none"
+                    ? t("none")
                     : drawer.operator.roles.map((role) => (
                         <Badge key={role} kind="mute">{role}</Badge>
                       ))}
                 </span>,
               ],
-              ["Operator id", <span className="mono">{drawer.operator.operator_id}</span>],
+              [t("Operator id"), <span className="mono">{drawer.operator.operator_id}</span>],
             ]}
           />
           <p className="hint" style={{ marginBottom: 0 }}>
-            Permissions are read from this member's roles on every request, so a change
-            lands on their next click — no re-login.
+            {t("Permissions are read from this member's roles on every request, so a change lands on their next click — no re-login.")}
           </p>
         </Drawer>
       )}
 
       {drawer?.kind === "roles" && (
         <Drawer
-          title={`Roles for ${drawer.operator.email}`}
+          title={t("Roles for {email}", { email: drawer.operator.email })}
           sub={drawer.operator.operator_id}
           onClose={() => setDrawer(null)}
         >
@@ -356,13 +365,15 @@ export function Members({ me }) {
                     }
                   />
                   <span>{role.name}</span>
-                  <span className="hint mono">{role.permissions.length} perms</span>
+                  <span className="hint mono">
+                    {t("{count} perms", { count: role.permissions.length })}
+                  </span>
                 </label>
               ))}
             </div>
             <div className="form-actions">
               <button className="primary" disabled={busy}>
-                {busy ? "Saving…" : "Save roles"}
+                {busy ? t("Saving…") : t("Save roles")}
               </button>
             </div>
           </form>

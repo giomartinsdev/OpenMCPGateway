@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useT } from "../i18n.jsx";
 import { Bone, Notice } from "../ui.jsx";
 
 /** Split `code fences` out of prose so they render as blocks, not inline text. */
@@ -71,6 +72,7 @@ function Table({ table }) {
 }
 
 export function Docs({ signedIn = false }) {
+  const t = useT();
   const [sections, setSections] = useState(null);
   const [error, setError] = useState("");
   const [active, setActive] = useState("");
@@ -105,12 +107,10 @@ export function Docs({ signedIn = false }) {
   return (
     <div className="docs">
       <div className="docs-head">
-        <span className="eyebrow">Documentation</span>
-        <h1>The manual</h1>
+        <span className="eyebrow">{t("Documentation")}</span>
+        <h1>{t("The manual")}</h1>
         <p className="sub">
-          What the gateway does, how a request gets through, and how to keep the
-          configuration in a file you can review. Apache-2.0, self-hosted, no account
-          to create.
+          {t("What the gateway does, how a request gets through, and how to keep the configuration in a file you can review. Apache-2.0, self-hosted, no account to create.")}
         </p>
         <div className="row" style={{ marginTop: "var(--s4)" }}>
           <a
@@ -119,12 +119,12 @@ export function Docs({ signedIn = false }) {
             target="_blank"
             rel="noreferrer"
           >
-            Source on GitHub
+            {t("Source on GitHub")}
           </a>
           {/* Signed out, `#/` is the landing page and its sign-in form; signed
               in, it is the gateway list. Same link, honest label for each. */}
           <a className="cta-secondary docs-cta" href="#/">
-            {signedIn ? "Back to the panel" : "Sign in"}
+            {signedIn ? t("Back to the panel") : t("Sign in")}
           </a>
         </div>
       </div>
@@ -135,8 +135,8 @@ export function Docs({ signedIn = false }) {
         <div className="docs-body">
           {/* The shape of the page before its text arrives: TOC column plus the
               measure. A spinner here would make the whole page jump. */}
-          <nav className="docs-toc" aria-label="Sections">
-            <div className="nav-label">On this page</div>
+          <nav className="docs-toc" aria-label={t("Sections")}>
+            <div className="nav-label">{t("On this page")}</div>
             <Bone height={14} width="60%" />
             <Bone height={14} width="75%" />
             <Bone height={14} width="50%" />
@@ -150,8 +150,8 @@ export function Docs({ signedIn = false }) {
         </div>
       ) : (
       <div className="docs-body">
-        <nav className="docs-toc" aria-label="Sections">
-          <div className="nav-label">On this page</div>
+        <nav className="docs-toc" aria-label={t("Sections")}>
+          <div className="nav-label">{t("On this page")}</div>
           {sections.map((section) => (
             <a
               key={section.id}

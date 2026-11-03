@@ -3,11 +3,14 @@
 
 import { useState } from "react";
 import { api } from "../../api.js";
+import { useT } from "../../i18n.jsx";
 import {
   Badge, Card, Chart, Empty, Skeleton, SAMPLE_REQUESTS, SAMPLE_STATS,
   outcomeKind, relative,
 } from "../../ui.jsx";
 
+// Translated at the point of render: the key is the English phrase, so a locale
+// only has to supply the sentence, not a second naming scheme.
 export const OUTCOME_LABEL = {
   allowed: "allowed",
   unauthenticated: "401 unauthenticated",
@@ -16,6 +19,7 @@ export const OUTCOME_LABEL = {
 };
 
 export function AuthForm({ gateway, onSaved }) {
+  const t = useT();
   const [form, setForm] = useState({
     auth_mode: gateway.auth_mode,
     idp: gateway.idp ?? "",
@@ -44,7 +48,7 @@ export function AuthForm({ gateway, onSaved }) {
         upstream_token: form.upstream_token || null,
       });
       setForm({ ...form, client_secret: "" });
-      onSaved({ kind: "ok", text: "Auth configuration saved." });
+      onSaved({ kind: "ok", text: t("Auth configuration saved.") });
     } catch (err) {
       onSaved({ kind: "err", text: err.message });
     } finally {
@@ -55,69 +59,72 @@ export function AuthForm({ gateway, onSaved }) {
   return (
     <form onSubmit={submit} className="card flat">
       <div className="field">
-        <label htmlFor="auth-mode">Mode</label>
+        <label htmlFor="auth-mode">{t("Mode")}</label>
         <select id="auth-mode" value={form.auth_mode} onChange={set("auth_mode")}>
-          <option value="none">Anyone (no auth)</option>
-          <option value="api_key">API key</option>
-          <option value="oauth">SSO (OAuth)</option>
+          <option value="none">{t("Anyone (no auth)")}</option>
+          <option value="api_key">{t("API key")}</option>
+          <option value="oauth">{t("SSO (OAuth)")}</option>
         </select>
       </div>
       {form.auth_mode === "oauth" && (
         <>
           <div className="field">
-            <label htmlFor="auth-idp">Identity provider</label>
+            <label htmlFor="auth-idp">{t("Identity provider")}</label>
             <select id="auth-idp" value={form.idp} onChange={set("idp")}>
-              <option value="">Choose…</option>
+              <option value="">{t("Choose…")}</option>
               <option value="github">GitHub</option>
               <option value="google">Google</option>
               <option value="azure">Microsoft</option>
               <option value="discord">Discord</option>
-              <option value="oidc">Custom OIDC (Auth0, Keycloak…)</option>
+              <option value="oidc">{t("Custom OIDC (Auth0, Keycloak…)")}</option>
             </select>
           </div>
           <div className="field">
-            <label htmlFor="auth-client-id">Client ID</label>
+            <label htmlFor="auth-client-id">{t("Client ID")}</label>
             <input id="auth-client-id" value={form.client_id} onChange={set("client_id")}
                    placeholder="Ov23li…" className="mono" />
           </div>
           <div className="field">
-            <label htmlFor="auth-client-secret">Client secret</label>
+            <label htmlFor="auth-client-secret">{t("Client secret")}</label>
             <input id="auth-client-secret" type="password" value={form.client_secret} onChange={set("client_secret")}
-                   placeholder="leave blank to keep current" className="mono" />
+                   placeholder={t("leave blank to keep current")} className="mono" />
           </div>
           {form.idp === "oidc" && (
             <div className="field">
-              <label htmlFor="auth-config-url">Discovery URL</label>
+              <label htmlFor="auth-config-url">{t("Discovery URL")}</label>
               <input id="auth-config-url" value={form.config_url} onChange={set("config_url")}
                      placeholder="https://idp.example.com/.well-known/openid-configuration"
                      className="mono" />
             </div>
           )}
           <div className="field">
-            <label htmlFor="auth-scopes">Required scopes</label>
+            <label htmlFor="auth-scopes">{t("Required scopes")}</label>
             <input id="auth-scopes" value={form.required_scopes} onChange={set("required_scopes")}
                    placeholder="read:user" className="mono" />
           </div>
         </>
       )}
       <div className="field">
-        <label htmlFor="auth-upstream">Upstream token</label>
+        <label htmlFor="auth-upstream">{t("Upstream token")}</label>
         <input id="auth-upstream" type="password" value={form.upstream_token} className="mono"
                onChange={set("upstream_token")}
-               placeholder="only if the MCP server requires its own bearer" />
+               placeholder={t("only if the MCP server requires its own bearer")} />
         <div className="hint">
-          Sent as <span className="mono">Authorization: Bearer …</span> on every
-          upstream call, so callers never hold it. Leave blank to keep the current one.
+          {t("Sent as")} <span className="mono">Authorization: Bearer …</span>{" "}
+          {t("on every upstream call, so callers never hold it. Leave blank to keep the current one.")}
         </div>
       </div>
       <div className="form-actions">
-        <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+        <button className="primary" disabled={busy}>
+          {busy ? t("Saving…") : t("Save")}
+        </button>
       </div>
     </form>
   );
 }
 
 export function RateLimitForm({ gateway, onSaved }) {
+  const t = useT();
   const [value, setValue] = useState(gateway.requests_per_minute ?? 0);
   const [busy, setBusy] = useState(false);
 
@@ -137,39 +144,43 @@ export function RateLimitForm({ gateway, onSaved }) {
       }}
     >
       <div className="field inline" style={{ width: 180 }}>
-        <label htmlFor="rate-limit">Requests / minute</label>
+        <label htmlFor="rate-limit">{t("Requests / minute")}</label>
         <input id="rate-limit" type="number" min="0" value={value}
                onChange={(e) => setValue(e.target.value)} />
       </div>
-      <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      <button className="primary" disabled={busy}>
+        {busy ? t("Saving…") : t("Save")}
+      </button>
       <p className="hint" style={{ margin: 0, flex: 1, minWidth: 240 }}>
-        0 means no limit. Each subject gets its own budget, and only JSON-RPC
-        requests count — handshakes and notifications are free.
+        {t("0 means no limit. Each subject gets its own budget, and only JSON-RPC requests count — handshakes and notifications are free.")}
       </p>
     </form>
   );
 }
 
 export function RecentRequests({ requests }) {
+  const t = useT();
   return (
     <Skeleton
       data={requests}
       sample={SAMPLE_REQUESTS}
-      label="Loading recent requests"
+      label={t("Loading recent requests")}
       empty={requests?.length === 0}
-      emptyMessage={<Empty title="No calls yet">Requests appear here as they arrive.</Empty>}
+      emptyMessage={
+        <Empty title={t("No calls yet")}>{t("Requests appear here as they arrive.")}</Empty>
+      }
     >
       {(rows) => (
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
-                <th>When</th>
-                <th>Subject</th>
-                <th>Outcome</th>
-                <th className="num">Status</th>
-                <th className="num">Latency</th>
-                <th>IP</th>
+                <th>{t("When")}</th>
+                <th>{t("Subject")}</th>
+                <th>{t("Outcome")}</th>
+                <th className="num">{t("Status")}</th>
+                <th className="num">{t("Latency")}</th>
+                <th>{t("IP")}</th>
               </tr>
             </thead>
             <tbody>
@@ -179,7 +190,7 @@ export function RecentRequests({ requests }) {
                   <td className="mono">{request.subject ?? "—"}</td>
                   <td>
                     <Badge kind={outcomeKind(request.outcome)}>
-                      {OUTCOME_LABEL[request.outcome] ?? request.outcome}
+                      {t(OUTCOME_LABEL[request.outcome] ?? request.outcome)}
                     </Badge>
                   </td>
                   <td className="num">{request.status}</td>
@@ -196,27 +207,32 @@ export function RecentRequests({ requests }) {
 }
 
 export function Traffic({ stats }) {
+  const t = useT();
   return (
-    <Card title="Traffic">
-      <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading the chart">
+    <Card title={t("Traffic")}>
+      <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading the chart")}>
         {(data) => <Chart series={data.series} />}
       </Skeleton>
       <div className="grid-2" style={{ marginTop: 16 }}>
         <div>
-          <div className="eyebrow" style={{ marginBottom: 8 }}>By outcome</div>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t("By outcome")}</div>
           <Skeleton
             data={stats}
             sample={SAMPLE_STATS}
-            label="Loading outcomes"
+            label={t("Loading outcomes")}
             empty={stats && Object.keys(stats.by_outcome ?? {}).length === 0}
-            emptyMessage={<Empty>Nothing yet.</Empty>}
+            emptyMessage={<Empty>{t("Nothing yet.")}</Empty>}
           >
             {(data) => (
               <table>
                 <tbody>
                   {Object.entries(data.by_outcome ?? {}).map(([outcome, count]) => (
                     <tr key={outcome}>
-                      <td><Badge kind={outcomeKind(outcome)}>{OUTCOME_LABEL[outcome] ?? outcome}</Badge></td>
+                      <td>
+                        <Badge kind={outcomeKind(outcome)}>
+                          {t(OUTCOME_LABEL[outcome] ?? outcome)}
+                        </Badge>
+                      </td>
                       <td className="num">{count}</td>
                     </tr>
                   ))}
@@ -226,20 +242,20 @@ export function Traffic({ stats }) {
           </Skeleton>
         </div>
         <div>
-          <div className="eyebrow" style={{ marginBottom: 8 }}>By caller IP</div>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t("By caller IP")}</div>
           <Skeleton
             data={stats}
             sample={SAMPLE_STATS}
-            label="Loading callers"
+            label={t("Loading callers")}
             empty={stats && Object.keys(stats.by_ip ?? {}).length === 0}
-            emptyMessage={<Empty>Nothing yet.</Empty>}
+            emptyMessage={<Empty>{t("Nothing yet.")}</Empty>}
           >
             {(data) => (
               <table>
                 <tbody>
                   {Object.entries(data.by_ip ?? {}).slice(0, 6).map(([ip, count]) => (
                     <tr key={ip}>
-                      <td className="mono">{ip || "unknown"}</td>
+                      <td className="mono">{ip || t("unknown")}</td>
                       <td className="num">{count}</td>
                     </tr>
                   ))}

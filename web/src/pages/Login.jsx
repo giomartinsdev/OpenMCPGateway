@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useT } from "../i18n.jsx";
 import { Notice } from "../ui.jsx";
 
 function GoogleMark() {
@@ -19,6 +20,7 @@ function GoogleMark() {
  * so the two screens cannot drift apart on validation or error copy.
  */
 export function AuthCard({ onLogin }) {
+  const t = useT();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -54,18 +56,18 @@ export function AuthCard({ onLogin }) {
   return (
     <form className="card auth-card" onSubmit={submit}>
       <h2 style={{ marginBottom: 4 }}>
-        {mode === "login" ? "Welcome back" : "Create your account"}
+        {mode === "login" ? t("Welcome back") : t("Create your account")}
       </h2>
       <p className="hint" style={{ marginBottom: 16 }}>
         {mode === "login"
-          ? "Operator access to gateways, keys and traffic."
-          : "Then create your own tenant or join one you were invited to."}
+          ? t("Operator access to gateways, keys and traffic.")
+          : t("Then create your own tenant or join one you were invited to.")}
       </p>
 
       <Notice kind="err">{error}</Notice>
 
       <div className="field">
-        <label htmlFor="email">Email</label>
+        <label htmlFor="email">{t("Email")}</label>
         <input
           id="email"
           type="email"
@@ -76,7 +78,7 @@ export function AuthCard({ onLogin }) {
         />
       </div>
       <div className="field">
-        <label htmlFor="password">Password</label>
+        <label htmlFor="password">{t("Password")}</label>
         <input
           id="password"
           type="password"
@@ -88,25 +90,25 @@ export function AuthCard({ onLogin }) {
         />
         {mode === "register" && (
           <div className="hint" style={{ marginTop: 5 }}>
-            At least 12 characters.
+            {t("At least 12 characters.")}
           </div>
         )}
       </div>
 
       <button className="primary" style={{ width: "100%", marginTop: 4 }} disabled={busy}>
-        {busy ? "Working…" : mode === "login" ? "Sign in" : "Create account"}
+        {busy ? t("Working…") : mode === "login" ? t("Sign in") : t("Create account")}
       </button>
 
       {methods.google && (
         <>
           <div className="divider">
-            <span>or</span>
+            <span>{t("or")}</span>
           </div>
           {/* A plain link, not a fetch: the login is a browser redirect to
               Google and back, so the browser must own the navigation. */}
           <a className="btn google" href="/api/auth/google/start">
             <GoogleMark />
-            Continue with Google
+            {t("Continue with Google")}
           </a>
         </>
       )}
@@ -114,16 +116,16 @@ export function AuthCard({ onLogin }) {
       <div className="login-foot">
         {mode === "login" ? (
           <>
-            New here?{" "}
+            {t("New here?")}{" "}
             <a href="#create" onClick={(e) => { e.preventDefault(); setError(""); setMode("register"); }}>
-              Create an account
+              {t("Create an account")}
             </a>
           </>
         ) : (
           <>
-            Already have one?{" "}
+            {t("Already have one?")}{" "}
             <a href="#login" onClick={(e) => { e.preventDefault(); setError(""); setMode("login"); }}>
-              Sign in
+              {t("Sign in")}
             </a>
           </>
         )}

@@ -6,6 +6,7 @@
 // up disagreeing about what "load more" does.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "./i18n.jsx";
 
 /** How many rows a page holds. The API clamps to 200 either way. */
 export const PAGE = 50;
@@ -94,6 +95,7 @@ export function usePagedList(fetch, query = {}) {
  * URL to escape.
  */
 export function FilterRow({ fields, value, onChange }) {
+  const t = useT();
   // Draft is local so typing stays instant; the debounce decides when the list
   // hears about it.
   const [draft, setDraft] = useState(value);
@@ -125,8 +127,8 @@ export function FilterRow({ fields, value, onChange }) {
             <span className="filter-box">
               <input
                 value={draft[field.key] ?? ""}
-                placeholder={field.placeholder ?? field.label ?? field.key}
-                aria-label={`Filter by ${field.label ?? field.key}`}
+                placeholder={t(field.placeholder ?? field.label ?? field.key)}
+                aria-label={t("Filter by {field}", { field: t(field.label ?? field.key) })}
                 onChange={(event) => edit(field.key, event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key !== "Escape") return;
@@ -138,8 +140,10 @@ export function FilterRow({ fields, value, onChange }) {
                 <button
                   type="button"
                   className="clear-filter"
-                  title="Clear"
-                  aria-label={`Clear ${field.label ?? field.key} filter`}
+                  title={t("Clear")}
+                  aria-label={t("Clear {field} filter", {
+                    field: t(field.label ?? field.key),
+                  })}
                   onClick={() => edit(field.key, "")}
                 >
                   ×
@@ -163,7 +167,8 @@ export function FilterRow({ fields, value, onChange }) {
  * reader wants is one decision too many for a click they will make again anyway.
  */
 export function SortHeader({ field, label, sort, onSort, sortable = true, ...rest }) {
-  if (!sortable) return <th {...rest}>{label}</th>;
+  const t = useT();
+  if (!sortable) return <th {...rest}>{t(label)}</th>;
   const active = sort.sort === field;
   const arrow = !active ? "" : sort.order === "asc" ? "↑" : "↓";
   return (
@@ -178,7 +183,7 @@ export function SortHeader({ field, label, sort, onSort, sortable = true, ...res
         className={active ? "sort active" : "sort"}
         onClick={() => onSort(field)}
       >
-        {label}
+        {t(label)}
         <span aria-hidden="true">{arrow}</span>
       </button>
     </th>
@@ -214,11 +219,12 @@ export function useSort(defaultSort, defaults = {}) {
 
 /** The one button under a table that has more rows behind it. */
 export function LoadMore({ next, busy, onClick }) {
+  const t = useT();
   if (!next) return null;
   return (
     <div className="row" style={{ marginTop: "var(--s3)", justifyContent: "center" }}>
       <button className="cta-secondary" disabled={busy} onClick={onClick}>
-        {busy ? "Loading…" : "Load more"}
+        {busy ? t("Loading…") : t("Load more")}
       </button>
     </div>
   );

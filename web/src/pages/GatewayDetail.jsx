@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useI18n, useT } from "../i18n.jsx";
 import {
   Badge, Bone, Card, Empty, Endpoint, Notice, Skeleton, Stat, can, relative,
 } from "../ui.jsx";
@@ -30,6 +31,8 @@ const SAMPLE = {
 };
 
 export function GatewayDetail({ id, me }) {
+  const t = useT();
+  const { locale } = useI18n();
   // Two separate permissions: managing a gateway is not the same as minting a
   // credential for it, and the server checks them separately.
   const canEdit = can(me, "gateways:write");
@@ -60,18 +63,18 @@ export function GatewayDetail({ id, me }) {
       <div className="page-head">
         <div>
           <div className="crumbs">
-            <a href="#/">Gateways</a>
+            <a href="#/">{t("Gateways")}</a>
             <span className="sep">/</span>
             <span>{header.slug}</span>
           </div>
-          <Skeleton data={gateway} sample={SAMPLE} label="Loading gateway">
+          <Skeleton data={gateway} sample={SAMPLE} label={t("Loading gateway")}>
             {(data) => <h1>{data.name}</h1>}
           </Skeleton>
-          <div className="sub">{header.description || "No description."}</div>
+          <div className="sub">{header.description || t("No description.")}</div>
         </div>
         <div className="actions">
           <Badge kind={header.enabled ? "ok" : "mute"}>
-            {header.enabled ? "enabled" : "disabled"}
+            {header.enabled ? t("enabled") : t("disabled")}
           </Badge>
           {gateway && canEdit && (
             <button
@@ -80,7 +83,7 @@ export function GatewayDetail({ id, me }) {
                 load();
               }}
             >
-              {gateway.enabled ? "Disable" : "Enable"}
+              {gateway.enabled ? t("Disable") : t("Enable")}
             </button>
           )}
         </div>
@@ -90,37 +93,43 @@ export function GatewayDetail({ id, me }) {
 
       {gateway?.pending && (
         <Notice kind="err">
-          This gateway is enabled but not serving yet: {gateway.pending}. Set the OAuth
-          client details below and it goes live immediately.
+          {t("This gateway is enabled but not serving yet: {reason}. Set the OAuth client details below and it goes live immediately.", {
+            reason: gateway.pending,
+          })}
         </Notice>
       )}
 
       <div className="grid-3" style={{ marginBottom: 12 }}>
-        <Skeleton data={gateway} sample={SAMPLE} label="Loading requests">
-          {(data) => <Stat label="Requests / 60 min" value={data.stats?.requests ?? 0} />}
+        <Skeleton data={gateway} sample={SAMPLE} label={t("Loading requests")}>
+          {(data) => (
+            <Stat label={t("Requests / 60 min")} value={data.stats?.requests ?? 0} />
+          )}
         </Skeleton>
-        <Skeleton data={gateway} sample={SAMPLE} label="Loading latency">
+        <Skeleton data={gateway} sample={SAMPLE} label={t("Loading latency")}>
           {(data) => (
             <Stat
-              label="Avg latency"
+              label={t("Avg latency")}
               value={`${data.stats?.avg_duration_ms ?? 0} ms`}
-              hint={`peak ${data.stats?.max_duration_ms ?? 0} ms`}
+              hint={t("peak {ms} ms", { ms: data.stats?.max_duration_ms ?? 0 })}
             />
           )}
         </Skeleton>
-        <Skeleton data={gateway} sample={SAMPLE} label="Loading callers">
+        <Skeleton data={gateway} sample={SAMPLE} label={t("Loading callers")}>
           {(data) => (
-            <Stat label="Distinct callers" value={Object.keys(data.stats?.by_ip ?? {}).length} />
+            <Stat
+              label={t("Distinct callers")}
+              value={Object.keys(data.stats?.by_ip ?? {}).length}
+            />
           )}
         </Skeleton>
       </div>
 
-      <Card title="Endpoint">
+      <Card title={t("Endpoint")}>
         {gateway ? (
           <>
             <Endpoint value={gateway.endpoint} />
             <p className="hint" style={{ marginTop: 10 }}>
-              Point an MCP client here. Upstream stays private at{" "}
+              {t("Point an MCP client here. Upstream stays private at")}{" "}
               <span className="mono">{gateway.target_url}</span>.
             </p>
           </>
@@ -134,29 +143,28 @@ export function GatewayDetail({ id, me }) {
 
       {gateway ? <ConnectGuide gateway={gateway} /> : null}
 
-      <Card title="Auth">
+      <Card title={t("Auth")}>
         <div className="grid-2">
           <div>
             <div className="row" style={{ gap: 24, marginBottom: 12 }}>
               <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>Mode</div>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Mode")}</div>
                 <Badge kind={header.auth_mode === "none" ? "warn" : "info"}>
                   {header.auth_mode}
                   {header.idp ? ` · ${header.idp}` : ""}
                 </Badge>
               </div>
               <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>Allowlist</div>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Allowlist")}</div>
                 <Badge kind={header.principals.length ? "ok" : "mute"}>
                   {header.principals.length
-                    ? `${header.principals.length} principals`
-                    : "any authenticated subject"}
+                    ? t("{count} principals", { count: header.principals.length })
+                    : t("any authenticated subject")}
                 </Badge>
               </div>
             </div>
             <p className="hint" style={{ margin: 0 }}>
-              An allowlist is a second gate: a valid token still has to belong to a listed
-              subject. Empty means "anyone who authenticates".
+              {t("An allowlist is a second gate: a valid token still has to belong to a listed subject. Empty means \"anyone who authenticates\".")}
             </p>
           </div>
           {gateway ? (
@@ -164,7 +172,7 @@ export function GatewayDetail({ id, me }) {
               <AuthForm gateway={gateway} onSaved={(msg) => { setBanner(msg); load(); }} />
             ) : (
               <Notice kind="info">
-                Read-only: an administrator of this tenant changes the auth.
+                {t("Read-only: an administrator of this tenant changes the auth.")}
               </Notice>
             )
           ) : (
@@ -177,15 +185,17 @@ export function GatewayDetail({ id, me }) {
         </div>
       </Card>
 
-      <Card title="Rate limit">
+      <Card title={t("Rate limit")}>
         {gateway ? (
           canEdit ? (
             <RateLimitForm gateway={gateway} onSaved={load} />
           ) : (
             <Notice kind="info">
               {gateway.requests_per_minute
-                ? `${gateway.requests_per_minute} requests per minute per caller.`
-                : "No limit. Each caller gets its own budget."}
+                ? t("{count} requests per minute per caller.", {
+                    count: gateway.requests_per_minute,
+                  })
+                : t("No limit. Each caller gets its own budget.")}
             </Notice>
           )
         ) : (
@@ -195,23 +205,25 @@ export function GatewayDetail({ id, me }) {
 
       <div className="grid-2" style={{ marginTop: 12 }}>
         <Card
-          title="Allowed subjects"
+          title={t("Allowed subjects")}
           actions={gateway && canEdit && (
             <button
               className="sm"
               onClick={() => {
-                const subject = window.prompt("Subject to allow (e.g. octocat):");
+                const subject = window.prompt(t("Subject to allow (e.g. octocat):"));
                 if (!subject) return;
                 api.addPrincipal(id, subject).then(load).catch((e) => setError(e.message));
               }}
             >
-              Add
+              {t("Add")}
             </button>
           )}
         >
           {header.principals.length === 0 ? (
             gateway ? (
-              <Empty title="No allowlist">Every authenticated caller is accepted.</Empty>
+              <Empty title={t("No allowlist")}>
+                {t("Every authenticated caller is accepted.")}
+              </Empty>
             ) : (
               <Bone height={60} radius={10} />
             )
@@ -229,7 +241,7 @@ export function GatewayDetail({ id, me }) {
                           onClick={() => api.removePrincipal(id, principal.subject).then(load)}
                           disabled={!gateway}
                         >
-                          remove
+                          {t("remove")}
                         </button>
                       </td>
                     )}
@@ -241,7 +253,7 @@ export function GatewayDetail({ id, me }) {
         </Card>
 
         <Card
-          title="API keys"
+          title={t("API keys")}
           actions={gateway && canKeys && (
             <button
               className="sm"
@@ -254,7 +266,7 @@ export function GatewayDetail({ id, me }) {
                   .catch((e) => setError(e.message));
               }}
             >
-              Issue key
+              {t("Issue key")}
             </button>
           )}
         >
@@ -264,8 +276,12 @@ export function GatewayDetail({ id, me }) {
           {newKey && (
             <div className="secret" style={{ marginBottom: 12 }}>
               <div className="spread" style={{ marginBottom: 6 }}>
-                <strong>Copy this key now — it is not stored and cannot be shown again.</strong>
-                <button className="ghost sm" onClick={() => setNewKey(null)}>dismiss</button>
+                <strong>
+                  {t("Copy this key now — it is not stored and cannot be shown again.")}
+                </strong>
+                <button className="ghost sm" onClick={() => setNewKey(null)}>
+                  {t("dismiss")}
+                </button>
               </div>
               <div className="row">
                 <span className="mono" style={{ wordBreak: "break-all" }}>{newKey}</span>
@@ -273,14 +289,16 @@ export function GatewayDetail({ id, me }) {
                   className="ghost copy"
                   onClick={() => navigator.clipboard?.writeText(newKey)}
                 >
-                  copy
+                  {t("copy")}
                 </button>
               </div>
             </div>
           )}
           {header.api_keys.length === 0 ? (
             gateway ? (
-              <Empty title="No keys">Issue one to authenticate with a bearer token.</Empty>
+              <Empty title={t("No keys")}>
+                {t("Issue one to authenticate with a bearer token.")}
+              </Empty>
             ) : (
               <Bone height={60} radius={10} />
             )
@@ -288,9 +306,9 @@ export function GatewayDetail({ id, me }) {
             <table>
               <thead>
                 <tr>
-                  <th>Label</th>
-                  <th>Key id</th>
-                  <th className="num">Issued</th>
+                  <th>{t("Label")}</th>
+                  <th>{t("Key id")}</th>
+                  <th className="num">{t("Issued")}</th>
                   <th />
                 </tr>
               </thead>
@@ -310,7 +328,9 @@ export function GatewayDetail({ id, me }) {
                           disabled={!gateway}
                           onClick={() => {
                             if (!window.confirm(
-                              `Rotate ${key.label}? The current key stops working immediately.`
+                              t("Rotate {label}? The current key stops working immediately.", {
+                                label: key.label,
+                              })
                             )) return;
                             api.rotateKey(id, key.key_id)
                               .then((rotated) => {
@@ -320,17 +340,21 @@ export function GatewayDetail({ id, me }) {
                               .catch((e) => setError(e.message));
                           }}
                         >
-                          rotate
+                          {t("rotate")}
                         </button>
                         <button
                           className="ghost sm danger"
                           disabled={!gateway}
                           onClick={() => {
-                            if (!window.confirm(`Revoke ${key.label}? Callers using it get 401 at once.`)) return;
+                            if (!window.confirm(
+                              t("Revoke {label}? Callers using it get 401 at once.", {
+                                label: key.label,
+                              })
+                            )) return;
                             api.revokeKey(id, key.key_id).then(load);
                           }}
                         >
-                          revoke
+                          {t("revoke")}
                         </button>
                       </td>
                     )}
@@ -344,28 +368,33 @@ export function GatewayDetail({ id, me }) {
 
       <Traffic stats={stats} />
 
-      <Card title="Recent requests">
+      <Card title={t("Recent requests")}>
         <RecentRequests requests={gateway ? gateway.requests : null} />
       </Card>
 
       {gateway && canEdit && (
-        <Card title="Danger zone" className="danger-zone">
+        <Card title={t("Danger zone")} className="danger-zone">
           <div className="spread">
             <div>
-              <h3>Delete this gateway</h3>
+              <h3>{t("Delete this gateway")}</h3>
               <div className="hint" style={{ marginTop: 2 }}>
-                Removes the route and its keys immediately. The event log keeps the history.
+                {t("Removes the route and its keys immediately. The event log keeps the history.")}
               </div>
             </div>
             <button
               className="danger"
               onClick={async () => {
-                if (!window.confirm(`Delete ${gateway.slug}? Its route stops answering.`)) return;
+                if (
+                  !window.confirm(
+                    t("Delete {slug}? Its route stops answering.", { slug: gateway.slug }),
+                  )
+                )
+                  return;
                 await api.deleteGateway(id);
                 navigate("/");
               }}
             >
-              Delete
+              {t("Delete")}
             </button>
           </div>
         </Card>

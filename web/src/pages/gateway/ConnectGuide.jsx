@@ -6,9 +6,11 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../../api.js";
+import { useT } from "../../i18n.jsx";
 import { Bone, Card, Empty, Notice } from "../../ui.jsx";
 
 function CodeBlock({ step }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   return (
@@ -26,7 +28,7 @@ function CodeBlock({ step }) {
             setTimeout(() => setCopied(false), 1500);
           }}
         >
-          {copied ? "copied" : "copy"}
+          {copied ? t("copied") : t("copy")}
         </button>
       </div>
       <pre className="code"><code>{step.code}</code></pre>
@@ -35,6 +37,7 @@ function CodeBlock({ step }) {
 }
 
 export function ConnectGuide({ gateway }) {
+  const t = useT();
   const [tab, setTab] = useState("curl");
   const [guide, setGuide] = useState(null);
   const [error, setError] = useState("");
@@ -54,7 +57,7 @@ export function ConnectGuide({ gateway }) {
 
   return (
     <Card
-      title="Test this gateway"
+      title={t("Test this gateway")}
       actions={
         <div className="seg">
           {["curl", "python"].map((name) => (
@@ -81,16 +84,15 @@ export function ConnectGuide({ gateway }) {
         </div>
       ) : null}
       {guide && steps.length === 0 ? (
-        <Empty>No steps for this auth mode.</Empty>
+        <Empty>{t("No steps for this auth mode.")}</Empty>
       ) : null}
       {steps.map((step) => (
         <CodeBlock key={`${tab}-${step.title}`} step={step} />
       ))}
       {guide?.auth_mode === "oauth" ? (
         <p className="hint" style={{ marginBottom: 0 }}>
-          {guide.idp ? <span className="mono">{guide.idp}</span> : "OAuth"} issues the
-          token; the gateway only validates it. Steps 1–5 are what an MCP client does
-          for you — a 401 on step 1 is expected, not a failure.
+          {guide.idp ? <span className="mono">{guide.idp}</span> : t("OAuth")}{" "}
+          {t("issues the token; the gateway only validates it. Steps 1–5 are what an MCP client does for you — a 401 on step 1 is expected, not a failure.")}
         </p>
       ) : null}
     </Card>

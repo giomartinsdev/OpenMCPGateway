@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useI18n, useT } from "../i18n.jsx";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
   Badge, Bars, Card, Chart, Details, Drawer, NoMatches, Notice, Skeleton,
@@ -35,12 +36,14 @@ const FIELDS = [
 
 const SORTS = { occurred_at: "desc", duration_ms: "desc", status: "asc", subject: "asc" };
 
-/** "up from 3" / "down from 9" / nothing when the window before was empty. */
-function delta(now, before) {
-  if (!before) return now > 0 ? "first traffic in this window" : null;
+/** "up 12% from 9" / nothing when the window before was empty. */
+function delta(t, now, before) {
+  if (!before) return now > 0 ? t("first traffic in this window") : null;
   const change = Math.round(((now - before) / before) * 100);
-  if (change === 0) return "level with the previous window";
-  return `${change > 0 ? "up" : "down"} ${Math.abs(change)}% from ${before}`;
+  if (change === 0) return t("level with the previous window");
+  return change > 0
+    ? t("up {change}% from {before}", { change, before })
+    : t("down {change}% from {before}", { change: Math.abs(change), before });
 }
 
 function rejected(stats) {
@@ -52,6 +55,8 @@ function rejected(stats) {
 }
 
 export function Traffic() {
+  const t = useT();
+  const { locale } = useI18n();
   const [minutes, setMinutes] = useState(60);
   const [stats, setStats] = useState(null);
   const [filters, setFilters] = useState({});
@@ -88,9 +93,9 @@ export function Traffic() {
     <>
       <div className="page-head">
         <div>
-          <h1>Traffic</h1>
+          <h1>{t("Traffic")}</h1>
           <div className="sub">
-            Every request the gateway admitted or refused, across all routes.
+            {t("Every request the gateway admitted or refused, across all routes.")}
           </div>
         </div>
         <div className="actions">
@@ -101,7 +106,7 @@ export function Traffic() {
                 className={minutes === value ? "active" : ""}
                 onClick={() => setMinutes(value)}
               >
-                {label}
+                {t(label)}
               </button>
             ))}
           </div>
@@ -111,46 +116,50 @@ export function Traffic() {
       <Notice kind="err">{error || listError}</Notice>
 
       <div className="grid-4" style={{ marginBottom: 12 }}>
-        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading requests">
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading requests")}>
           {(data) => (
             <Stat
-              label="Requests"
+              label={t("Requests")}
               value={data.requests}
-              hint={delta(data.requests, data.previous_requests)}
+              hint={delta(t, data.requests, data.previous_requests)}
             />
           )}
         </Skeleton>
-        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading latency">
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading latency")}>
           {(data) => (
             <Stat
-              label="Avg latency"
+              label={t("Avg latency")}
               value={`${data.avg_duration_ms} ms`}
-              hint={`peak ${data.max_duration_ms} ms`}
+              hint={t("peak {ms} ms", { ms: data.max_duration_ms })}
             />
           )}
         </Skeleton>
-        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading rejections">
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading rejections")}>
           {(data) => (
             <Stat
-              label="Rejected"
+              label={t("Rejected")}
               value={rejected(data)}
               hint={
                 data.requests
-                  ? `${Math.round((rejected(data) / data.requests) * 100)}% of requests`
+                  ? t("{percent}% of requests", {
+                      percent: Math.round((rejected(data) / data.requests) * 100),
+                    })
                   : "401 / 403 / 429"
               }
             />
           )}
         </Skeleton>
-        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading callers">
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading callers")}>
           {(data) => (
             <Stat
-              label="Callers"
+              label={t("Callers")}
               value={Object.keys(data.by_ip ?? {}).length}
               hint={
                 Object.keys(data.by_gateway ?? {}).length === 1
-                  ? "1 gateway serving"
-                  : `${Object.keys(data.by_gateway ?? {}).length} gateways serving`
+                  ? t("1 gateway serving")
+                  : t("{count} gateways serving", {
+                      count: Object.keys(data.by_gateway ?? {}).length,
+                    })
               }
             />
           )}
@@ -158,21 +167,24 @@ export function Traffic() {
       </div>
 
       <Card
-        title="Volume"
+        title={t("Volume")}
         aside={
           stats?.busiest
-            ? `busiest minute ${new Date(stats.busiest.bucket).toLocaleTimeString()} · ${stats.busiest.count} requests`
+            ? t("busiest minute {time} · {count} requests", {
+                time: new Date(stats.busiest.bucket).toLocaleTimeString(locale),
+                count: stats.busiest.count,
+              })
             : null
         }
       >
-        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading the chart">
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading the chart")}>
           {(data) => <Chart series={data.series} />}
         </Skeleton>
       </Card>
 
       <div className="grid-3" style={{ marginTop: 12 }}>
-        <Card title="By outcome">
-          <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading outcomes">
+        <Card title={t("By outcome")}>
+          <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading outcomes")}>
             {(data) => (
               <Bars
                 total={data.requests}
@@ -186,13 +198,13 @@ export function Traffic() {
             )}
           </Skeleton>
         </Card>
-        <Card title="By gateway">
-          <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading gateways">
+        <Card title={t("By gateway")}>
+          <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading gateways")}>
             {(data) => <Bars total={data.requests} data={data.by_gateway} />}
           </Skeleton>
         </Card>
-        <Card title="Top callers">
-          <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading callers">
+        <Card title={t("Top callers")}>
+          <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading callers")}>
             {(data) => <Bars total={data.requests} data={data.by_ip} />}
           </Skeleton>
         </Card>
@@ -200,25 +212,28 @@ export function Traffic() {
 
       {refused > 0 && (
         <p className="hint" style={{ marginTop: 12 }}>
-          {refused} {refused === 1 ? "request was" : "requests were"} refused in this
-          window. A refusal is not a failure of the gateway: it is the guard doing its
-          job, and the row says which one.
+          {refused === 1
+            ? t("1 request was refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.")
+            : t("{count} requests were refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.", { count: refused })}
         </p>
       )}
 
-      <Card title="Recent requests" aside={requests ? `${requests.length} rows` : null}>
+      <Card
+        title={t("Recent requests")}
+        aside={requests ? t("{count} rows", { count: requests.length }) : null}
+      >
         <Skeleton
           data={requests}
           sample={SAMPLE_REQUESTS}
-          label="Loading recent requests"
+          label={t("Loading recent requests")}
           empty={requests?.length === 0}
           emptyMessage={
             <NoMatches
               filters={filters}
               onClear={() => setFilters({})}
-              title="Nothing recorded yet"
+              title={t("Nothing recorded yet")}
             >
-              Requests appear here as they arrive.
+              {t("Requests appear here as they arrive.")}
             </NoMatches>
           }
         >
@@ -233,14 +248,14 @@ export function Traffic() {
                       sort={sort}
                       onSort={setSort}
                     />
-                    <th>Gateway</th>
+                    <th>{t("Gateway")}</th>
                     <SortHeader
                       field="subject"
                       label="Subject"
                       sort={sort}
                       onSort={setSort}
                     />
-                    <th>Outcome</th>
+                    <th>{t("Outcome")}</th>
                     <SortHeader
                       field="status"
                       label="Status"
@@ -255,9 +270,9 @@ export function Traffic() {
                       onSort={setSort}
                       className="num"
                     />
-                    <th>Tool</th>
-                    <th>IP</th>
-                    <th>ID</th>
+                    <th>{t("Tool")}</th>
+                    <th>{t("IP")}</th>
+                    <th>{t("ID")}</th>
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
@@ -275,7 +290,11 @@ export function Traffic() {
                       <td className="hint nowrap">{relative(request.occurred_at)}</td>
                       <td className="nowrap">{request.gateway}</td>
                       <td className="mono">{request.subject ?? "—"}</td>
-                      <td><Badge kind={outcomeKind(request.outcome)}>{request.outcome}</Badge></td>
+                      <td>
+                        <Badge kind={outcomeKind(request.outcome)}>
+                          {t(OUTCOME_LABEL[request.outcome] ?? request.outcome)}
+                        </Badge>
+                      </td>
                       <td className="num">{request.status}</td>
                       <td className="num">{request.duration_ms} ms</td>
                       <td className="mono hint">{request.tool || "—"}</td>
@@ -293,7 +312,7 @@ export function Traffic() {
 
       {open && (
         <Drawer
-          title={OUTCOME_LABEL[open.outcome] ?? open.outcome}
+          title={t(OUTCOME_LABEL[open.outcome] ?? open.outcome)}
           sub={open.event_id}
           onClose={() => setOpen(null)}
           actions={
@@ -304,30 +323,35 @@ export function Traffic() {
                 setOpen(null);
               }}
             >
-              Filter this gateway
+              {t("Filter this gateway")}
             </button>
           }
         >
           <Details
             rows={[
-              ["When", new Date(open.occurred_at).toLocaleString()],
-              ["Seen", relative(open.occurred_at)],
-              ["Gateway", open.gateway],
-              ["Subject", <span className="mono">{open.subject ?? "anonymous"}</span>],
-              ["Outcome", <Badge kind={outcomeKind(open.outcome)}>{open.outcome}</Badge>],
-              ["Status", open.status],
-              ["Latency", `${open.duration_ms} ms`],
-              ["Method", <span className="mono">{open.method}</span>],
-              ["Tool", <span className="mono">{open.tool || "—"}</span>],
-              ["IP", <span className="mono">{open.ip || "—"}</span>],
-              ["Event id", <span className="mono">{open.event_id}</span>],
-              ["Gateway id", <span className="mono">{open.gateway_id}</span>],
+              [t("When"), new Date(open.occurred_at).toLocaleString(locale)],
+              [t("Seen"), relative(open.occurred_at)],
+              [t("Gateway"), open.gateway],
+              [t("Subject"), <span className="mono">{open.subject ?? t("anonymous")}</span>],
+              [
+                t("Outcome"),
+                <Badge kind={outcomeKind(open.outcome)}>
+                  {t(OUTCOME_LABEL[open.outcome] ?? open.outcome)}
+                </Badge>,
+              ],
+              [t("Status"), open.status],
+              [t("Latency"), `${open.duration_ms} ms`],
+              [t("Method"), <span className="mono">{open.method}</span>],
+              [t("Tool"), <span className="mono">{open.tool || "—"}</span>],
+              [t("IP"), <span className="mono">{open.ip || "—"}</span>],
+              [t("Event id"), <span className="mono">{open.event_id}</span>],
+              [t("Gateway id"), <span className="mono">{open.gateway_id}</span>],
             ]}
           />
           <p className="hint" style={{ marginBottom: 0 }}>
             {open.outcome === "allowed"
-              ? "The guard admitted this call and the proxy forwarded it upstream."
-              : "The guard refused this call before it reached the upstream server, so nothing was forwarded."}
+              ? t("The guard admitted this call and the proxy forwarded it upstream.")
+              : t("The guard refused this call before it reached the upstream server, so nothing was forwarded.")}
           </p>
         </Drawer>
       )}

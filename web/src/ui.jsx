@@ -4,6 +4,7 @@
 
 import { useEffect } from "react";
 import { Skeleton as SkulletSkeleton, SkeletonBox } from "skullet/react";
+import { getLocale, useT } from "./i18n.jsx";
 
 /** Whether the signed-in operator may do something. Server still decides. */
 export function can(me, permission) {
@@ -18,9 +19,10 @@ export function can(me, permission) {
  * Every caller passes one: a generic grey block is worse than a spinner because
  * it lies about the layout.
  */
-export function Skeleton({ data, sample, children, label = "Loading", ...rest }) {
+export function Skeleton({ data, sample, children, label, ...rest }) {
+  const t = useT();
   return (
-    <SkulletSkeleton data={data} sample={sample} label={label} {...rest}>
+    <SkulletSkeleton data={data} sample={sample} label={label ?? t("Loading")} {...rest}>
       {children}
     </SkulletSkeleton>
   );
@@ -72,15 +74,16 @@ export function Notice({ kind = "info", children }) {
 
 /** Copy-to-clipboard line. The endpoint is the thing people paste into a client. */
 export function Endpoint({ value }) {
+  const t = useT();
   return (
     <div className="endpoint">
       <span>{value}</span>
       <button
         className="ghost sm copy"
         onClick={() => navigator.clipboard?.writeText(value)}
-        title="Copy"
+        title={t("Copy")}
       >
-        copy
+        {t("copy")}
       </button>
     </div>
   );
@@ -107,6 +110,7 @@ export function Empty({ title, children, action }) {
  * for anyone not using a mouse.
  */
 export function Drawer({ title, sub, onClose, actions, children }) {
+  const t = useT();
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === "Escape") onClose();
@@ -126,8 +130,8 @@ export function Drawer({ title, sub, onClose, actions, children }) {
           </div>
           <div className="row">
             {actions}
-            <button className="ghost sm" onClick={onClose} aria-label="Close">
-              Close
+            <button className="ghost sm" onClick={onClose} aria-label={t("Close")}>
+              {t("Close")}
             </button>
           </div>
         </div>
@@ -159,18 +163,21 @@ export function Details({ rows }) {
  * has any rows under it. When filters are on, say so and hand back a button.
  */
 export function NoMatches({ filters, onClear, title, children, action }) {
+  const t = useT();
   const active = Object.values(filters ?? {}).filter((v) => v !== "" && v != null);
   if (active.length > 0) {
     return (
       <Empty
-        title="No rows match this filter"
+        title={t("No rows match this filter")}
         action={
           <button className="sm" onClick={onClear}>
-            Clear {active.length === 1 ? "the filter" : "all filters"}
+            {active.length === 1 ? t("Clear the filter") : t("Clear all filters")}
           </button>
         }
       >
-        {active.map((value) => `“${value}”`).join(", ")} matched nothing.
+        {t("{values} matched nothing.", {
+          values: active.map((value) => `“${value}”`).join(", "),
+        })}
       </Empty>
     );
   }
@@ -188,9 +195,10 @@ export function NoMatches({ filters, onClear, title, children, action }) {
  * the division in their head.
  */
 export function Bars({ data, total }) {
+  const t = useT();
   const entries = Object.entries(data ?? {});
   if (entries.length === 0) {
-    return <Empty title="No traffic">Nothing in this window.</Empty>;
+    return <Empty title={t("No traffic")}>{t("Nothing in this window.")}</Empty>;
   }
   const peak = Math.max(...entries.map(([, count]) => count), 1);
   const sum = total ?? entries.reduce((carry, [, count]) => carry + count, 0);
@@ -199,7 +207,7 @@ export function Bars({ data, total }) {
       {entries.map(([label, count]) => (
         <li key={label}>
           <div className="bar-label">
-            <span className="mono">{label || "unknown"}</span>
+            <span className="mono">{label || t("unknown")}</span>
             <span className="hint num">
               {count}
               {sum ? ` · ${Math.round((count / sum) * 100)}%` : ""}
@@ -215,7 +223,8 @@ export function Bars({ data, total }) {
 }
 
 export function Chart({ series }) {
-  if (!series?.length) return <Empty title="No traffic">Nothing in this window.</Empty>;
+  const t = useT();
+  if (!series?.length) return <Empty title={t("No traffic")}>{t("Nothing in this window.")}</Empty>;
   const peak = Math.max(...series.map((p) => p.count), 1);
   return (
     <div className="chart">
@@ -223,7 +232,10 @@ export function Chart({ series }) {
         <div
           key={point.bucket}
           style={{ height: `${Math.max((point.count / peak) * 100, 3)}%` }}
-          title={`${point.bucket} · ${point.count} requests`}
+          title={t("{bucket} · {count} requests", {
+            bucket: point.bucket,
+            count: point.count,
+          })}
         />
       ))}
     </div>
@@ -274,14 +286,17 @@ export const SAMPLE_EVENTS = [
   { global_seq: 3, event_type: "role.defined", aggregate_id: "role_0000", actor: "someone@example.com", occurred_at: new Date().toISOString() },
 ];
 
+/** "3m ago", in the reader's language. `Intl` knows the plural rules. */
 export function relative(iso) {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
-  const seconds = Math.round((Date.now() - then) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
-  return `${Math.round(seconds / 86400)}d ago`;
+  const format = new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto", style: "narrow" });
+  const seconds = Math.round((then - Date.now()) / 1000);
+  const abs = Math.abs(seconds);
+  if (abs < 60) return format.format(seconds, "second");
+  if (abs < 3600) return format.format(Math.round(seconds / 60), "minute");
+  if (abs < 86400) return format.format(Math.round(seconds / 3600), "hour");
+  return format.format(Math.round(seconds / 86400), "day");
 }
 
 export function outcomeKind(outcome) {

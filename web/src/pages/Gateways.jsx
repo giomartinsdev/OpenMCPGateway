@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
+import { useT } from "../i18n.jsx";
 import {
   Badge, Card, Details, Drawer, Endpoint, NoMatches, Notice, Skeleton,
   SAMPLE_GATEWAYS, SAMPLE_STATS, Stat, can, relative,
@@ -8,6 +9,10 @@ import {
 import { navigate } from "../App.jsx";
 
 const AUTH_LABEL = { none: "open", api_key: "API key", oauth: "SSO" };
+
+function authLabel(t, mode) {
+  return mode ? t(AUTH_LABEL[mode] ?? mode) : mode;
+}
 
 // One filter per column, under its own label. Endpoint is derived, not stored, so
 // it is not filterable; the name box answers to a slug or an id too, because
@@ -35,6 +40,7 @@ function takeNewConsole() {
 }
 
 export function Gateways({ me }) {
+  const t = useT();
   const canEdit = can(me, "gateways:write");
   const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
@@ -65,15 +71,15 @@ export function Gateways({ me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Gateways</h1>
+          <h1>{t("Gateways")}</h1>
           <div className="sub">
-            Every MCP server you front, with its own auth, limits and traffic.
+            {t("Every MCP server you front, with its own auth, limits and traffic.")}
           </div>
         </div>
         {canEdit && (
           <div className="actions">
             <button className="primary" onClick={() => setCreating(true)}>
-              New gateway
+              {t("New gateway")}
             </button>
           </div>
         )}
@@ -83,24 +89,22 @@ export function Gateways({ me }) {
 
       {newConsole && (
         <Card
-          title="Your tenant's console gateway"
+          title={t("Your tenant's console gateway")}
           actions={
             <button className="ghost sm" onClick={() => setNewConsole(null)}>
-              Dismiss
+              {t("Dismiss")}
             </button>
           }
         >
           <p className="sub" style={{ marginBottom: 12 }}>
-            Every tenant ships with a gateway to this deployment's own read-only
-            MCP — gateways, traffic, audit log and this manual. Point an agent at
-            it and ask what the deployment is doing. The key is shown once.
+            {t("Every tenant ships with a gateway to this deployment's own read-only MCP — gateways, traffic, audit log and this manual. Point an agent at it and ask what the deployment is doing. The key is shown once.")}
           </p>
           <div className="field">
-            <div className="hint">Endpoint</div>
+            <div className="hint">{t("Endpoint")}</div>
             <Endpoint value={newConsole.endpoint} />
           </div>
           <div className="field">
-            <div className="hint">API key</div>
+            <div className="hint">{t("API key")}</div>
             <Endpoint value={newConsole.api_key} />
           </div>
         </Card>
@@ -108,33 +112,38 @@ export function Gateways({ me }) {
 
       {unauthenticated.length > 0 && (
         <Notice kind="info">
-          {unauthenticated.length === 1 ? "1 gateway is" : `${unauthenticated.length} gateways are`} proxying with no
-          authentication. Fine on a private network; require a key or SSO before exposing them.
+          {unauthenticated.length === 1
+            ? t("1 gateway is proxying with no authentication. Fine on a private network; require a key or SSO before exposing it.")
+            : t("{count} gateways are proxying with no authentication. Fine on a private network; require a key or SSO before exposing them.", { count: unauthenticated.length })}
         </Notice>
       )}
 
       <div className="grid-3" style={{ marginBottom: 12 }}>
-        <Skeleton data={gateways} sample={SAMPLE_GATEWAYS} label="Loading gateways">
+        <Skeleton data={gateways} sample={SAMPLE_GATEWAYS} label={t("Loading gateways")}>
           {(rows) => (
-            <Stat label="Gateways" value={rows.length} hint={`${rows.filter((g) => g.enabled).length} enabled`} />
-          )}
-        </Skeleton>
-        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading requests">
-          {(data) => (
             <Stat
-              label="Requests / 60 min"
-              value={data.requests}
-              hint={`avg ${data.avg_duration_ms} ms`}
+              label={t("Gateways")}
+              value={rows.length}
+              hint={t("{count} enabled", { count: rows.filter((g) => g.enabled).length })}
             />
           )}
         </Skeleton>
-        <Skeleton data={stats} sample={SAMPLE_STATS} label="Loading rejections">
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading requests")}>
+          {(data) => (
+            <Stat
+              label={t("Requests / 60 min")}
+              value={data.requests}
+              hint={t("avg {ms} ms", { ms: data.avg_duration_ms })}
+            />
+          )}
+        </Skeleton>
+        <Skeleton data={stats} sample={SAMPLE_STATS} label={t("Loading rejections")}>
           {(data) =>
             rejected === 0 ? (
-              <Stat label="Rejected" value={0} hint="401 / 403 / 429" />
+              <Stat label={t("Rejected")} value={0} hint="401 / 403 / 429" />
             ) : (
               <Stat
-                label="Rejected"
+                label={t("Rejected")}
                 value={
                   (data.by_outcome?.unauthenticated ?? 0) +
                   (data.by_outcome?.forbidden ?? 0) +
@@ -148,7 +157,7 @@ export function Gateways({ me }) {
       </div>
 
       {creating && (
-        <Drawer title="New gateway" onClose={() => setCreating(false)}>
+        <Drawer title={t("New gateway")} onClose={() => setCreating(false)}>
           <CreateGateway
             onCancel={() => setCreating(false)}
             // Straight to the new gateway: its endpoint and key are the next
@@ -158,26 +167,29 @@ export function Gateways({ me }) {
         </Drawer>
       )}
 
-      <Card title="All gateways" aside={gateways ? `${gateways.length} shown` : null}>
+      <Card
+        title={t("All gateways")}
+        aside={gateways ? t("{count} shown", { count: gateways.length }) : null}
+      >
         <Skeleton
           data={gateways}
           sample={SAMPLE_GATEWAYS}
-          label="Loading the gateway list"
+          label={t("Loading the gateway list")}
           empty={gateways?.length === 0}
           emptyMessage={
             <NoMatches
               filters={filters}
               onClear={() => setFilters({})}
-              title="No gateways yet"
+              title={t("No gateways yet")}
               action={
                 canEdit ? (
                   <button className="sm" onClick={() => setCreating(true)}>
-                    Create the first gateway
+                    {t("Create the first gateway")}
                   </button>
                 ) : null
               }
             >
-              Create one to expose an MCP server.
+              {t("Create one to expose an MCP server.")}
             </NoMatches>
           }
         >
@@ -187,10 +199,10 @@ export function Gateways({ me }) {
                 <thead>
                   <tr>
                     <SortHeader field="name" label="Name" sort={sort} onSort={setSort} />
-                    <th>Endpoint</th>
-                    <th>Auth</th>
-                    <th className="num">Limit</th>
-                    <th>Status</th>
+                    <th>{t("Endpoint")}</th>
+                    <th>{t("Auth")}</th>
+                    <th className="num">{t("Limit")}</th>
+                    <th>{t("Status")}</th>
                     <SortHeader
                       field="updated_at"
                       label="Updated"
@@ -198,7 +210,7 @@ export function Gateways({ me }) {
                       onSort={setSort}
                       className="num"
                     />
-                    <th>ID</th>
+                    <th>{t("ID")}</th>
                   </tr>
                   <FilterRow fields={FIELDS} value={filters} onChange={setFilters} />
                 </thead>
@@ -218,7 +230,7 @@ export function Gateways({ me }) {
                       <td className="mono">{gateway.endpoint}</td>
                       <td>
                         <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
-                          {AUTH_LABEL[gateway.auth_mode] ?? gateway.auth_mode}
+                          {authLabel(t, gateway.auth_mode)}
                           {gateway.idp ? ` · ${gateway.idp}` : ""}
                         </Badge>
                       </td>
@@ -229,7 +241,7 @@ export function Gateways({ me }) {
                       </td>
                       <td>
                         <Badge kind={gateway.enabled ? "ok" : "mute"}>
-                          {gateway.enabled ? "enabled" : "disabled"}
+                          {gateway.enabled ? t("enabled") : t("disabled")}
                         </Badge>
                       </td>
                       <td className="num hint">{relative(gateway.updated_at)}</td>
@@ -254,37 +266,46 @@ export function Gateways({ me }) {
               className="ghost sm"
               onClick={() => { setSelected(null); navigate(`/gateways/${selected.id}`); }}
             >
-              Open full page
+              {t("Open full page")}
             </button>
           }
         >
           <div className="field">
-            <div className="hint">Endpoint</div>
+            <div className="hint">{t("Endpoint")}</div>
             <Endpoint value={selected.endpoint} />
           </div>
           <Details
             rows={[
-              ["Name", selected.name],
-              ["Slug", <span className="mono">{selected.slug}</span>],
-              ["Upstream", <span className="mono">{selected.target_url}</span>],
+              [t("Name"), selected.name],
+              [t("Slug"), <span className="mono">{selected.slug}</span>],
+              [t("Upstream"), <span className="mono">{selected.target_url}</span>],
               [
-                "Auth",
+                t("Auth"),
                 <Badge kind={selected.auth_mode === "none" ? "warn" : "info"}>
-                  {AUTH_LABEL[selected.auth_mode] ?? selected.auth_mode}
+                  {authLabel(t, selected.auth_mode)}
                   {selected.idp ? ` · ${selected.idp}` : ""}
                 </Badge>,
               ],
-              ["Rate limit", selected.requests_per_minute ? `${selected.requests_per_minute}/min` : "none"],
-              ["Status", <Badge kind={selected.enabled ? "ok" : "mute"}>{selected.enabled ? "enabled" : "disabled"}</Badge>],
-              ["Description", selected.description || "—"],
-              ["Created", new Date(selected.created_at).toLocaleString()],
-              ["Updated", relative(selected.updated_at)],
-              ["Gateway id", <span className="mono">{selected.id}</span>],
+              [
+                t("Rate limit"),
+                selected.requests_per_minute
+                  ? `${selected.requests_per_minute}/min`
+                  : t("none"),
+              ],
+              [
+                t("Status"),
+                <Badge kind={selected.enabled ? "ok" : "mute"}>
+                  {selected.enabled ? t("enabled") : t("disabled")}
+                </Badge>,
+              ],
+              [t("Description"), selected.description || "—"],
+              [t("Created"), new Date(selected.created_at).toLocaleString()],
+              [t("Updated"), relative(selected.updated_at)],
+              [t("Gateway id"), <span className="mono">{selected.id}</span>],
             ]}
           />
           <p className="hint" style={{ marginBottom: 0 }}>
-            Keys, the upstream credential and the connect guide live on the gateway's own
-            page.
+            {t("Keys, the upstream credential and the connect guide live on the gateway's own page.")}
           </p>
         </Drawer>
       )}
@@ -293,6 +314,7 @@ export function Gateways({ me }) {
 }
 
 function CreateGateway({ onCreated }) {
+  const t = useT();
   const [form, setForm] = useState({
     slug: "",
     name: "",
@@ -328,57 +350,57 @@ function CreateGateway({ onCreated }) {
       <Notice kind="err">{error}</Notice>
       <div className="field-row">
         <div className="field">
-          <label htmlFor="name">Name</label>
+          <label htmlFor="name">{t("Name")}</label>
           <input id="name" value={form.name} onChange={set("name")} required
-                 placeholder="Rancher cluster" />
+                 placeholder={t("Rancher cluster")} />
         </div>
         <div className="field">
-          <label htmlFor="slug">Slug</label>
+          <label htmlFor="slug">{t("Slug")}</label>
           <input id="slug" value={form.slug} onChange={set("slug")} required
                  pattern="[a-z0-9-]+" placeholder="rancher" className="mono" />
           <div className="hint">
-            Becomes <span className="mono">/g/{form.slug || "slug"}/mcp</span>
+            {t("Becomes")} <span className="mono">/g/{form.slug || t("slug")}/mcp</span>
           </div>
         </div>
       </div>
       <div className="field">
-        <label htmlFor="target_url">Upstream MCP URL</label>
+        <label htmlFor="target_url">{t("Upstream MCP URL")}</label>
         <input id="target_url" value={form.target_url} onChange={set("target_url")} required
                placeholder="http://rancher-mcp.apps.svc.cluster.local:8000/mcp" className="mono" />
         <div className="hint">
-          Streamable HTTP endpoint of the server you are proxying, including its path.
+          {t("Streamable HTTP endpoint of the server you are proxying, including its path.")}
         </div>
       </div>
       <div className="field-row">
         <div className="field">
-          <label htmlFor="auth_mode">Who may call it</label>
+          <label htmlFor="auth_mode">{t("Who may call it")}</label>
           <select id="auth_mode" value={form.auth_mode} onChange={set("auth_mode")}>
-            <option value="api_key">API key</option>
-            <option value="oauth">SSO (OAuth)</option>
-            <option value="none">Anyone (no auth)</option>
+            <option value="api_key">{t("API key")}</option>
+            <option value="oauth">{t("SSO (OAuth)")}</option>
+            <option value="none">{t("Anyone (no auth)")}</option>
           </select>
         </div>
         {form.auth_mode === "oauth" ? (
           <div className="field">
-            <label htmlFor="idp">Identity provider</label>
+            <label htmlFor="idp">{t("Identity provider")}</label>
             <select id="idp" value={form.idp} onChange={set("idp")}>
-              <option value="">Choose…</option>
+              <option value="">{t("Choose…")}</option>
               <option value="github">GitHub</option>
               <option value="google">Google</option>
               <option value="azure">Microsoft</option>
-              <option value="oidc">Custom OIDC</option>
+              <option value="oidc">{t("Custom OIDC")}</option>
             </select>
           </div>
         ) : <div />}
       </div>
       <div className="field">
-        <label htmlFor="description">Description</label>
+        <label htmlFor="description">{t("Description")}</label>
         <input id="description" value={form.description} onChange={set("description")}
-               placeholder="What this server is for" />
+               placeholder={t("What this server is for")} />
       </div>
       <div className="form-actions">
         <button className="primary" disabled={busy}>
-          {busy ? "Creating…" : "Create gateway"}
+          {busy ? t("Creating…") : t("Create gateway")}
         </button>
       </div>
     </form>

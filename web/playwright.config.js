@@ -17,6 +17,11 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // The panel follows the browser's language and colour scheme, so both are
+    // pinned: a developer on a pt-BR machine must not run the suite in
+    // Portuguese, and the assertions below quote English copy.
+    locale: "en-US",
+    colorScheme: "dark",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {

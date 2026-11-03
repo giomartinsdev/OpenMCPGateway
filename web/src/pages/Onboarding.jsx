@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api } from "../api.js";
+import { useT } from "../i18n.jsx";
+import { Mark } from "../Mark.jsx";
 import { Notice } from "../ui.jsx";
 
 // What an account sees before it belongs anywhere. Signing up grants an
@@ -7,6 +9,7 @@ import { Notice } from "../ui.jsx";
 // choice below is made: join a tenant with the code someone shared, or start
 // one and own it.
 export function Onboarding({ me, onReady }) {
+  const t = useT();
   const [mode, setMode] = useState("create");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -45,27 +48,27 @@ export function Onboarding({ me, onReady }) {
     <div className="auth-wrap">
       <div className="auth">
         <div className="logo">
-          <div className="logo-mark" />
+          <Mark size={28} />
           <div className="logo-text">
             OpenMCP<span>Gateway</span>
           </div>
         </div>
         <form className="card auth-card" onSubmit={submit}>
           <h2 style={{ marginBottom: 4 }}>
-            {mode === "create" ? "Create a tenant" : "Join a tenant"}
+            {mode === "create" ? t("Create a tenant") : t("Join a tenant")}
           </h2>
           <p className="hint" style={{ marginBottom: 16 }}>
-            Signed in as {me.email}.{" "}
+            {t("Signed in as {email}.", { email: me.email })}{" "}
             {mode === "create"
-              ? "A tenant is where your gateways and members live. You will own it."
-              : "Paste the join code the tenant's owner shared with you."}
+              ? t("A tenant is where your gateways and members live. You will own it.")
+              : t("Paste the join code the tenant's owner shared with you.")}
           </p>
 
           <Notice kind="err">{error}</Notice>
 
           {mode === "create" ? (
             <div className="field">
-              <label htmlFor="tenant-name">Tenant name</label>
+              <label htmlFor="tenant-name">{t("Tenant name")}</label>
               <input
                 id="tenant-name"
                 value={name}
@@ -77,7 +80,7 @@ export function Onboarding({ me, onReady }) {
             </div>
           ) : (
             <div className="field">
-              <label htmlFor="join-code">Join code</label>
+              <label htmlFor="join-code">{t("Join code")}</label>
               <input
                 id="join-code"
                 value={code}
@@ -88,28 +91,28 @@ export function Onboarding({ me, onReady }) {
                 required
               />
               <div className="hint">
-                Eight characters. Ask an owner of the tenant for it.
+                {t("Eight characters. Ask an owner of the tenant for it.")}
               </div>
             </div>
           )}
 
           <button className="primary" style={{ width: "100%", marginTop: 4 }} disabled={busy}>
-            {busy ? "Working…" : mode === "create" ? "Create tenant" : "Join"}
+            {busy ? t("Working…") : mode === "create" ? t("Create tenant") : t("Join")}
           </button>
 
           <div className="login-foot">
             {mode === "create" ? (
               <>
-                Invited to an existing tenant?{" "}
+                {t("Invited to an existing tenant?")}{" "}
                 <a href="#join" onClick={(e) => { e.preventDefault(); setMode("join"); }}>
-                  Join with a code
+                  {t("Join with a code")}
                 </a>
               </>
             ) : (
               <>
-                Starting fresh?{" "}
+                {t("Starting fresh?")}{" "}
                 <a href="#create" onClick={(e) => { e.preventDefault(); setMode("create"); }}>
-                  Create a tenant
+                  {t("Create a tenant")}
                 </a>
               </>
             )}
