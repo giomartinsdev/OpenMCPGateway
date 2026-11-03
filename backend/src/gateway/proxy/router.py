@@ -36,6 +36,7 @@ from gateway.proxy.runtime import (
     GuardMiddleware,
     RateLimiter,
     build_auth_provider,
+    forget_client_store,
 )
 
 
@@ -277,6 +278,10 @@ class GatewayRouter(BaseModel):
         live = self.live_gateways.pop(slug, None)
         if live is not None:
             await _close(live.lifespan)
+            # The OAuth state outlives the provider on purpose (a reinstall must
+            # not invalidate tokens already handed out), so it has to be
+            # released here or a deleted gateway keeps it forever.
+            forget_client_store(live.gateway_id)
             log.info("gateway.dropped", gateway=slug)
 
     def _publish(self) -> None:

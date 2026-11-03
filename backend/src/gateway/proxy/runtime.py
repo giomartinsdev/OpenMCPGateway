@@ -25,7 +25,7 @@ from gateway.proxy.identity import (
     Identity,
     IdentityDenied,
 )
-from gateway.proxy.providers import build_auth_provider
+from gateway.proxy.providers import build_auth_provider, forget_client_store
 from gateway.proxy.rate_limit import RateLimiter
 
 __all__ = [
@@ -36,4 +36,5 @@ __all__ = [
     "IdentityDenied",
     "RateLimiter",
     "build_auth_provider",
+    "forget_client_store",
 ]

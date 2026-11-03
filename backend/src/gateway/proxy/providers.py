@@ -7,6 +7,37 @@ from fastmcp.server.auth import AuthProvider
 from gateway.domain.events import AuthMode, IdentityProvider
 from gateway.proxy.identity import GatewayNotReady
 
+# OAuth state that outlives the provider instance, keyed by gateway id.
+#
+# `OAuthProxy` keeps three things a token depends on in `client_storage`: the
+# `jti → upstream token` mapping, the upstream tokens themselves, and refresh
+# metadata. A JWT it issued is self-contained *except* for the jti, which is a
+# pointer into that store. Build a fresh store per install — which `refresh()`
+# does on every unknown path — and the pointer dangles: the token still verifies
+# by signature and then reads back as unauthenticated, so clients get a 401
+# moments after a successful login.
+#
+# ponytail: a process-local dict, so two replicas would each only honour their
+# own tokens. One replica is the current deployment shape (see k8s comment: the
+# rate limiter is in-process too). Move to the same Postgres/Redis store as the
+# read models when scaling out.
+_CLIENT_STORES: dict[str, Any] = {}
+
+
+def _client_store(gateway_id: str) -> Any:
+    """The durable-per-process OAuth store for one gateway."""
+    from key_value.aio.stores.memory import MemoryStore
+
+    store = _CLIENT_STORES.get(gateway_id)
+    if store is None:
+        store = _CLIENT_STORES[gateway_id] = MemoryStore()
+    return store
+
+
+def forget_client_store(gateway_id: str) -> None:
+    """Drop a gateway's OAuth state. Called when the gateway stops serving."""
+    _CLIENT_STORES.pop(gateway_id, None)
+
 
 def build_auth_provider(
     config: dict[str, Any], *, base_url: str, credentials: dict[str, str]
@@ -35,12 +66,9 @@ def build_auth_provider(
     scopes = list(config.get("required_scopes") or []) or None
     jwt_key = credentials.get("jwt_signing_key") or ""
     # FastMCP persists dynamic client registrations to ~/.local/share by default.
-    # An in-memory store keeps the container root-filesystem read-only and means a
-    # stateless pod: registrations are re-created on demand, which is what a client
-    # does anyway when its registration stops resolving.
-    from key_value.aio.stores.memory import MemoryStore
-
-    client_storage = MemoryStore()
+    # An in-memory store keeps the container root-filesystem read-only. It is
+    # shared per gateway id, not per install — see `_CLIENT_STORES` for why.
+    client_storage = _client_store(config["id"])
 
     common = {
         "client_id": credentials["client_id"],
