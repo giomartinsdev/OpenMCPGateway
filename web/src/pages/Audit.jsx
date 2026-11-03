@@ -42,7 +42,7 @@ export function Audit() {
                 <tr key={event.global_seq ?? event.event_id}>
                   <td className="num hint">{event.global_seq}</td>
                   <td className="mono">{event.event_type}</td>
-                  <td className="mono" style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                  <td className="mono" style={{ fontSize: 11.5, color: "var(--fg-4)" }}>
                     {event.aggregate_id}
                   </td>
                   <td className="hint">{event.actor || "—"}</td>

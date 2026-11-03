@@ -22,110 +22,123 @@ import html as htmllib
 _INSTALLED = False
 
 # One page, so one stylesheet. Values mirror `web/src/styles.css` — the panel is
-# the only place these colours are authored; keep them in sync by eye, not by a
+# the only place these tokens are authored; keep them in sync by eye, not by a
 # build step, because this HTML is served by Python with no bundler in reach.
+#
+# No remote font: the CSP below forbids it, and the page must render correctly
+# on a machine that cannot reach the font CDN at all. The stack degrades to the
+# platform sans, which is why the type scale is set in relative steps, not in
+# pixel-exact sizes copied from the panel.
 _STYLES = """
   :root {
-    --brand: #ccff00; --brand-hover: #a3cc00;
-    --bg: #0d0f0d; --raised: #242824; --inset: #070807;
-    --border: #242824; --border-strong: #3d443d;
-    --text: #d2d7d2; --text-strong: #e3e8e3; --text-dim: #9da99d;
-    --on-brand: #070807; --danger-solid: #d78392; --danger-bg: #361118;
-    --ok-bg: #143029; --ok-fg: #cce3de; --ok-border: #1d443b;
-    --radius: 3px;
-    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
-    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --bg: #0f0e0d; --panel: #151412; --panel-2: #1b1a17; --panel-3: #22201d;
+    --glass: rgba(21, 20, 18, .93);
+    --line: rgba(250, 250, 249, .08); --line-2: rgba(250, 250, 249, .16);
+    --line-3: rgba(250, 250, 249, .25);
+    --fg: #fafaf9; --fg-2: #d6d4cf; --fg-3: #a6a39c; --fg-4: #85827c; --fg-5: #6f6c66;
+    --apur: #3dd68c; --warn: #e8b43a; --danger: #e4784f;
+    --sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --serif: "Faustina", Georgia, "Times New Roman", serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --radius: 16px; --radius-sm: 6px; --pill: 100px;
+    --t-body: 13px; --t-label: 12px; --t-micro: 11px;
+    --ease: cubic-bezier(.4,0,.2,1); --hover: .12s;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh; display: flex; align-items: center;
     justify-content: center; padding: 24px;
-    background: var(--bg); color: var(--text);
-    font: 400 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased;
+    background: radial-gradient(110% 90% at 55% 50%, #141310, var(--bg) 58%, #0b0a09);
+    color: var(--fg); font: 400 var(--t-body)/1.45 var(--sans);
+    -webkit-font-smoothing: antialiased;
   }
   .card {
-    width: 100%; max-width: 32rem; background: var(--raised);
-    border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;
+    width: 100%; max-width: 34rem;
+    background: var(--glass); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 22px;
   }
-  .logo { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; }
-  .logo-mark {
-    width: 9px; height: 22px; background: var(--brand);
-    clip-path: polygon(0 0, 100% 0, 55% 100%, 0 100%);
-  }
-  .logo-text { color: #fff; font-weight: 650; font-size: 14px; letter-spacing: -0.01em; }
-  .logo-text span { color: var(--brand); }
+  .logo { display: flex; align-items: center; gap: 9px; margin-bottom: 20px; }
+  .logo-mark { width: 8px; height: 22px; background: var(--apur); border-radius: 2px; }
+  .logo-text { color: var(--fg); font: 500 14px/1 var(--sans); letter-spacing: -.01em; }
+  .logo-text span { color: var(--fg-3); }
   h1 {
-    margin: 0 0 6px; font-size: 20px; font-weight: 600;
-    letter-spacing: -0.02em; color: var(--text-strong);
+    margin: 0 0 8px; color: var(--fg);
+    font: 400 27px/1.15 var(--serif); letter-spacing: -.015em;
   }
-  .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 18px; }
+  .sub { color: var(--fg-3); font-size: var(--t-body); margin-bottom: 16px; }
+  .sub strong { color: var(--fg); font-weight: 500; }
   .info {
-    background: var(--inset); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px;
-    font-size: 13px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 12px;
+    font-size: var(--t-body); color: var(--fg-2);
   }
-  .info strong { color: var(--text-strong); font-weight: 600; }
+  .info strong { color: var(--fg); font-weight: 500; }
   .badge {
-    display: inline-flex; align-items: center; gap: 5px; border-radius: 2px;
-    padding: 2px 7px; font-size: 11px; font-weight: 500;
-    background: var(--ok-bg); color: var(--ok-fg); border: 1px solid var(--ok-border);
-    margin-bottom: 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 22px; padding: 0 8px; margin-bottom: 12px;
+    border: 1px solid rgba(61,214,140,.28); border-radius: var(--radius-sm);
+    background: rgba(61,214,140,.12); color: var(--apur);
+    font: 500 var(--t-label)/1 var(--sans); white-space: nowrap;
   }
+  .badge strong { font-weight: 500; }
   .target {
-    background: var(--inset); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 11px 13px; margin-bottom: 12px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 12px;
   }
   .target .label {
-    color: var(--text-dim); font-size: 11px; text-transform: uppercase;
-    letter-spacing: .07em; display: block; margin-bottom: 5px;
+    display: block; margin-bottom: 5px; color: var(--fg-3);
+    font: 500 var(--t-micro)/1.3 var(--sans);
   }
   .target .value {
-    font-family: var(--mono); font-size: 12.5px; color: var(--text-strong);
+    font-family: var(--mono); font-size: var(--t-label); color: var(--fg);
     word-break: break-all;
   }
   details { margin-bottom: 4px; }
   summary {
-    color: var(--text-dim); font-size: 12px; cursor: pointer;
-    padding: 6px 0; user-select: none;
+    color: var(--fg-4); font: 500 var(--t-micro)/1.3 var(--sans);
+    cursor: pointer; padding: 6px 0; user-select: none;
   }
-  summary:hover { color: var(--text-strong); }
+  summary:hover { color: var(--fg-2); }
   .details {
-    background: var(--inset); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 11px 13px; margin-top: 4px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); padding: 4px 13px; margin-top: 4px;
   }
-  .row { display: flex; gap: 12px; padding: 5px 0; font-size: 12.5px; }
-  .row + .row { border-top: 1px solid var(--border); }
-  .row .k { color: var(--text-dim); min-width: 132px; }
-  .row .v {
-    color: var(--text); font-family: var(--mono); font-size: 12px;
-    word-break: break-all;
+  .row {
+    display: flex; gap: 12px; padding: 7px 0;
+    font-size: var(--t-label);
+    border-bottom: 1px solid var(--line);
   }
-  .actions { display: flex; gap: 10px; margin-top: 18px; }
+  .row:last-child { border-bottom: 0; }
+  .row .k { color: var(--fg-4); min-width: 132px; flex: 0 0 auto; }
+  .row .v { color: var(--fg-2); font-family: var(--mono); word-break: break-all; }
+  .actions { display: flex; gap: 8px; margin-top: 18px; }
   button {
-    font: 500 13px var(--sans); border-radius: var(--radius); cursor: pointer;
-    border: 1px solid var(--border-strong); background: transparent;
-    color: var(--text); padding: 8px 16px;
-    transition: background .12s, border-color .12s, color .12s;
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 34px; padding: 0 16px;
+    border: 1px solid var(--line-2); border-radius: var(--pill);
+    background: rgba(21,20,18,.6); color: var(--fg);
+    font: 500 var(--t-body)/1 var(--sans); cursor: pointer; white-space: nowrap;
+    transition: background-color var(--hover) var(--ease), border-color var(--hover) var(--ease);
   }
-  button:hover { background: #2f342f; color: var(--text-strong); }
+  button:hover { background: var(--panel-2); border-color: var(--line-3); }
+  /* Emphasis is an inversion, not a colour — the accent is reserved for state. */
   .primary {
-    background: var(--brand); border-color: var(--brand);
-    color: var(--on-brand); font-weight: 600; flex: 1;
+    background: var(--fg); border-color: var(--fg); color: var(--bg);
+    font-weight: 500; flex: 1;
   }
-  .primary:hover {
-    background: var(--brand-hover); border-color: var(--brand-hover);
-    color: var(--on-brand);
+  .primary:hover { background: var(--fg-2); border-color: var(--fg-2); color: var(--bg); }
+  .deny:hover {
+    background: rgba(228,120,79,.12); border-color: var(--danger); color: var(--danger);
   }
-  .deny:hover { background: var(--danger-bg); color: var(--danger-solid); border-color: #4a1f27; }
-  .foot { color: var(--text-dim); font-size: 11.5px; margin-top: 16px; }
-  .foot a { color: var(--brand); text-decoration: none; }
-  .foot a:hover { color: var(--brand-hover); }
+  .foot { color: var(--fg-4); font-size: var(--t-micro); line-height: 1.6; margin-top: 16px; }
+  .foot a { color: var(--fg-2); text-decoration: none; border-bottom: 1px solid var(--line-3); }
+  .foot a:hover { color: var(--fg); border-bottom-color: var(--fg); }
   .error {
-    background: var(--danger-bg); color: #efcdd3; border: 1px solid #4a1f27;
-    border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px;
-    font-size: 13px;
+    background: rgba(228,120,79,.1); border: 1px solid rgba(228,120,79,.3);
+    border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 12px;
+    color: #f0c4b2; font-size: var(--t-body);
   }
-  .mono { font-family: var(--mono); font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: var(--t-label); }
 """
 
 # The pages carry no script and no remote asset, so the policy can stay this

@@ -140,7 +140,7 @@ export function Traffic() {
                   <td><Badge kind={outcomeKind(request.outcome)}>{request.outcome}</Badge></td>
                   <td className="num">{request.status}</td>
                   <td className="num">{request.duration_ms} ms</td>
-                  <td className="mono" style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                  <td className="mono" style={{ fontSize: 11.5, color: "var(--fg-4)" }}>
                     {request.ip || "—"}
                   </td>
                 </tr>

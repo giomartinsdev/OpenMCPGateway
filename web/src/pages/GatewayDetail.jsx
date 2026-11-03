@@ -240,7 +240,7 @@ export function GatewayDetail({ id, me }) {
                     {/* The id, not the subject: the subject is `api-key:<id>`
                         and pasting that as a bearer is the mistake this column
                         used to invite. */}
-                    <td className="mono" style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                    <td className="mono" style={{ fontSize: 11.5, color: "var(--fg-4)" }}>
                       {key.key_id}
                     </td>
                     <td className="hint">{relative(key.issued_at)}</td>

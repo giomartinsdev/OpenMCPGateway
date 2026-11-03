@@ -104,12 +104,12 @@ export function Gateways({ me }) {
                   onClick={() => navigate(`/gateways/${gateway.id}`)}
                 >
                   <td>
-                    <div style={{ color: "var(--text-strong)", fontWeight: 500 }}>
+                    <div style={{ color: "var(--fg)", fontWeight: 500 }}>
                       {gateway.name}
                     </div>
                     <div className="hint mono">{gateway.slug}</div>
                   </td>
-                  <td className="mono" style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                  <td className="mono" style={{ fontSize: 11.5, color: "var(--fg-4)" }}>
                     {gateway.endpoint}
                   </td>
                   <td>

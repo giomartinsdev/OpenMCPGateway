@@ -147,7 +147,7 @@ export function Roles({ me }) {
               {roles.map((role) => (
                 <tr key={role.id}>
                   <td>
-                    <div style={{ color: "var(--text-strong)" }}>{role.name}</div>
+                    <div style={{ color: "var(--fg)" }}>{role.name}</div>
                     <div className="hint mono">{role.id}</div>
                   </td>
                   <td>
