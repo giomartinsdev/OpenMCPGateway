@@ -52,10 +52,10 @@ test("a gateway accepts a key and a second issuer beside its login", async ({ pa
   await page.getByLabel("Also accept API keys on this gateway").check();
 
   await page.getByRole("button", { name: "Add issuer" }).click();
-  await page.getByLabel("label").fill("corp");
-  await page.getByLabel("Issuer").fill("https://login.example.com/");
-  await page.getByLabel("Audience").fill("omg");
-  await page.getByLabel("JWKS").fill("https://login.example.com/.well-known/jwks.json");
+  await page.getByLabel("Label").fill("corp");
+  await page.getByLabel("Issuer", { exact: true }).fill("https://login.example.com/");
+  await page.getByLabel("Audience (optional)").fill("omg");
+  await page.getByLabel("JWKS URL").fill("https://login.example.com/.well-known/jwks.json");
 
   await page.getByRole("button", { name: "Save auth" }).click();
   await expect(page.getByText("Auth configuration saved.")).toBeVisible();

@@ -91,16 +91,21 @@ export function AuthForm({ gateway, onSaved }) {
 
   return (
     <form onSubmit={submit} className="card flat">
-      <div className="field">
-        <label htmlFor="auth-mode">{t("Mode")}</label>
-        <select id="auth-mode" value={form.auth_mode} onChange={set("auth_mode")}>
-          <option value="none">{t("Anyone (no auth)")}</option>
-          <option value="api_key">{t("API key")}</option>
-          <option value="oauth">{t("SSO (OAuth)")}</option>
-        </select>
-      </div>
+      <fieldset className="form-section">
+        <legend>{t("Who may call it")}</legend>
+        <div className="field">
+          <label htmlFor="auth-mode">{t("Mode")}</label>
+          <select id="auth-mode" value={form.auth_mode} onChange={set("auth_mode")}>
+            <option value="none">{t("Anyone (no auth)")}</option>
+            <option value="api_key">{t("API key")}</option>
+            <option value="oauth">{t("SSO (OAuth)")}</option>
+          </select>
+        </div>
+      </fieldset>
+
       {form.auth_mode === "oauth" && (
-        <>
+        <fieldset className="form-section">
+          <legend>{t("Sign-in flow")}</legend>
           <div className="field">
             <label htmlFor="auth-idp">{t("Identity provider")}</label>
             <select id="auth-idp" value={form.idp} onChange={set("idp")}>
@@ -135,54 +140,80 @@ export function AuthForm({ gateway, onSaved }) {
             <input id="auth-scopes" value={form.required_scopes} onChange={set("required_scopes")}
                    placeholder="read:user" className="mono" />
           </div>
+        </fieldset>
+      )}
 
-          <div className="field">
-            <label htmlFor="auth-allow-key" className="row" style={{ gap: 8 }}>
-              <input id="auth-allow-key" type="checkbox" checked={form.allow_api_key}
-                     onChange={(event) => setForm({ ...form, allow_api_key: event.target.checked })} />
-              <span>{t("Also accept API keys on this gateway")}</span>
-            </label>
-            <div className="hint">
-              {t("A browser client logs in, a script presents a key — same URL, same allowlist, same rate limit. The gateway needs at least one issued key.")}
-            </div>
+      {form.auth_mode === "oauth" && (
+        <fieldset className="form-section">
+          <legend>{t("Other ways in")}</legend>
+          <label className="permission" htmlFor="auth-allow-key">
+            <input id="auth-allow-key" type="checkbox" checked={form.allow_api_key}
+                   onChange={(event) => setForm({ ...form, allow_api_key: event.target.checked })} />
+            <span>{t("Also accept API keys on this gateway")}</span>
+          </label>
+          <div className="hint" style={{ margin: "8px 0 var(--s4)" }}>
+            {t("A browser client logs in, a script presents a key — same URL, same allowlist, same rate limit. The gateway needs at least one issued key.")}
           </div>
 
-          <div className="field">
-            <label>{t("Also accept tokens from other issuers")}</label>
-            {form.verifiers.map((verifier, index) => (
-              <div key={index} className="verifier-row">
-                <input value={verifier.label} onChange={setVerifier(index, "label")}
-                       placeholder={t("label")} aria-label={t("label")} />
-                <input value={verifier.issuer} onChange={setVerifier(index, "issuer")}
-                       placeholder="https://idp.example.com/" aria-label={t("Issuer")} className="mono" />
-                <input value={verifier.audience} onChange={setVerifier(index, "audience")}
-                       placeholder={t("audience (optional)")} aria-label={t("Audience")} className="mono" />
-                <input value={verifier.jwks_uri} onChange={setVerifier(index, "jwks_uri")}
-                       placeholder="https://idp.example.com/jwks.json" aria-label="JWKS" className="mono" />
+          {form.verifiers.map((verifier, index) => (
+            <div key={index} className="verifier">
+              <div className="verifier-head">
+                <span className="eyebrow">{t("Issuer {n}", { n: index + 1 })}</span>
                 <button type="button" className="ghost sm" onClick={() => removeVerifier(index)}>
                   {t("Remove")}
                 </button>
               </div>
-            ))}
-            <button type="button" className="ghost sm" onClick={addVerifier}>
-              {t("Add issuer")}
-            </button>
-            <div className="hint">
-              {t("No login flow for these: the client already holds the token, and the gateway checks its signature, issuer and audience. Use it for Auth0, Keycloak, or a second IdP beside the one above.")}
+              <div className="field-row">
+                <div className="field">
+                  <label htmlFor={`verifier-label-${index}`}>{t("Label")}</label>
+                  <input id={`verifier-label-${index}`} value={verifier.label}
+                         onChange={setVerifier(index, "label")} placeholder="corp" />
+                </div>
+                <div className="field">
+                  <label htmlFor={`verifier-issuer-${index}`}>{t("Issuer")}</label>
+                  <input id={`verifier-issuer-${index}`} value={verifier.issuer}
+                         onChange={setVerifier(index, "issuer")}
+                         placeholder="https://idp.example.com/" className="mono" />
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field">
+                  <label htmlFor={`verifier-audience-${index}`}>{t("Audience (optional)")}</label>
+                  <input id={`verifier-audience-${index}`} value={verifier.audience}
+                         onChange={setVerifier(index, "audience")}
+                         placeholder="omg" className="mono" />
+                </div>
+                <div className="field">
+                  <label htmlFor={`verifier-jwks-${index}`}>{t("JWKS URL")}</label>
+                  <input id={`verifier-jwks-${index}`} value={verifier.jwks_uri}
+                         onChange={setVerifier(index, "jwks_uri")}
+                         placeholder="https://idp.example.com/.well-known/jwks.json" className="mono" />
+                </div>
+              </div>
             </div>
+          ))}
+          <button type="button" className="ghost sm" onClick={addVerifier}>
+            {t("Add issuer")}
+          </button>
+          <div className="hint" style={{ marginTop: 8 }}>
+            {t("No login flow for these: the client already holds the token, and the gateway checks its signature, issuer and audience. Use it for Auth0, Keycloak, or a second IdP beside the one above.")}
           </div>
-        </>
+        </fieldset>
       )}
-      <div className="field">
-        <label htmlFor="auth-upstream">{t("Upstream token")}</label>
-        <input id="auth-upstream" type="password" value={form.upstream_token} className="mono"
-               onChange={set("upstream_token")}
-               placeholder={t("only if the MCP server requires its own bearer")} />
-        <div className="hint">
-          {t("Sent as")} <span className="mono">Authorization: Bearer …</span>{" "}
-          {t("on every upstream call, so callers never hold it. Leave blank to keep the current one.")}
+
+      <fieldset className="form-section">
+        <legend>{t("Upstream")}</legend>
+        <div className="field">
+          <label htmlFor="auth-upstream">{t("Upstream token")}</label>
+          <input id="auth-upstream" type="password" value={form.upstream_token} className="mono"
+                 onChange={set("upstream_token")}
+                 placeholder={t("only if the MCP server requires its own bearer")} />
+          <div className="hint">
+            {t("Sent as")} <span className="mono">Authorization: Bearer …</span>{" "}
+            {t("on every upstream call, so callers never hold it. Leave blank to keep the current one.")}
+          </div>
         </div>
-      </div>
+      </fieldset>
       <div className="form-actions">
         <button className="primary" disabled={busy}>
           {busy ? t("Saving…") : t("Save auth")}

@@ -306,7 +306,7 @@ export function GatewayDetail({ id, me }) {
       <Card title={t("Auth")}>
         {gateway ? (
           <>
-            <div className="row" style={{ gap: 24, marginBottom: 12 }}>
+            <div className="row" style={{ gap: 24, marginBottom: 14 }}>
               <div>
                 <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Mode")}</div>
                 <Badge kind={gateway.auth_mode === "none" ? "warn" : "info"}>
@@ -329,9 +329,6 @@ export function GatewayDetail({ id, me }) {
                 </Badge>
               </div>
             </div>
-            <p className="hint" style={{ margin: "0 0 14px" }}>
-              {t("An allowlist is a second gate: a valid token still has to belong to a listed subject. Empty means \"anyone who authenticates\".")}
-            </p>
             {canEdit ? (
               <AuthForm gateway={gateway} onSaved={(msg) => { setBanner(msg); load(); }} />
             ) : (
@@ -366,11 +363,16 @@ export function GatewayDetail({ id, me }) {
             </button>
           )}
         >
+          {/* The rule, once, in the card that owns the list. It used to sit in
+              the Auth card, an explanation of a table two cards further down. */}
+          {gateway && (
+            <p className="hint" style={{ margin: "0 0 12px" }}>
+              {t("An allowlist is a second gate: a valid token still has to belong to a listed subject. Empty means \"anyone who authenticates\".")}
+            </p>
+          )}
           {header.principals.length === 0 ? (
             gateway ? (
-              <Empty title={t("No allowlist")}>
-                {t("Every authenticated caller is accepted.")}
-              </Empty>
+              <Empty title={t("No allowlist")} />
             ) : (
               <Bone height={60} radius={10} />
             )
