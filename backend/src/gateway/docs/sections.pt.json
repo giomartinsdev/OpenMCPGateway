@@ -392,6 +392,10 @@
           [
             "OMG_CONFIG_FILE",
             "YAML opcional aplicado no boot"
+          ],
+          [
+            "OMG_REDIS_URL",
+            "Opcional; contadores de rate limit compartilhados em vez de em processo"
           ]
         ]
       }

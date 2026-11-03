@@ -392,6 +392,10 @@
           [
             "OMG_CONFIG_FILE",
             "Optional YAML applied at boot"
+          ],
+          [
+            "OMG_REDIS_URL",
+            "Optional; shared rate-limit counters instead of in-process"
           ]
         ]
       }
