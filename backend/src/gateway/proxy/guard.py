@@ -22,6 +22,10 @@ from gateway.proxy.rate_limit import RateLimiter
 
 _RESOURCE_METADATA = "/.well-known/oauth-protected-resource"
 
+#: Returned by `_blocked_tool` for a body it cannot read as an MCP call. A
+#: sentinel rather than `None`, because `None` means "this request names no tool"
+#: — and a body the guard cannot read is a body it cannot clear.
+_UNPARSEABLE = "<unparseable>"
 
 class GuardMiddleware:
     """Auth + authorisation + rate limit + observation for one gateway mount."""
@@ -93,13 +97,16 @@ class GuardMiddleware:
                     # for something specific, and "unknown tool" would send it
                     # looking for a typo in its own config.
                     outcome, status = "forbidden", 403
-                    reason = "tool not in allowlist"
+                    if blocked == _UNPARSEABLE:
+                        reason = "body not checkable against tool allowlist"
+                        message = "request body is not JSON-RPC that the tool " \
+                                  "allowlist can check"
+                    else:
+                        reason = "tool not in allowlist"
+                        message = f"tool '{blocked}' is not exposed by gateway " \
+                                  f"'{self.config['slug']}'"
                     response = JSONResponse(
-                        {
-                            "error": "forbidden",
-                            "message": f"tool '{blocked}' is not exposed by gateway "
-                                       f"'{self.config['slug']}'",
-                        },
+                        {"error": "forbidden", "message": message},
                         status_code=403,
                     )
                 # Rate limiting counts MCP *requests* (JSON-RPC messages that
@@ -132,7 +139,7 @@ class GuardMiddleware:
                 outcome=outcome,
                 status=status,
                 duration_ms=int((time.perf_counter() - started) * 1000),
-                ip=_client_ip(scope, headers),
+                ip=_client_ip(scope),
                 method=scope.get("method", "POST"),
             )
             self.metrics.observe(
@@ -147,7 +154,7 @@ class GuardMiddleware:
                 outcome=outcome,
                 status=status,
                 duration_ms=int((time.perf_counter() - started) * 1000),
-                ip=_client_ip(scope, headers),
+                ip=_client_ip(scope),
                 tool=tool,
                 method=scope.get("method", "POST"),
                 reason=reason,
@@ -235,14 +242,18 @@ class GuardMiddleware:
         try:
             payload = json.loads(body)
         except (ValueError, UnicodeDecodeError):
-            return None
+            # Fail closed. `None` means "asked for no tool"; a body we cannot
+            # read is a body we cannot clear, and the upstream may accept what
+            # this parse rejected. The allowlist decides, so refuse.
+            return _UNPARSEABLE
         messages = payload if isinstance(payload, list) else [payload]
         for message in messages:
             if not isinstance(message, dict):
                 continue
             if message.get("method") != "tools/call":
                 continue
-            name = (message.get("params") or {}).get("name")
+            params = message.get("params")
+            name = params.get("name") if isinstance(params, dict) else None
             if isinstance(name, str) and name not in allowed:
                 return name
         return None
@@ -263,7 +274,6 @@ class GuardMiddleware:
             headers={"WWW-Authenticate": 'Bearer realm="openmcp-gateway"'},
         )
 
-
 async def _read_body(receive: Receive) -> bytes:
     """Consume and buffer the request body so it can be inspected and replayed.
 
@@ -280,7 +290,6 @@ async def _read_body(receive: Receive) -> bytes:
         if not message.get("more_body", False):
             break
     return b"".join(chunks)
-
 
 def _replay(body: bytes, receive: Receive) -> Receive:
     """Return a `receive` that yields the buffered body, then delegates."""
@@ -299,7 +308,6 @@ def _replay(body: bytes, receive: Receive) -> Receive:
 
     return replay
 
-
 def _called_tool(body: bytes) -> str | None:
     """The tool a `tools/call` names, so the log can say what was called.
 
@@ -317,11 +325,11 @@ def _called_tool(body: bytes) -> str | None:
     for message in messages:
         if not isinstance(message, dict) or message.get("method") != "tools/call":
             continue
-        name = (message.get("params") or {}).get("name")
+        params = message.get("params")
+        name = params.get("name") if isinstance(params, dict) else None
         if isinstance(name, str) and name:
             return name
     return None
-
 
 def _is_jsonrpc_request(body: bytes) -> bool:
     """True for a JSON-RPC message that expects a response (has an `id`).
@@ -339,10 +347,8 @@ def _is_jsonrpc_request(body: bytes) -> bool:
         return any(_message_has_id(item) for item in payload)
     return _message_has_id(payload)
 
-
 def _message_has_id(payload: Any) -> bool:
     return isinstance(payload, dict) and payload.get("id") is not None
-
 
 async def _run_capturing_status(
     app: ASGIApp, scope: Scope, receive: Receive, send: Send,
@@ -369,11 +375,9 @@ async def _run_capturing_status(
     await app(scope, receive, wrapped)
     return captured or 200
 
-
 def _this_month() -> str:
     """`YYYY-MM` in UTC, the same spelling the projection writes."""
     return datetime.now(UTC).strftime("%Y-%m")
-
 
 _REQUEST_ID_HEADER = "x-request-id"
 
@@ -391,16 +395,19 @@ def _request_id(headers: Headers) -> str:
         return supplied
     return f"req_{secrets.token_hex(8)}"
 
-
 def _bearer(headers: Headers) -> str | None:
     value = headers.get("authorization") or ""
     scheme, _, token = value.partition(" ")
     return token.strip() if scheme.lower() == "bearer" and token.strip() else None
 
+def _client_ip(scope: Scope) -> str | None:
+    """The peer we actually answered, never a header the caller controls.
 
-def _client_ip(scope: Scope, headers: Headers) -> str | None:
-    forwarded = headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    `X-Forwarded-For` is attacker-supplied unless a proxy we trust rewrote it,
+    and only uvicorn's `ProxyHeadersMiddleware` knows which peers those are:
+    it rewrites `scope["client"]` before this runs. Reading the raw header here
+    would undo that check and let the caller pick the address that lands in the
+    traffic log and the audit trail.
+    """
     client = scope.get("client")
     return client[0] if client else None
