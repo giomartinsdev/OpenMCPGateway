@@ -13,7 +13,19 @@ test("a JSON body comes back one item per line", () => {
 test("a truncated body still gets its shape back", () => {
   // The stored preview is a prefix, so this is the common case: `JSON.parse`
   // refuses it, the drawer still has to be readable.
-  assert.equal(indentJson('{"jsonrpc":"2.0","result":{"tools":[{"name":"issu'), '{\n  "jsonrpc": "2.0",\n  "result": {\n    "tools": [\n      {\n        "name": "issu');
+  assert.equal(
+    indentJson('{"jsonrpc":"2.0","result":{"tools":[{"name":"issu'),
+    '{\n  "jsonrpc": "2.0",\n  "result": {\n    "tools": [\n      {\n        "name": "issu',
+  );
+});
+
+test("an MCP response keeps its SSE envelope and shapes the frame", () => {
+  // What the proxy actually stores for a streamable-HTTP call: the body is a
+  // frame, not JSON, so shaping the whole thing would eat the `event:` line.
+  assert.equal(
+    indentJson('event: message\r\ndata: {"jsonrpc":"2.0","id":1,"result":{}}'),
+    'event: message\ndata: {\n  "jsonrpc": "2.0",\n  "id": 1,\n  "result": {}\n}',
+  );
 });
 
 test("braces inside a string do not change the depth", () => {

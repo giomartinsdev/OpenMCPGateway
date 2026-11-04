@@ -3,24 +3,21 @@
 /**
  * JSON, one item per line — even when the body was cut.
  *
- * The stored preview is a prefix, so it is usually *not* parseable JSON, and
- * `JSON.parse` refuses exactly the long responses worth reading. This walks the
- * text instead and only tracks whether it is inside a string, so a truncated
- * body still gets its shape back and a body that is not JSON at all comes out
- * unchanged.
+ * `JSON.parse` is not enough here twice over: the stored preview is a *prefix*,
+ * so it usually is not valid JSON at all, and an MCP response over
+ * streamable-HTTP is not JSON either — it is an SSE frame with the payload after
+ * `data: `. So this walks the text and tracks only whether it is inside a
+ * string: a truncated body still gets its shape back, a sentence that is not
+ * JSON comes out untouched, and a frame keeps its envelope on its own line.
  */
-export function indentJson(text) {
-  const source = String(text ?? "");
-  // No structure to shape: a plain sentence, and squeezing its spaces would be
-  // the one thing this function must not do. SSE frames (`data: {...}`) still
-  // have braces and go through the walk.
-  if (!/[{[]/.test(source)) return source.trim();
+function shape(text) {
   const pad = (depth) => "  ".repeat(depth);
   let out = "";
   let depth = 0;
   let inString = false;
   let escaped = false;
-  for (const char of source) {
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
     if (inString) {
       out += char;
       if (escaped) escaped = false;
@@ -32,8 +29,16 @@ export function indentJson(text) {
       inString = true;
       out += char;
     } else if (char === "{" || char === "[") {
-      depth += 1;
-      out += `${char}\n${pad(depth)}`;
+      // `{}` and `[]` are one token, not an opening a line above a closing.
+      const closing = char === "{" ? "}" : "]";
+      const rest = text.slice(index + 1).trimStart();
+      if (rest.startsWith(closing)) {
+        out += char + closing;
+        index = text.length - rest.length;
+      } else {
+        depth += 1;
+        out += `${char}\n${pad(depth)}`;
+      }
     } else if (char === "}" || char === "]") {
       depth = Math.max(0, depth - 1);
       out += `\n${pad(depth)}${char}`;
@@ -46,6 +51,22 @@ export function indentJson(text) {
     }
   }
   return out.trim();
+}
+
+export function indentJson(text) {
+  const source = String(text ?? "").replace(/\r\n?/g, "\n").trim();
+  // No structure to shape: a plain sentence, and squeezing its spaces would be
+  // the one thing this function must not do.
+  if (!/[{[]/.test(source)) return source;
+  const lines = source.split("\n");
+  // An unshaped body is one long line; an SSE body is `event: X` then `data: `.
+  if (!lines.some((line) => line.startsWith("data: "))) return shape(source);
+  return lines
+    .map((line) => {
+      const data = /^data: (.*)$/.exec(line);
+      return data ? `data: ${shape(data[1])}` : line;
+    })
+    .join("\n");
 }
 
 /** Handing the browser a file without a server round trip. */
