@@ -29,6 +29,7 @@ export default {
   "Stream": "Flujo",
   "Stream seq": "Sec. flujo",
   "Actor": "Actor",
+  "Actions": "Acciones",
   "system": "sistema",
   "Payload": "Carga útil",
   "This is the event as it was appended. Hashes and secrets are redacted before the row is served, so a missing field here was never readable.": "Este es el evento tal como se anexó. Los hashes y secretos se ocultan antes de servir la fila, así que un campo ausente aquí nunca fue legible.",

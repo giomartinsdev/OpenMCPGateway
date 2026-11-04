@@ -29,6 +29,7 @@ export default {
   "Stream": "流",
   "Stream seq": "流序号",
   "Actor": "操作者",
+  "Actions": "操作",
   "system": "系统",
   "Payload": "载荷",
   "This is the event as it was appended. Hashes and secrets are redacted before the row is served, so a missing field here was never readable.": "这是事件追加时的原样。哈希和机密在返回该行之前已脱敏，因此此处缺失的字段从未可读。",

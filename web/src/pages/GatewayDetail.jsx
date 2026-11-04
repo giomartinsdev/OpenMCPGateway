@@ -476,6 +476,7 @@ export function GatewayDetail({ id, me }) {
               <Bone height={60} radius={10} />
             )
           ) : (
+            <div className="table-scroll" tabIndex={0}>
             <table>
               <thead>
                 <tr>
@@ -485,7 +486,7 @@ export function GatewayDetail({ id, me }) {
                   <th>{t("Expires")}</th>
                   <th>{t("Seen")}</th>
                   <th>{t("Last used")}</th>
-                  <th />
+                  <th><span className="sr-only">{t("Actions")}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -580,6 +581,7 @@ export function GatewayDetail({ id, me }) {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
       </div>
