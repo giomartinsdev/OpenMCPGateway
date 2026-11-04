@@ -330,8 +330,7 @@ export function GatewayDetail({ id, me }) {
           <div style={{ display: "grid", gap: 10 }}>
             <Bone height={22} width={260} />
             <Bone height={34} />
-            <Bone height={34} />
-            <Bone height={34} />
+            <Bone height={34} width="60%" />
           </div>
         )}
       </Card>
@@ -424,110 +423,112 @@ export function GatewayDetail({ id, me }) {
               <Bone height={60} radius={10} />
             )
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("Label")}</th>
-                  <th>{t("Key id")}</th>
-                  <th className="num">{t("Issued")}</th>
-                  <th>{t("Expires")}</th>
-                  <th>{t("Seen")}</th>
-                  <th>{t("Last used")}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {header.api_keys.map((key) => (
-                  <tr key={key.key_id}>
-                    <td>{key.label}</td>
-                    {/* The id, not the subject: the subject is `api-key:<id>`
-                        and pasting that as a bearer is the mistake this column
-                        used to invite. */}
-                    <td className="mono hint">{key.key_id}</td>
-                    <td className="num hint">{relative(key.issued_at)}</td>
-                    <td className="hint">
-                      {(() => {
-                        const expiry = expiryLabel(t, key.expires_at);
-                        return expiry ? (
-                          <Badge kind={expiry.kind}>{expiry.text}</Badge>
-                        ) : (
-                          t("never")
-                        );
-                      })()}
-                    </td>
-                    <td className="hint">
-                      {key.revealed_at
-                        ? t("seen {when} by {who}", {
-                            when: relative(key.revealed_at),
-                            who: key.revealed_by ?? "—",
-                          })
-                        : key.recoverable
-                          ? t("never")
-                          : t("not available")}
-                    </td>
-                    {/* Read from the traffic log as far back as retention
-                        goes. "Never" here means "not since we started keeping
-                        the evidence", which is the only honest claim to make. */}
-                    <td className="hint">
-                      {key.last_used_at ? relative(key.last_used_at) : t("never")}
-                    </td>
-                    {canKeys && (
-                      <td className="actions">
-                        <button
-                          className="ghost icon"
-                          title={t("Show the key once")}
-                          aria-label={t("Show the key once")}
-                          disabled={!key.recoverable || !gateway || shownKey !== ""}
-                          onClick={() => {
-                            api.revealKey(id, key.key_id)
-                              .then((revealed) => {
-                                setShownKey(revealed.api_key);
-                                load();
-                              })
-                              .catch((e) => setError(e.message));
-                          }}
-                        >
-                          <EyeIcon />
-                        </button>
-                        <button
-                          className="ghost sm"
-                          disabled={!gateway}
-                          onClick={() => {
-                            if (!window.confirm(
-                              t("Rotate {label}? The current key stops working immediately.", {
-                                label: key.label,
-                              })
-                            )) return;
-                            api.rotateKey(id, key.key_id)
-                              .then((rotated) => {
-                                setNewKey(rotated.api_key);
-                                load();
-                              })
-                              .catch((e) => setError(e.message));
-                          }}
-                        >
-                          {t("rotate")}
-                        </button>
-                        <button
-                          className="ghost sm danger"
-                          disabled={!gateway}
-                          onClick={() => {
-                            if (!window.confirm(
-                              t("Revoke {label}? Callers using it get 401 at once.", {
-                                label: key.label,
-                              })
-                            )) return;
-                            api.revokeKey(id, key.key_id).then(load);
-                          }}
-                        >
-                          {t("revoke")}
-                        </button>
-                      </td>
-                    )}
+            <div className="table-scroll" tabIndex={0}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("Label")}</th>
+                    <th>{t("Key id")}</th>
+                    <th className="num">{t("Issued")}</th>
+                    <th>{t("Expires")}</th>
+                    <th>{t("Seen")}</th>
+                    <th>{t("Last used")}</th>
+                    <th><span className="sr-only">{t("Operations")}</span></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {header.api_keys.map((key) => (
+                    <tr key={key.key_id}>
+                      <td>{key.label}</td>
+                      {/* The id, not the subject: the subject is `api-key:<id>`
+                          and pasting that as a bearer is the mistake this column
+                          used to invite. */}
+                      <td className="mono hint">{key.key_id}</td>
+                      <td className="num hint">{relative(key.issued_at)}</td>
+                      <td className="hint">
+                        {(() => {
+                          const expiry = expiryLabel(t, key.expires_at);
+                          return expiry ? (
+                            <Badge kind={expiry.kind}>{expiry.text}</Badge>
+                          ) : (
+                            t("never")
+                          );
+                        })()}
+                      </td>
+                      <td className="hint">
+                        {key.revealed_at
+                          ? t("seen {when} by {who}", {
+                              when: relative(key.revealed_at),
+                              who: key.revealed_by ?? "—",
+                            })
+                          : key.recoverable
+                            ? t("never")
+                            : t("not available")}
+                      </td>
+                      {/* Read from the traffic log as far back as retention
+                          goes. "Never" here means "not since we started keeping
+                          the evidence", which is the only honest claim to make. */}
+                      <td className="hint">
+                        {key.last_used_at ? relative(key.last_used_at) : t("never")}
+                      </td>
+                      {canKeys && (
+                        <td className="actions">
+                          <button
+                            className="ghost icon"
+                            title={t("Show the key once")}
+                            aria-label={t("Show the key once")}
+                            disabled={!key.recoverable || !gateway || shownKey !== ""}
+                            onClick={() => {
+                              api.revealKey(id, key.key_id)
+                                .then((revealed) => {
+                                  setShownKey(revealed.api_key);
+                                  load();
+                                })
+                                .catch((e) => setError(e.message));
+                            }}
+                          >
+                            <EyeIcon />
+                          </button>
+                          <button
+                            className="ghost sm"
+                            disabled={!gateway}
+                            onClick={() => {
+                              if (!window.confirm(
+                                t("Rotate {label}? The current key stops working immediately.", {
+                                  label: key.label,
+                                })
+                              )) return;
+                              api.rotateKey(id, key.key_id)
+                                .then((rotated) => {
+                                  setNewKey(rotated.api_key);
+                                  load();
+                                })
+                                .catch((e) => setError(e.message));
+                            }}
+                          >
+                            {t("rotate")}
+                          </button>
+                          <button
+                            className="ghost sm danger"
+                            disabled={!gateway}
+                            onClick={() => {
+                              if (!window.confirm(
+                                t("Revoke {label}? Callers using it get 401 at once.", {
+                                  label: key.label,
+                                })
+                              )) return;
+                              api.revokeKey(id, key.key_id).then(load);
+                            }}
+                          >
+                            {t("revoke")}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       </div>

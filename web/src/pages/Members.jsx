@@ -161,7 +161,7 @@ export function Members({ me }) {
           }
         >
           {(rows) => (
-            <div className="table-scroll">
+            <div className="table-scroll" tabIndex={0}>
               <table>
                 <thead>
                   <tr>
@@ -180,13 +180,13 @@ export function Members({ me }) {
                       className="num"
                     />
                     <th>{t("ID")}</th>
-                    <th />
+                    <th><span className="sr-only">{t("Operations")}</span></th>
                   </tr>
                   <FilterRow
                     fields={[
                       { key: "email", label: "Email" },
                       null,
-                      null,
+                      { key: "created_at", label: "Joined" },
                       { key: "id", label: "ID" },
                       null,
                     ]}

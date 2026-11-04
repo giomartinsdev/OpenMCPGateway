@@ -95,7 +95,7 @@ export function HistoryPanel({ gateway, onRestored }) {
         }
       >
         {(rows) => (
-          <div className="table-scroll">
+          <div className="table-scroll" tabIndex={0}>
             <table>
               <thead>
                 <tr>
@@ -109,7 +109,7 @@ export function HistoryPanel({ gateway, onRestored }) {
                     onSort={setSort}
                     className="num"
                   />
-                  <th />
+                  <th><span className="sr-only">{t("Operations")}</span></th>
                 </tr>
                 <FilterRow fields={HISTORY_FIELDS} value={filters} onChange={setFilters} />
               </thead>
@@ -247,7 +247,7 @@ export function WebhooksPanel({ gateway }) {
             <tr>
               <th>{t("URL")}</th>
               <th>{t("Outcomes")}</th>
-              <th />
+              <th><span className="sr-only">{t("Operations")}</span></th>
             </tr>
           </thead>
           <tbody>

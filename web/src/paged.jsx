@@ -152,7 +152,7 @@ export function FilterRow({ fields, value, onChange }) {
             </span>
           </th>
         ) : (
-          <th key={`spacer-${index}`} />
+          <th key={`spacer-${index}`} role="presentation" />
         ),
       )}
     </tr>

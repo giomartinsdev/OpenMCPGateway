@@ -224,7 +224,7 @@ export function Gateways({ me }) {
           }
         >
           {(rows) => (
-            <div className="table-scroll">
+            <div className="table-scroll" tabIndex={0}>
               <table>
                 <thead>
                   <tr>
@@ -333,11 +333,15 @@ function CreateGateway({ onCreated }) {
         <div className="field">
           <label htmlFor="slug">{t("Slug")}</label>
           <input id="slug" value={form.slug} onChange={set("slug")} required
-                 // The hyphen is escaped because the `pattern` attribute is
-                 // compiled with the `v` flag, where a bare `-` inside a class is
-                 // an invalid character class — the whole pattern is then ignored
-                 // and the field silently stops validating.
-                 pattern="[a-z0-9\-]+" placeholder="rancher" className="mono" />
+                 // Two constraints, one attribute. The hyphen is escaped because
+                 // the attribute is compiled with the `v` flag, where a bare `-`
+                 // inside a class is an invalid character class and the whole
+                 // pattern is silently dropped. The shape is the server's
+                 // (`SLUG_RE` in domain/model/base.py): a slug starts and ends
+                 // alphanumeric, so `-a`, `a-` and 64 characters are refused here
+                 // instead of arriving as a 422 after the click.
+                 pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" placeholder="rancher"
+                 className="mono" />
           <div className="hint">
             {t("Becomes")} <span className="mono">/g/{form.slug || t("slug")}/mcp</span>
           </div>

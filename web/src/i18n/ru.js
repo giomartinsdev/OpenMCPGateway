@@ -32,6 +32,7 @@ export default {
   "Stream": "Поток",
   "Stream seq": "Номер в потоке",
   "Actor": "Актор",
+  "Actions": "Действия",
   "system": "система",
   "Payload": "Полезная нагрузка",
   "This is the event as it was appended. Hashes and secrets are redacted before the row is served, so a missing field here was never readable.": "Это событие в том виде, в каком оно было добавлено. Хеши и секреты вымарываются до выдачи строки, поэтому отсутствующее здесь поле никогда не было читаемым.",

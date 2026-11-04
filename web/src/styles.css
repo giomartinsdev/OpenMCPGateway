@@ -48,7 +48,9 @@
      on --panel-4, which is where the labels actually sit. Lightened until the
      worst case cleared AA rather than only the headline surface. */
   --fg-4: #9a968e;
-  --fg-5: #6f6c66;
+  /* 5.99:1 on --bg, 4.56:1 on --panel-4. The previous #6f6c66 measured 3.69:1
+     on --bg — same micro type as the light variant, same 4.5 floor. */
+  --fg-5: #938f87;
 
   /* signal */
   --apur: #3dd68c;
@@ -98,7 +100,10 @@
      panel. `--fg-4` is body-adjacent text, so the floor is 4.5 on the worst
      surface it lands on, not on white. */
   --fg-4: #666158;
-  --fg-5: #8b857a;
+  /* 5.30:1 on --bg and 4.67:1 on --panel-4, the darkest light surface. The
+     previous #8b857a measured 3.21:1 on --bg: --fg-5 is micro type (eyebrows,
+     nav labels, footer), which AA treats as body text, not as a decoration. */
+  --fg-5: #68625a;
 
   --apur: #128a52;
   --warn: #8a5f00;
@@ -286,6 +291,7 @@ code, .mono {
   display: flex;
   align-items: center;
   gap: 9px;
+  min-height: 24px; /* WCAG 2.5.8: the text is 15px, the target is not */
   padding: 0 var(--s2);
   border-radius: var(--radius-xs);
 }
@@ -346,7 +352,13 @@ a.logo:hover .logo-text { color: var(--fg); }
   font-size: var(--t-label);
   margin-bottom: 2px;
 }
-.crumbs a { color: var(--fg-3); }
+.crumbs a {
+  color: var(--fg-3);
+  /* 18px of text; 24px of target. The padding grows the box, the negative
+     margin takes the growth back out of the line so nothing below moves. */
+  padding: 3px 0;
+  margin: -3px 0;
+}
 .crumbs a:hover { color: var(--fg); }
 .crumbs .sep { color: var(--fg-5); }
 
@@ -389,6 +401,12 @@ a.logo:hover .logo-text { color: var(--fg); }
 
 /* Tables scroll inside their card instead of pushing the page sideways. */
 .table-scroll { overflow-x: auto; margin: 0 calc(var(--s4) * -1); padding: 0 var(--s4) 2px; }
+/* `.sr-only` is an absolutely positioned 1px box, so it resolves against the
+   nearest positioned ancestor and lands at its inline offset. Without one here
+   it resolves against the viewport, escapes the scroll container and widens the
+   document by its own offset — which is what put a 16px horizontal scrollbar on
+   /roles once the `th` got a real accessible name. */
+.table-scroll { position: relative; }
 
 /* -- stats -------------------------------------------------------------- */
 
@@ -490,7 +508,12 @@ tr.filters .clear-filter:hover { color: var(--fg); background: var(--panel-4); }
 /* A sortable header says so: the affordance is the arrow slot, which holds
    still so the label does not jump when the direction changes. */
 thead .sort {
-  height: auto;
+  /* Label 14px, target 24 (WCAG 2.5.8). A pseudo-element cannot do this here: the
+     `th` clips nothing, but the row's own box ends 3px below the label and the
+     overflow past it hits the card, not the button. Growing the button and pulling
+     the extra height back with a negative margin keeps the header row 23px. */
+  min-height: 24px;
+  margin: -5px 0;
   padding: 0;
   gap: 4px;
   border-radius: 3px;
@@ -680,7 +703,9 @@ label {
   white-space: nowrap;
 }
 .badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.badge.ok { background: rgba(var(--ok-rgb), 0.1); color: var(--apur); box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.26); }
+/* The accent is a fill, not a text colour: #128a52 on its own 10% tint measured
+   3.69:1. `--notice-ok-fg` is the token that already exists for readable-on-tint. */
+.badge.ok { background: rgba(var(--ok-rgb), 0.1); color: var(--notice-ok-fg); box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.26); }
 .badge.warn { background: rgba(var(--warn-rgb), 0.1); color: var(--warn); box-shadow: inset 0 0 0 1px rgba(var(--warn-rgb), 0.26); }
 .badge.err { background: rgba(var(--danger-rgb), 0.1); color: var(--danger); box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.26); }
 .badge.info { background: rgba(var(--tint), 0.06); color: var(--fg-2); box-shadow: inset 0 0 0 1px var(--line-2); }
