@@ -9,6 +9,7 @@ import json
 import secrets
 import time
 from datetime import UTC, datetime
+from ipaddress import ip_address, ip_network
 from typing import Any
 
 from starlette.datastructures import Headers
@@ -481,17 +482,48 @@ def _client_ip(
     which matters here because the traffic log is the evidence for "who called
     this", not a display field.
 
-    `trusted_proxies` names the peers allowed to speak for someone else. The
-    *left-most* entry is taken, because that is the address the outermost proxy
-    observed; the rest are the hops it traversed and are just as forgeable.
+    `trusted_proxies` names the peers allowed to speak for someone else: an
+    address, or a CIDR — the ingress pod's address changes on every restart, so a
+    list of exact addresses would silently stop recording callers after a rollout.
+
+    The chain is read from the *right*, and the walk stops at the first entry that
+    is not itself a trusted proxy. A caller may send its own `X-Forwarded-For`,
+    and the proxy appends the address it saw, so the left-most entry is whatever
+    the caller felt like claiming; each hop going right was observed by the hop
+    before it, and trusting an entry the proxy did not write would be trusting the
+    caller's claim again.
     """
+    if not _peer_trusted(scope, trusted_proxies):
+        return _peer(scope)
     forwarded = headers.get("x-forwarded-for")
-    if forwarded and _peer_trusted(scope, trusted_proxies):
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
+    if not forwarded:
+        return _peer(scope)
+    hops = [_clean_hop(part) for part in forwarded.split(",")]
+    for hop in reversed(hops):
+        if hop is None:
+            # Unparseable: the rest of the chain is unverifiable, and guessing
+            # which entry was meant is how a log starts naming an address that
+            # never made a call.
+            break
+        if not _address_trusted(hop, trusted_proxies):
+            return hop
+    return _peer(scope)
+
+def _peer(scope: Scope) -> str | None:
     client = scope.get("client")
     return client[0] if client else None
+
+def _clean_hop(value: str) -> str | None:
+    """One `X-Forwarded-For` entry as a bare address, or None if it is not one."""
+    hop = value.strip()
+    if hop.startswith("["):  # [2001:db8::1]:443
+        hop = hop[1:].split("]", 1)[0]
+    elif hop.count(":") == 1:  # 203.0.113.9:8080
+        hop = hop.split(":", 1)[0]
+    try:
+        return str(ip_address(hop))
+    except ValueError:
+        return None
 
 def _peer_trusted(scope: Scope, trusted_proxies: tuple[str, ...]) -> bool:
     """Whether the immediate peer is one whose forwarding headers are believed.
@@ -504,5 +536,26 @@ def _peer_trusted(scope: Scope, trusted_proxies: tuple[str, ...]) -> bool:
         return False
     if "*" in trusted_proxies:
         return True
-    client = scope.get("client")
-    return bool(client) and client[0] in trusted_proxies
+    peer = _peer(scope)
+    return bool(peer) and _address_trusted(peer, trusted_proxies)
+
+def _address_trusted(address: str, trusted_proxies: tuple[str, ...]) -> bool:
+    """`address` is one of the trusted entries, exactly or inside a listed CIDR."""
+    try:
+        parsed = ip_address(address)
+    except ValueError:
+        return False
+    for entry in trusted_proxies:
+        if entry == "*":
+            return True
+        try:
+            if "/" in entry:
+                if parsed in ip_network(entry, strict=False):
+                    return True
+            elif parsed == ip_address(entry):
+                return True
+        except ValueError:
+            # A typo in the deployment config must not widen the list; it just
+            # does not match, and the next entry gets a turn.
+            continue
+    return False
