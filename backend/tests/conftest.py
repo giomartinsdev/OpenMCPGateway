@@ -161,7 +161,13 @@ async def _start_server(container: Container) -> str:
     app = GatewayDispatcher(admin)
 
     server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        uvicorn.Config(
+            app, host="127.0.0.1", port=port, log_level="warning",
+            # Same as `omg serve`: the guard owns the forwarded-address decision,
+            # so a test that forges the header must be refused for the same reason
+            # production refuses it.
+            proxy_headers=False,
+        )
     )
     task = asyncio.create_task(server.serve())
     for _ in range(200):

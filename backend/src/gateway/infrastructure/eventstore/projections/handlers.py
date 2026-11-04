@@ -333,6 +333,10 @@ async def on_request(session: AsyncSession, event: Event) -> None:
             method=event.method,
             reason=event.reason,
             request_id=event.request_id,
+            bytes_in=event.bytes_in,
+            bytes_out=event.bytes_out,
+            request_preview=event.request_preview,
+            response_preview=event.response_preview,
             occurred_at=event.occurred_at,
         )
         .on_conflict_do_nothing(index_elements=[rm_requests_tail.c.event_id])

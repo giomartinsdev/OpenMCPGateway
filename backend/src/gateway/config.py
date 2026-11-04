@@ -74,6 +74,20 @@ class Settings(BaseModel):
     #: Days of traffic to keep. `0` keeps everything, which is the default: an
     #: unset horizon must not delete history. The audit log is never pruned.
     retention_days: int = 0
+    #: Largest request body the guard will buffer. The guard reads the body to
+    #: inspect it, so this is also the largest allocation a single call can
+    #: cause. 1 MiB is generous for JSON-RPC: the biggest real payload is a tool
+    #: call with a long argument, and a `tools/list` from a 500-tool server.
+    max_body_bytes: int = 1_048_576
+    #: Peer addresses whose `X-Forwarded-For` is believed. Empty means "nobody",
+    #: which makes the header a claim rather than an address. Set it to the
+    #: ingress/bridge CIDR; `*` trusts every peer, which is only correct when
+    #: nothing but the proxy can reach this port.
+    trusted_proxies: tuple[str, ...] = Field(default_factory=tuple)
+    #: Failed password attempts allowed per address per window before the sign-in
+    #: route stops answering. The password form is the fallback when the identity
+    #: provider is broken, so it is also the door worth guessing at.
+    login_attempts_per_minute: int = 5
     log_level: str = "info"
 
     @field_validator("base_url")
@@ -145,6 +159,13 @@ class Settings(BaseModel):
             ),
             redis_url=_opt("OMG_REDIS_URL"),
             retention_days=_int("OMG_RETENTION_DAYS", 0),
+            max_body_bytes=_int("OMG_MAX_BODY_BYTES", 1_048_576),
+            trusted_proxies=tuple(
+                item.strip()
+                for item in os.environ.get("OMG_TRUSTED_PROXIES", "").split(",")
+                if item.strip()
+            ),
+            login_attempts_per_minute=_int("OMG_LOGIN_ATTEMPTS_PER_MINUTE", 5),
             operator_allowlist=tuple(
                 email.strip().lower()
                 for email in os.environ.get("OMG_OPERATOR_ALLOWLIST", "").split(",")

@@ -301,9 +301,9 @@ export const SAMPLE_MEMBERS = [
 ];
 
 export const SAMPLE_REQUESTS = [
-  { occurred_at: new Date().toISOString(), subject: "api-key:key_0000", outcome: "allowed", status: 200, duration_ms: 12, ip: "10.0.0.1" },
-  { occurred_at: new Date().toISOString(), subject: "google:someone@example.com", outcome: "forbidden", status: 403, duration_ms: 3, ip: "10.0.0.2" },
-  { occurred_at: new Date().toISOString(), subject: null, outcome: "unauthenticated", status: 401, duration_ms: 1, ip: "10.0.0.3" },
+  { occurred_at: new Date().toISOString(), subject: "api-key:key_0000", outcome: "allowed", status: 200, duration_ms: 12, bytes_in: 142, bytes_out: 1893, ip: "10.0.0.1" },
+  { occurred_at: new Date().toISOString(), subject: "google:someone@example.com", outcome: "forbidden", status: 403, duration_ms: 3, bytes_in: 98, bytes_out: 0, ip: "10.0.0.2" },
+  { occurred_at: new Date().toISOString(), subject: null, outcome: "unauthenticated", status: 401, duration_ms: 1, bytes_in: 0, bytes_out: 0, ip: "10.0.0.3" },
 ];
 
 export const SAMPLE_EVENTS = [

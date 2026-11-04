@@ -440,6 +440,18 @@
           [
             "OMG_RETENTION_DAYS",
             "Apaga linhas do log de requisições e read models de requisição mais antigos que N dias, no boot. `0` (padrão) guarda tudo; eventos de auditoria nunca são podados"
+          ],
+          [
+            "OMG_MAX_BODY_BYTES",
+            "Maior corpo de requisição que o guard lê, em bytes (padrão `1048576`). Qualquer coisa maior é recusada com `413` antes de ser encaminhada"
+          ],
+          [
+            "OMG_TRUSTED_PROXIES",
+            "Endereços ou CIDRs separados por vírgula cujo `X-Forwarded-For` é levado a sério, para o log de tráfego gravar o chamador e não o ingress. Vazio (padrão) não confia em ninguém; `*` confia em qualquer peer e só está correto quando a porta é privada"
+          ],
+          [
+            "OMG_LOGIN_ATTEMPTS_PER_MINUTE",
+            "Tentativas de login por senha permitidas por endereço por minuto (padrão `5`). Acima disso a rota responde `429` com `Retry-After`"
           ]
         ]
       }

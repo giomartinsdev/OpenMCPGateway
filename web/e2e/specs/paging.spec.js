@@ -241,6 +241,10 @@ test("clicking a request expands it in a drawer with the whole row", async ({ pa
   await expect(drawer).toContainText("refusing");
   await expect(drawer).toContainText("Event id");
   await expect(drawer).toContainText("before it reached the upstream server");
+  // A body that was never read is said out loud rather than drawn as an empty
+  // box, and the bytes that crossed the wire get a column of their own.
+  await expect(drawer).toContainText("The request body was not kept for this call.");
+  await expect(page.getByRole("columnheader", { name: "Size" })).toBeVisible();
   await expect(drawer.getByRole("button", { name: "Filter this gateway" })).toBeVisible();
 });
 

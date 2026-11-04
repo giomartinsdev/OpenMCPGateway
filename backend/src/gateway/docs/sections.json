@@ -440,6 +440,18 @@
           [
             "OMG_RETENTION_DAYS",
             "Delete request-log rows and request read models older than N days, at boot. `0` (default) keeps everything; audit events are never pruned"
+          ],
+          [
+            "OMG_MAX_BODY_BYTES",
+            "Largest request body the guard will read, in bytes (default `1048576`). Anything bigger is refused with `413` before it is forwarded"
+          ],
+          [
+            "OMG_TRUSTED_PROXIES",
+            "Comma-separated addresses or CIDRs whose `X-Forwarded-For` is believed, so the traffic log records the caller and not the ingress. Empty (default) trusts nobody; `*` trusts every peer and is only correct when the port is private"
+          ],
+          [
+            "OMG_LOGIN_ATTEMPTS_PER_MINUTE",
+            "Password sign-in attempts allowed per address per minute (default `5`). Past that the route answers `429` with `Retry-After`"
           ]
         ]
       }

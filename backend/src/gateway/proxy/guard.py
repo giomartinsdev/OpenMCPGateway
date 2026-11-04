@@ -18,10 +18,19 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from gateway.log import log
 from gateway.observability import Metrics, RequestRecorder
 from gateway.proxy.identity import GatewayAuth, Identity, is_key_subject
+from gateway.proxy.payload import preview
 from gateway.proxy.rate_limit import RateLimiter
 
 _RESOURCE_METADATA = "/.well-known/oauth-protected-resource"
 
+#: Largest response body the guard will keep a copy of.
+#:
+#: The response is *streamed* to the caller; this only decides how much of it is
+#: retained to build a preview and a byte count. Past the cap the bytes are still
+#: forwarded and still counted — dropping them from the preview is the only thing
+#: that changes, because buffering a whole SSE stream to describe it would trade
+#: a debugging aid for the memory the body cap just bought.
+_RESPONSE_PREVIEW_BYTES = 256 * 1024
 
 class GuardMiddleware:
     """Auth + authorisation + rate limit + observation for one gateway mount."""
@@ -29,7 +38,8 @@ class GuardMiddleware:
     def __init__(self, app: ASGIApp, *, config: dict[str, Any],
                  auth: GatewayAuth, limiter: RateLimiter,
                  recorder: RequestRecorder, metrics: Metrics, base_url: str,
-                 read_models: Any = None) -> None:
+                 read_models: Any = None, max_body_bytes: int = 1_048_576,
+                 trusted_proxies: tuple[str, ...] = ()) -> None:
         self.app = app
         self.config = config
         self.auth = auth
@@ -42,6 +52,11 @@ class GuardMiddleware:
         self.base_url = base_url.rstrip("/")
         self.prefix = f"/g/{config['slug']}"
         self.inner_path = "/mcp"
+        #: The body is buffered so it can be inspected, so this is also the
+        #: largest allocation one call can cause.
+        self.max_body_bytes = max_body_bytes
+        #: Peers whose `X-Forwarded-For` is believed. Empty means none.
+        self.trusted_proxies = trusted_proxies
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -58,10 +73,16 @@ class GuardMiddleware:
         #: explanation. `outcome` says "forbidden"; this says which gate.
         reason = ""
         tool: str | None = None
+        #: The payload trace. Filled in as the call proceeds, recorded in the
+        #: `finally` whether it succeeded, was refused, or raised.
+        request_body = b""
+        bytes_out = 0
+        response_body = b""
         #: Minted at the edge when the caller sent none, so two anonymous calls
         #: never share a row. Length-capped: a header is attacker-controlled and
         #: ends up in a database column and a log line.
         request_id = _request_id(headers)
+        client_ip = _client_ip(scope, headers, self.trusted_proxies)
 
         try:
             identity = await self.auth.resolve(_bearer(headers))
@@ -83,76 +104,100 @@ class GuardMiddleware:
             else:
                 # Downstream code may read this; nothing authenticates off it.
                 scope["omg.identity"] = identity
-                body = await _read_body(receive)
-                receive = _replay(body, receive)
-                tool = _called_tool(body)
-                blocked = self._blocked_tool(body, identity.source)
-                if blocked is not None:
-                    # A tool outside the allowlist is a 403 with the name in it,
-                    # not a silent removal from `tools/list`: the caller asked
-                    # for something specific, and "unknown tool" would send it
-                    # looking for a typo in its own config.
-                    outcome, status = "forbidden", 403
-                    reason = "tool not in allowlist"
+                body, too_large = await _read_body(
+                    receive, self.max_body_bytes
+                )
+                if too_large:
+                    # Refused before the body is buffered in full: the point of
+                    # the cap is to not hold it, so the overflow is dropped as it
+                    # arrives rather than collected and then rejected.
+                    outcome, status = "forbidden", 413
+                    reason = "request body too large"
                     response = JSONResponse(
                         {
-                            "error": "forbidden",
-                            "message": f"tool '{blocked}' is not exposed by gateway "
-                                       f"'{self.config['slug']}'",
+                            "error": "payload_too_large",
+                            "message": f"body exceeds {self.max_body_bytes} bytes",
                         },
-                        status_code=403,
-                    )
-                # Rate limiting counts MCP *requests* (JSON-RPC messages that
-                # carry an id), not HTTP POSTs: one MCP call is a handshake plus
-                # a call on the wire, and charging for the transport would make
-                # a limit of N mean fewer than N calls to the user.
-                elif _is_jsonrpc_request(body) and (
-                    refusal := await self._refusal(identity.subject)
-                ) is not None:
-                    outcome, status, reason = refusal
-                    response = JSONResponse(
-                        {"error": outcome, "message": reason},
-                        status_code=status,
-                        headers={"Retry-After": "60"} if status == 429 else None,
+                        status_code=413,
                     )
                 else:
-                    status = await _run_capturing_status(
-                        self.app, self._rewrite(scope), receive, send, request_id
-                    )
+                    request_body = body
+                    receive = _replay(body, receive)
+                    tool = _called_tool(body)
+                    blocked = self._blocked_tool(body, identity.source)
+                    if blocked is not None:
+                        # A tool outside the allowlist is a 403 with the name in
+                        # it, not a silent removal from `tools/list`: the caller
+                        # asked for something specific, and "unknown tool" would
+                        # send it looking for a typo in its own config.
+                        outcome, status = "forbidden", 403
+                        reason = "tool not in allowlist"
+                        response = JSONResponse(
+                            {
+                                "error": "forbidden",
+                                "message": f"tool '{blocked}' is not exposed by gateway "
+                                           f"'{self.config['slug']}'",
+                            },
+                            status_code=403,
+                        )
+                    # Rate limiting counts MCP *requests* (JSON-RPC messages that
+                    # carry an id), not HTTP POSTs: one MCP call is a handshake
+                    # plus a call on the wire, and charging for the transport
+                    # would make a limit of N mean fewer than N calls to the user.
+                    elif _is_jsonrpc_request(body) and (
+                        refusal := await self._refusal(identity.subject)
+                    ) is not None:
+                        outcome, status, reason = refusal
+                        response = JSONResponse(
+                            {"error": outcome, "message": reason},
+                            status_code=status,
+                            headers={"Retry-After": "60"} if status == 429 else None,
+                        )
+                    else:
+                        status, bytes_out, response_body = await _run_traced(
+                            self.app, self._rewrite(scope), receive, send, request_id
+                        )
         except Exception:
             outcome = "error"
             status = 502
             reason = "upstream error"
             raise
         finally:
+            duration_ms = int((time.perf_counter() - started) * 1000)
             log.info(
                 "proxy.request",
                 gateway=self.config["slug"],
                 subject=identity.subject if identity else "anonymous",
                 outcome=outcome,
                 status=status,
-                duration_ms=int((time.perf_counter() - started) * 1000),
-                ip=_client_ip(scope, headers),
+                duration_ms=duration_ms,
+                ip=client_ip,
                 method=scope.get("method", "POST"),
+                bytes_in=len(request_body),
+                bytes_out=bytes_out,
             )
             self.metrics.observe(
                 gateway=self.config["slug"],
                 outcome=outcome,
                 status=status,
-                duration_ms=int((time.perf_counter() - started) * 1000),
+                duration_ms=duration_ms,
             )
             await self.recorder.record(
                 gateway_id=self.config["id"],
                 subject=identity.subject if identity else "anonymous",
                 outcome=outcome,
                 status=status,
-                duration_ms=int((time.perf_counter() - started) * 1000),
-                ip=_client_ip(scope, headers),
+                duration_ms=duration_ms,
+                ip=client_ip,
                 tool=tool,
                 method=scope.get("method", "POST"),
                 reason=reason,
                 request_id=request_id,
                 gateway_slug=self.config["slug"],
+                bytes_in=len(request_body),
+                bytes_out=bytes_out,
+                request_preview=preview(request_body),
+                response_preview=preview(response_body),
             )
 
         if response is not None:
@@ -264,22 +309,37 @@ class GuardMiddleware:
         )
 
 
-async def _read_body(receive: Receive) -> bytes:
+async def _read_body(
+    receive: Receive, limit: int = 1_048_576,
+) -> tuple[bytes, bool]:
     """Consume and buffer the request body so it can be inspected and replayed.
 
     `receive` is a one-shot stream: reading it for rate limiting would leave the
     downstream app with an empty body, so the bytes are captured here and handed
     back through `_replay`.
+
+    Returns `(body, too_large)`. Past `limit` the remaining chunks are read and
+    discarded rather than accumulated: the point of the cap is to not hold the
+    body, so collecting it first and rejecting it after would defeat it. The
+    stream still has to be drained, or the client sees a connection reset
+    instead of the 413 that explains why.
     """
     chunks: list[bytes] = []
+    total = 0
+    too_large = False
     while True:
         message = await receive()
         if message["type"] == "http.disconnect":
             break
-        chunks.append(message.get("body", b""))
+        chunk = message.get("body", b"")
+        total += len(chunk)
+        if total > limit:
+            too_large = True
+        elif not too_large:
+            chunks.append(chunk)
         if not message.get("more_body", False):
             break
-    return b"".join(chunks)
+    return (b"" if too_large else b"".join(chunks)), too_large
 
 
 def _replay(body: bytes, receive: Receive) -> Receive:
@@ -344,30 +404,43 @@ def _message_has_id(payload: Any) -> bool:
     return isinstance(payload, dict) and payload.get("id") is not None
 
 
-async def _run_capturing_status(
+async def _run_traced(
     app: ASGIApp, scope: Scope, receive: Receive, send: Send,
     request_id: str = "",
-) -> int:
-    """Run the downstream app, report the status it sent, stamp the request id.
+) -> tuple[int, int, bytes]:
+    """Run the downstream app; report status, body bytes and a retained prefix.
 
     The header is added by wrapping `send` rather than by wrapping the response:
     the proxy streams SSE, and rebuilding a streamed response to add one header
     would mean buffering it.
+
+    Response bytes are counted in full and retained only up to
+    `_RESPONSE_PREVIEW_BYTES`. Everything past that is forwarded untouched and
+    still counted, so the number in the log stays exact while the memory cost of
+    describing it stays bounded.
     """
     captured = 0
+    total = 0
+    kept = bytearray()
 
     async def wrapped(message: Any) -> None:
-        nonlocal captured
+        nonlocal captured, total
         if message["type"] == "http.response.start":
             captured = message["status"]
             if request_id:
                 headers = list(message.get("headers") or [])
                 headers.append((b"x-request-id", request_id.encode()))
                 message = {**message, "headers": headers}
+        elif message["type"] == "http.response.body":
+            chunk = message.get("body", b"")
+            total += len(chunk)
+            room = _RESPONSE_PREVIEW_BYTES - len(kept)
+            if room > 0 and chunk:
+                kept.extend(chunk[:room])
         await send(message)
 
     await app(scope, receive, wrapped)
-    return captured or 200
+    return captured or 200, total, bytes(kept)
 
 
 def _this_month() -> str:
@@ -398,9 +471,38 @@ def _bearer(headers: Headers) -> str | None:
     return token.strip() if scheme.lower() == "bearer" and token.strip() else None
 
 
-def _client_ip(scope: Scope, headers: Headers) -> str | None:
+def _client_ip(
+    scope: Scope, headers: Headers, trusted_proxies: tuple[str, ...] = (),
+) -> str | None:
+    """The caller's address, believing `X-Forwarded-For` only when it may.
+
+    The header is written by whoever is talking to us. Trusting it from an
+    arbitrary peer turns the audit trail into something the caller can dictate —
+    which matters here because the traffic log is the evidence for "who called
+    this", not a display field.
+
+    `trusted_proxies` names the peers allowed to speak for someone else. The
+    *left-most* entry is taken, because that is the address the outermost proxy
+    observed; the rest are the hops it traversed and are just as forgeable.
+    """
     forwarded = headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    if forwarded and _peer_trusted(scope, trusted_proxies):
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
     client = scope.get("client")
     return client[0] if client else None
+
+def _peer_trusted(scope: Scope, trusted_proxies: tuple[str, ...]) -> bool:
+    """Whether the immediate peer is one whose forwarding headers are believed.
+
+    `*` trusts everyone, which is only correct when nothing but the proxy can
+    reach the port — the same trade a `trusted_hosts="*"` makes, and the reason
+    it is opt-in rather than the default.
+    """
+    if not trusted_proxies:
+        return False
+    if "*" in trusted_proxies:
+        return True
+    client = scope.get("client")
+    return bool(client) and client[0] in trusted_proxies

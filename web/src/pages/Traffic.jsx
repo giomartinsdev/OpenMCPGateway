@@ -22,6 +22,7 @@ const FIELDS = [
   { key: "outcome", label: "Outcome" },
   { key: "status", label: "Status" },
   null, // latency is a number, and nobody filters a log by milliseconds
+  null, // size is a number for the same reason
   { key: "tool", label: "Tool" },
   { key: "ip", label: "IP" },
   { key: "id", label: "ID" },
@@ -44,6 +45,55 @@ function rejected(stats) {
     (stats?.by_outcome?.unauthenticated ?? 0) +
     (stats?.by_outcome?.forbidden ?? 0) +
     (stats?.by_outcome?.rate_limited ?? 0)
+  );
+}
+
+/**
+ * "1.2 kB" — a size a person can compare at a glance.
+ *
+ * Binary units, because this counts bytes of JSON: `1 kB` meaning 1024 is the
+ * convention every tool on the other side of this log already uses, and mixing
+ * it with the decimal one would make two rows disagree about the same call.
+ */
+function bytes(count) {
+  const value = Number(count ?? 0);
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "kB", "MB", "GB"];
+  let scaled = value;
+  let unit = 0;
+  while (scaled >= 1024 && unit < units.length - 1) {
+    scaled /= 1024;
+    unit += 1;
+  }
+  const rounded = scaled >= 100 || unit === 0 ? Math.round(scaled) : scaled.toFixed(1);
+  return `${rounded} ${units[unit]}`;
+}
+
+/**
+ * One preview, or the sentence that explains why there is none.
+ *
+ * `<pre>` and not a table cell: the body is JSON, and re-flowing it to a column
+ * width is how a preview becomes unreadable exactly when someone needs it. It
+ * scrolls horizontally instead of wrapping, so a long line stays one line.
+ */
+function PayloadBlock({ title, body, empty }) {
+  const t = useT();
+  if (!body) {
+    return (
+      <div className="payload-block">
+        <h3 className="payload-title">{title}</h3>
+        <p className="hint" style={{ margin: 0 }}>{empty}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="payload-block">
+      <h3 className="payload-title">
+        {title}
+        <span className="hint">{t("{count} characters", { count: body.length })}</span>
+      </h3>
+      <pre className="payload-body">{body}</pre>
+    </div>
   );
 }
 
@@ -293,6 +343,7 @@ export function Traffic() {
                       onSort={setSort}
                       className="num"
                     />
+                    <th className="num">{t("Size")}</th>
                     <th>{t("Tool")}</th>
                     <th>{t("IP")}</th>
                     <th>{t("ID")}</th>
@@ -320,6 +371,9 @@ export function Traffic() {
                       </td>
                       <td className="num">{request.status}</td>
                       <td className="num">{request.duration_ms} ms</td>
+                      <td className="num mono hint">
+                        {bytes(request.bytes_in)} → {bytes(request.bytes_out)}
+                      </td>
                       <td className="mono hint">{request.tool || "—"}</td>
                       <td className="mono hint">{request.ip || "—"}</td>
                       <td className="mono hint">{request.event_id}</td>
@@ -364,6 +418,19 @@ export function Traffic() {
               ],
               [t("Status"), open.status],
               [t("Latency"), `${open.duration_ms} ms`],
+              // The pair that turns a row into a trace. Shown even when zero,
+              // because "0 B out" on an allowed call is itself the finding: the
+              // upstream answered with an empty body.
+              [
+                t("Payload"),
+                <span className="inline-pair">
+                  <span className="mono">{bytes(open.bytes_in)}</span>
+                  <span className="hint">{t("in")}</span>
+                  <span className="arrow" aria-hidden="true">→</span>
+                  <span className="mono">{bytes(open.bytes_out)}</span>
+                  <span className="hint">{t("out")}</span>
+                </span>,
+              ],
               [t("Method"), <span className="mono">{open.method}</span>],
               [t("Tool"), <span className="mono">{open.tool || "—"}</span>],
               [t("IP"), <span className="mono">{open.ip || "—"}</span>],
@@ -377,6 +444,21 @@ export function Traffic() {
               [t("Event id"), <span className="mono">{open.event_id}</span>],
               [t("Gateway id"), <span className="mono">{open.gateway_id}</span>],
             ]}
+          />
+          {/* The bodies, as a direction rather than a table: "what I sent" and
+              "what came back" are one question asked twice, and a reader
+              comparing two previews reads them against each other. Each block is
+              absent when there is nothing to show, so an empty box never stands
+              in for an unread body. */}
+          <PayloadBlock
+            title={t("What went in")}
+            body={open.request_preview}
+            empty={t("The request body was not kept for this call.")}
+          />
+          <PayloadBlock
+            title={t("What came back")}
+            body={open.response_preview}
+            empty={t("The upstream sent nothing, or the call was refused before it was forwarded.")}
           />
           <p className="hint" style={{ marginBottom: 0 }}>
             {open.outcome === "allowed"

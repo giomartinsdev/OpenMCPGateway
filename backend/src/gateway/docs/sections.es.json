@@ -440,6 +440,18 @@
           [
             "OMG_RETENTION_DAYS",
             "Borra filas del log de peticiones y read models de petición más antiguos que N días, al arrancar. `0` (por defecto) lo guarda todo; los eventos de auditoría nunca se podan"
+          ],
+          [
+            "OMG_MAX_BODY_BYTES",
+            "Cuerpo de petición máximo que el guard lee, en bytes (por defecto `1048576`). Todo lo mayor se rechaza con `413` antes de reenviarse"
+          ],
+          [
+            "OMG_TRUSTED_PROXIES",
+            "Direcciones o CIDR separados por comas cuyo `X-Forwarded-For` se cree, para que el log de tráfico anote al llamante y no al ingress. Vacío (por defecto) no confía en nadie; `*` confía en cualquier peer y solo es correcto si el puerto es privado"
+          ],
+          [
+            "OMG_LOGIN_ATTEMPTS_PER_MINUTE",
+            "Intentos de inicio de sesión con contraseña permitidos por dirección por minuto (por defecto `5`). Por encima, la ruta responde `429` con `Retry-After`"
           ]
         ]
       }

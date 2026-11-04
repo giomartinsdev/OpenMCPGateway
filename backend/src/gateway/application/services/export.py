@@ -12,7 +12,9 @@ import io
 from typing import Any
 
 #: Column order, and the header row. Fixed, because a spreadsheet formula that
-#: referenced `C` should keep meaning `status`.
+#: referenced `C` should keep meaning `status`. The byte counts sit next to the
+#: latency because a size and a duration are the same kind of question, and the
+#: previews are last: they are the only columns that can hold a newline.
 COLUMNS: tuple[str, ...] = (
     "occurred_at",
     "gateway",
@@ -21,6 +23,8 @@ COLUMNS: tuple[str, ...] = (
     "outcome",
     "status",
     "duration_ms",
+    "bytes_in",
+    "bytes_out",
     "tool",
     "method",
     "ip",

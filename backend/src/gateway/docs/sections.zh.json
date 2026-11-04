@@ -440,6 +440,18 @@
           [
             "OMG_RETENTION_DAYS",
             "启动时删除早于 N 天的请求日志行与请求 read model。`0`（默认）全部保留；审计事件永不清理"
+          ],
+          [
+            "OMG_MAX_BODY_BYTES",
+            "guard 读取的请求体上限，单位字节（默认 `1048576`）。更大的请求在转发前即以 `413` 拒绝"
+          ],
+          [
+            "OMG_TRUSTED_PROXIES",
+            "以逗号分隔的地址或 CIDR，其 `X-Forwarded-For` 会被采信，使流量日志记录调用方而不是 ingress。为空（默认）表示不信任任何对端；`*` 信任所有对端，仅在端口不对外时正确"
+          ],
+          [
+            "OMG_LOGIN_ATTEMPTS_PER_MINUTE",
+            "每个地址每分钟允许的密码登录尝试次数（默认 `5`）。超出后该路由以 `429` 加 `Retry-After` 响应"
           ]
         ]
       }

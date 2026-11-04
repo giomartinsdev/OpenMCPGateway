@@ -37,8 +37,34 @@ def _start_session(response: Response, container: Any, *, operator_id: str,
 
 
 @router.post("/auth/login")
-async def login(payload: LoginRequest, response: Response,
+async def login(payload: LoginRequest, request: Request, response: Response,
                 container: ContainerDep) -> dict[str, Any]:
+    """The password form. Throttled per (address, email) before the check.
+
+    This is the fallback when the identity provider is broken, which makes it the
+    door worth guessing at: without a limit, an attacker with a word list has as
+    many attempts as the network allows. The bucket is keyed by both the address
+    and the address being tried, so one account under attack does not lock out
+    everybody behind the same NAT, and a distributed attempt on one account still
+    hits the same bucket once the address is matched.
+    """
+    limit = container.settings.login_attempts_per_minute
+    # Keyed by (peer, address being tried). Keying by the email alone would let
+    # anyone lock a known account out by failing on purpose; keying by the peer
+    # alone would let one noisy address starve everyone behind the same NAT.
+    # A distributed attempt on one account is a different attack and needs a
+    # global counter, which this deployment does not have.
+    #
+    # The limiter is the proxy's own, so a broken Redis degrades both budgets the
+    # same way instead of stopping one of them for good.
+    if not await container.limiter.allow(_peer(request) or "unknown",
+                                         f"login:{payload.email.lower()}", limit):
+        log.warning("operator.login_throttled", email=payload.email, ip=_peer(request))
+        raise HTTPException(
+            status_code=429,
+            detail="too many attempts, try again later",
+            headers={"Retry-After": "60"},
+        )
     operator = await container.commands.authenticate_operator(
         email=payload.email, password=payload.password
     )
@@ -51,6 +77,11 @@ async def login(payload: LoginRequest, response: Response,
         "is_admin": operator.is_admin,
         "tenant_id": operator.tenant_id,
     }
+
+def _peer(request: Request) -> str | None:
+    """The address the limiter should blame. Peer, not a forwarded claim."""
+    client = request.scope.get("client")
+    return client[0] if client else None
 
 
 @router.post("/auth/logout")

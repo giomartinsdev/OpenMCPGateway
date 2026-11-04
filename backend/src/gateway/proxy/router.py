@@ -111,6 +111,11 @@ class GatewayRouter(BaseModel):
     recorder: RequestRecorder
     base_url: str
     store: EventStore
+    #: Guard limits that come from the deployment rather than from a gateway:
+    #: the body cap and which peers may speak for a caller. Passed through here
+    #: because the guard is built per gateway and the setting is per process.
+    max_body_bytes: int = 1_048_576
+    trusted_proxies: tuple[str, ...] = ()
     live_gateways: dict[str, LiveGateway] = Field(default_factory=dict)
     # slug -> reason it is not serving yet; served by /healthz and the API so a
     # silent 404 has an explanation next to it.
@@ -233,7 +238,8 @@ class GatewayRouter(BaseModel):
         guarded = GuardMiddleware(
             mcp_app, config=config, auth=auth, limiter=self.limiter,
             recorder=self.recorder, metrics=self.metrics, base_url=self.base_url,
-            read_models=self.read_models,
+            read_models=self.read_models, max_body_bytes=self.max_body_bytes,
+            trusted_proxies=self.trusted_proxies,
         )
 
         routes: list[Any] = []

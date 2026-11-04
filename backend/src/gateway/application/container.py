@@ -116,6 +116,8 @@ class Container(BaseModel):
             recorder=recorder,
             base_url=settings.base_url,
             store=store,
+            max_body_bytes=settings.max_body_bytes,
+            trusted_proxies=settings.trusted_proxies,
         )
         from gateway.console import build_console
 

@@ -333,7 +333,11 @@ function CreateGateway({ onCreated }) {
         <div className="field">
           <label htmlFor="slug">{t("Slug")}</label>
           <input id="slug" value={form.slug} onChange={set("slug")} required
-                 pattern="[a-z0-9-]+" placeholder="rancher" className="mono" />
+                 // The hyphen is escaped because the `pattern` attribute is
+                 // compiled with the `v` flag, where a bare `-` inside a class is
+                 // an invalid character class — the whole pattern is then ignored
+                 // and the field silently stops validating.
+                 pattern="[a-z0-9\-]+" placeholder="rancher" className="mono" />
           <div className="hint">
             {t("Becomes")} <span className="mono">/g/{form.slug || t("slug")}/mcp</span>
           </div>

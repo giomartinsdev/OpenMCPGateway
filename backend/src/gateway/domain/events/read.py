@@ -36,6 +36,20 @@ class RequestObserved(Event):
     #: exists before the row does — which is what makes "which call was that" a
     #: question support can ask and this log can answer.
     request_id: str = ""
+    #: Bytes of request body the guard buffered, and bytes of response body it
+    #: passed back. The pair is what turns the log into a trace: "200 in 12 ms"
+    #: cannot separate a `tools/list` of six tools from one of six hundred.
+    bytes_in: int = 0
+    bytes_out: int = 0
+    #: A prefix of the request body and of the response body, redacted and
+    #: length-capped. Empty when the body was not read (a refusal before the
+    #: buffering step) or was not JSON.
+    #:
+    #: A preview, not the payload: the log is the most likely table to be
+    #: exported, and a tool argument is the most likely place a credential ends
+    #: up by accident.
+    request_preview: str = ""
+    response_preview: str = ""
 
 
 READ_EVENTS: tuple[type[Event], ...] = (RequestObserved,)

@@ -437,6 +437,10 @@ class ReadModels:
             rm_requests_tail.c.method,
             rm_requests_tail.c.reason,
             rm_requests_tail.c.request_id,
+            rm_requests_tail.c.bytes_in,
+            rm_requests_tail.c.bytes_out,
+            rm_requests_tail.c.request_preview,
+            rm_requests_tail.c.response_preview,
             rm_requests_tail.c.occurred_at,
         )
         if gateway_id is not None:

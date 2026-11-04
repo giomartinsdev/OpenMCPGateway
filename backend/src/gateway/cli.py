@@ -60,8 +60,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
         # probes would be most of it.
         access_log=False,
         log_level=settings.log_level,
-        proxy_headers=True,
-        forwarded_allow_ips="*",
+        # Uvicorn's own proxy-header handling is off on purpose: it would rewrite
+        # `scope["client"]` from a header before any of this code sees it, which
+        # makes the audit trail dependent on a setting in a different layer. The
+        # guard resolves the forwarded address itself, against the same
+        # `OMG_TRUSTED_PROXIES` list, so there is one answer to "who called this"
+        # and one place to change it.
+        proxy_headers=False,
     )
     return 0
 

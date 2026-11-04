@@ -45,6 +45,11 @@ export OMG_DATABASE_URL="postgresql://omg:omg@127.0.0.1:${PG_PORT}/omg"
 export OMG_SESSION_SECRET="e2e-session-secret-at-least-32-bytes!!"
 export OMG_BASE_URL="http://127.0.0.1:${PORT}"
 export OMG_WEB_DIST="$ROOT/web/dist"
+# The suite signs in as the same account before every scenario, from one
+# address, which is exactly the shape the sign-in throttle exists to refuse.
+# Raised here so the harness tests the panel and not the limiter; the throttle
+# itself is covered by the backend BDD scenarios.
+export OMG_LOGIN_ATTEMPTS_PER_MINUTE=100000
 
 # Not `exec`: the trap must still own the container's lifetime when the server
 # stops, otherwise every aborted run leaves a Postgres behind.

@@ -159,6 +159,14 @@ class RequestRow(ReadRow):
     #: The id the caller chose (or the guard minted), so a support ticket can be
     #: joined to a row. Empty on rows written before the column existed.
     request_id: str = ""
+    #: Bytes of request body buffered and bytes of response body forwarded.
+    #: Zero on refusals that never read the body.
+    bytes_in: int = 0
+    bytes_out: int = 0
+    #: Redacted, length-capped prefixes of the two bodies. Empty when there was
+    #: nothing to preview.
+    request_preview: str = ""
+    response_preview: str = ""
     occurred_at: datetime
 
 

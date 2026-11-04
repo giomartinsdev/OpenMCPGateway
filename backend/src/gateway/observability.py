@@ -36,6 +36,13 @@ class Observation(BaseModel):
     reason: str = ""
     #: The id the caller sent, or the one the guard minted for them.
     request_id: str = ""
+    #: The payload trace: exact byte counts, and a redacted prefix of each body.
+    #: Sized here rather than in the projection because the guard is the only
+    #: place that sees both bodies.
+    bytes_in: int = 0
+    bytes_out: int = 0
+    request_preview: str = ""
+    response_preview: str = ""
     #: The public name, for the webhook payload: a receiver subscribing to
     #: `gateway_down` knows slugs, not ids.
     gateway_slug: str = ""

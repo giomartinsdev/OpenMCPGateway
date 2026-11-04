@@ -244,6 +244,13 @@ A refused request says why. The guard stores the reason as an English sentence
 the log reads from `psql` too, and the drawer translates it on the way out. The
 outcome column says "forbidden"; the reason says which gate did it.
 
+Each row also carries the payload trace: exact bytes in and out, and a redacted
+prefix of each body (1024 characters, credential-named keys replaced, `…` when it
+was cut). A row that says "200 in 12 ms" cannot tell a `tools/list` of six tools
+from one of six hundred, and "it returned something odd" becomes a question the
+log answers. Bodies are never stored whole: the preview is the debugging aid, the
+byte count is the fact.
+
 Every answer carries `X-Request-Id` — the caller's when it sent a sane one,
 otherwise one the guard minted — and the traffic row stores it, so "which call
 was that" is one query. A gateway's page also carries its own history: every

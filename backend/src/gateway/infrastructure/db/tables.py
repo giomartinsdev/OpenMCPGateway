@@ -266,6 +266,13 @@ rm_requests_tail = Table(
     #: edge so it exists before the row does, which is what makes "which call was
     #: that" a question support can ask.
     Column("request_id", Text, nullable=False, default="", server_default=""),
+    #: Payload trace: how much crossed the proxy, and a redacted prefix of each
+    #: body. The cap is applied in the guard, not here — a column default cannot
+    #: stop a caller from writing a megabyte into the log.
+    Column("bytes_in", Integer, nullable=False, default=0, server_default="0"),
+    Column("bytes_out", Integer, nullable=False, default=0, server_default="0"),
+    Column("request_preview", Text, nullable=False, default="", server_default=""),
+    Column("response_preview", Text, nullable=False, default="", server_default=""),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
     schema=READMODELS_SCHEMA,
 )
@@ -343,6 +350,14 @@ Index(
 Index("rm_operators_tenant_idx", rm_operators.c.tenant_id)
 Index("rm_stats_bucket_idx", rm_request_stats.c.bucket.desc())
 Index("rm_tail_time_idx", rm_requests_tail.c.occurred_at.desc())
+#: The gateway page reads "this gateway's calls, newest first" and the CSV export
+#: does the same with a filter. `rm_tail_time_idx` alone makes that a scan of the
+#: whole log plus a sort; the composite one answers it directly.
+Index(
+    "rm_tail_gateway_time_idx",
+    rm_requests_tail.c.gateway_id,
+    rm_requests_tail.c.occurred_at.desc(),
+)
 
 __all__ = [
     "READMODELS_SCHEMA",

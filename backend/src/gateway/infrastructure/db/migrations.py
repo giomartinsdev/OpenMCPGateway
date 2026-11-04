@@ -210,6 +210,38 @@ async def _tool_scopes(connection: AsyncConnection) -> None:
         "ADD COLUMN IF NOT EXISTS tool_scopes JSONB NOT NULL DEFAULT '{}'::jsonb"
     ))
 
+async def _payload_trace_and_tail_index(connection: AsyncConnection) -> None:
+    """The trace columns, and the index the gateway page has been missing.
+
+    Byte counts default to zero and previews to empty, which is the truth about
+    rows written before this release: the call happened, the sizes were never
+    kept.
+
+    Every statement is conditional on the table existing. A database at version 3
+    has no `rm_requests_tail` yet — migration 4 only *moves* it — so an
+    unconditional index here would fail the upgrade that this list exists to make
+    safe. The same statement is also correct on a fresh database, where the
+    baseline already created it.
+    """
+    exists = await connection.scalar(
+        text(f"SELECT to_regclass('{READMODELS_SCHEMA}.rm_requests_tail')")
+    )
+    if exists is None:
+        return
+    for statement in (
+        f"ALTER TABLE {READMODELS_SCHEMA}.rm_requests_tail "
+        "ADD COLUMN IF NOT EXISTS bytes_in INTEGER NOT NULL DEFAULT 0",
+        f"ALTER TABLE {READMODELS_SCHEMA}.rm_requests_tail "
+        "ADD COLUMN IF NOT EXISTS bytes_out INTEGER NOT NULL DEFAULT 0",
+        f"ALTER TABLE {READMODELS_SCHEMA}.rm_requests_tail "
+        "ADD COLUMN IF NOT EXISTS request_preview TEXT NOT NULL DEFAULT ''",
+        f"ALTER TABLE {READMODELS_SCHEMA}.rm_requests_tail "
+        "ADD COLUMN IF NOT EXISTS response_preview TEXT NOT NULL DEFAULT ''",
+        f"CREATE INDEX IF NOT EXISTS rm_tail_gateway_time_idx "
+        f"ON {READMODELS_SCHEMA}.rm_requests_tail (gateway_id, occurred_at DESC)",
+    ):
+        await connection.execute(text(statement))
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline", _baseline),
     Migration(2, "tenancy", _tenancy),
@@ -219,6 +251,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(6, "correlation_quota_and_hooks", _correlation_quota_and_hooks),
     Migration(7, "multi_auth", _multi_auth),
     Migration(8, "tool_scopes", _tool_scopes),
+    Migration(9, "payload_trace_and_tail_index", _payload_trace_and_tail_index),
 )
 
 
