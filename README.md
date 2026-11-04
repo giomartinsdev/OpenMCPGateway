@@ -1,14 +1,20 @@
 # OpenMCPGateway
 
-Auth, authorisation, rate limiting and observability in front of any MCP server.
+**Auth, authorisation, rate limiting and observability in front of any MCP server.**
+
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-3dd68c.svg)](#license)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-3dd68c.svg)](#architecture)
+[![Postgres 17](https://img.shields.io/badge/postgres-17-3dd68c.svg)](#schema)
 
 Point an MCP client at the gateway instead of at the server. The gateway terminates
-OAuth (GitHub, Google, Microsoft, Discord, any OIDC provider) or verifies a bearer
-key, checks that the caller belongs to the gateway's tenant, enforces a per-subject
-budget, and records every request.
+OAuth (GitHub, Google, Microsoft, Discord, any OIDC provider, or the deployment
+itself) or verifies a bearer key, checks that the caller belongs to the gateway's
+tenant, enforces a per-subject budget, and records every request.
 A single gateway can do both at once, and can also accept tokens from further
 issuers it only verifies — so one URL covers browser logins, scripts with keys, and
 clients that already hold a token.
+
+<a href="site/img/panel-traffic.png"><img src="site/img/panel-traffic.png" alt="The traffic page: request flow from gateways to outcomes, outcome totals, and a table of individual calls with tool, status and latency." width="100%"></a>
 
 ```
 MCP client ──▶ https://gateway.example.com/g/<slug>/mcp ──▶ your MCP server
@@ -18,6 +24,32 @@ MCP client ──▶ https://gateway.example.com/g/<slug>/mcp ──▶ your MCP
                         ├─ requests per minute      429
                         └─ request log + stats      →  UI
 ```
+
+**One endpoint per MCP server, one place that decides who reaches it, and a log that
+answers "who used this and what broke".**
+
+| | |
+|---|---|
+| **No auth** | For a gateway that already lives behind a private network. |
+| **API key** | `omg_…`, hashed with SHA-256, with an optional expiry and a sealed copy the panel can reveal once. |
+| **OAuth** | Any provider you already run, or `idp: self` when you have none — one deployment can mix both. |
+
+> Live deployment and manual: **<https://mcp-gateway.giomartins.dev>**. The public
+> page for the project is at **<https://omg.giomartins.dev>** (`site/` in this repo,
+> published to a bucket by CI).
+
+## What it looks like
+
+<table>
+<tr>
+<td width="50%"><a href="site/img/panel-gateway-detail.png"><img src="site/img/panel-gateway-detail.png" alt="A gateway page: endpoint, auth mode, upstream tools with call counts, and the connect guide."></a><br><sub><b>One gateway.</b> The endpoint to paste, its auth mode, each upstream tool with its call count, and the connect guide generated from the real proxy config.</sub></td>
+<td width="50%"><a href="site/img/panel-request-drawer.png"><img src="site/img/panel-request-drawer.png" alt="The request drawer: outcome, subject, latency, and formatted request and response bodies."></a><br><sub><b>One call.</b> Why it was refused or what came back, with the payload shaped as JSON and the raw bytes one click away.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="site/img/panel-audit.png"><img src="site/img/panel-audit.png" alt="The audit log: who changed what, with the aggregate it touched."></a><br><sub><b>Who changed it.</b> The audit log is a different question from the traffic log, and gets its own stream.</sub></td>
+<td width="50%"><a href="site/img/panel-traffic-light.png"><img src="site/img/panel-traffic-light.png" alt="The same traffic page in the light palette."></a><br><sub><b>The same page in light.</b> Two palettes, one set of tokens — no component asks which one is active.</sub></td>
+</tr>
+</table>
 
 ## Why
 
@@ -219,6 +251,8 @@ host in `k8s/ingress.yaml`. The deployment expects a Postgres you already run; p
 
 ## The panel
 
+<a href="site/img/panel-home.png"><img src="site/img/panel-home.png" alt="The home screen: request flow from gateway to outcome, totals, rejection rate and latency percentiles." width="100%"></a>
+
 Every table is a cursor list with one filter box per column, a clear button on
 each box, and sortable headers. A filter that matches nothing says so and offers
 the button that clears it — an empty table plus a header row is a dead end.
@@ -335,7 +369,17 @@ code fence.
 
 ## Calling a gateway
 
-The gateway is a normal MCP server, so any client works:
+The gateway is a normal MCP server, so any client works. Only the URL and, for
+`api_key` gateways, one header differ from pointing the client at the server
+directly.
+
+| Client | Where | Remote HTTP support |
+|---|---|---|
+| opencode | `opencode.json` | `type: "remote"` |
+| Claude Code | `claude mcp add` | `--transport http` |
+| VS Code / Copilot | `.vscode/mcp.json` | `"type": "http"` |
+| Cursor | `~/.cursor/mcp.json` | `url` |
+| Anything without remote support | `npx mcp-remote <url>` | stdio bridge |
 
 ```jsonc
 // opencode.json
@@ -349,7 +393,38 @@ The gateway is a normal MCP server, so any client works:
 }
 ```
 
-With `auth: api_key`, add `"headers": {"Authorization": "Bearer omg_..."}`.
+```bash
+# Claude Code
+claude mcp add --transport http my-server \
+  https://gateway.example.com/g/my-server/mcp \
+  --header "Authorization: Bearer omg_..."
+```
+
+```jsonc
+// .vscode/mcp.json
+{
+  "servers": {
+    "my-server": {
+      "type": "http",
+      "url": "https://gateway.example.com/g/my-server/mcp",
+      "headers": { "Authorization": "Bearer omg_..." }
+    }
+  }
+}
+```
+
+```jsonc
+// ~/.cursor/mcp.json
+{
+  "mcpServers": {
+    "my-server": {
+      "url": "https://gateway.example.com/g/my-server/mcp",
+      "headers": { "Authorization": "Bearer omg_..." }
+    }
+  }
+}
+```
+
 With `auth: oauth`, add nothing: the client reads the 401 challenge, finds the
 metadata at the well-known URL, registers itself, and opens a browser.
 
@@ -369,7 +444,32 @@ hour" before anyone configures an upstream:
 }
 ```
 
-Delete it if you would rather point agents at `/mcp` directly. The slug is global,
+The console MCP exposes six read-only tools over the deployment: `search_docs`,
+`list_gateways`, `get_gateway`, `search_requests`, `search_events` and
+`traffic_stats`. They are ordinary tools on an ordinary gateway, so every question
+an agent asks it lands in the traffic log like any other call.
+
+```bash
+# The transport is stateful: initialize first, then carry the session id.
+SID=$(curl -sS -D - -o /dev/null http://localhost:8000/g/console/mcp \
+  -H "Authorization: Bearer omgc_..." \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}' \
+  | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}' | tr -d '\r')
+
+curl -sS http://localhost:8000/g/console/mcp \
+  -H "Authorization: Bearer omgc_..." \
+  -H "mcp-session-id: $SID" \
+  -H "MCP-Protocol-Version: 2025-06-18" \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"traffic_stats","arguments":{}}}'
+# → event: message
+#   data: {"jsonrpc":"2.0","id":2,"result":{...}}
+```
+
+Delete the console gateway if you would rather point agents at `/mcp` directly. The slug is global,
 because `/g/<slug>/mcp` is a public URL, so the first tenant on a deployment gets
 `console` and later ones get `console-<tenant id>` — named after the tenant rather
 than numbered, so the address still says whose gateway it is.
@@ -481,6 +581,33 @@ permission it does not hold itself.
 diff — `+ create`, `~ update` with the fields that differ, `− delete` — without
 touching a command. `prune: true` plus a truncated file is a delete nobody saw
 coming; this is the screen that shows it first, and it needs only `config:read`.
+
+## The public page
+
+`site/` is the project's marketing page: plain HTML, one stylesheet, no build. It
+carries a copy of the panel's design tokens rather than importing them, because it
+is published to a bucket and must not depend on the SPA's build output — when the
+palette moves, both files move.
+
+```bash
+python3 -m http.server -d site 8200              # look at it
+cd web && node e2e/site-check.mjs http://127.0.0.1:8200
+```
+
+`site-check.mjs` is the guard rail: it fails on a broken asset, a sideways
+scrollbar, a skipped heading level, a console error, or a text/background pair
+below WCAG AA — in both palettes and at a phone width. Screenshots come from a real
+local deployment, never from production data:
+
+```bash
+cd web && bash e2e/serve.sh                     # a demo tenant in a container
+node e2e/capture.mjs http://127.0.0.1:8123 ../site/img
+```
+
+`capture.mjs` registers a throwaway tenant with invented gateways, generates real
+traffic through the proxy (allowed, 401, 403 and 429 rows, with tool names), and
+fails before the shutter if the screen it is about to photograph has nothing on
+it.
 
 ## Documentation
 
