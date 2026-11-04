@@ -49,5 +49,24 @@ def test_a_garbage_entry_is_ignored():
     assert _client_ip(_scope(), headers, ("10.244.0.0/16",)) == "10.244.3.7"
 
 
+#: The shape this deployment actually serves: Cloudflare appends the caller, the
+#: host's nginx appends the Cloudflare edge, and the ingress appends the bridge.
+CF = "172.64.222.60"
+CHAIN_TRUST = ("10.42.0.0/16", "172.64.0.0/13")
+
+
+def test_the_cloudflare_hop_is_skipped_to_reach_the_caller():
+    headers = Headers({"x-forwarded-for": f"179.48.95.89, {CF}"})
+    assert _client_ip(_scope(("10.42.0.9", 1234)), headers, CHAIN_TRUST) == "179.48.95.89"
+
+
+def test_a_chain_forged_on_the_left_does_not_move_the_verdict():
+    # The caller writes its own header, Cloudflare appends the real address, and
+    # the hops to the right are the ones the proxies wrote. Only the right-hand
+    # entries were observed by someone trusted, so the forged one is never read.
+    headers = Headers({"x-forwarded-for": f"203.0.113.9, 179.48.95.89, {CF}"})
+    assert _client_ip(_scope(("10.42.0.9", 1234)), headers, CHAIN_TRUST) == "179.48.95.89"
+
+
 def test_a_missing_header_falls_back_to_the_peer():
     assert _client_ip(_scope(), Headers({}), ("10.244.0.0/16",)) == "10.244.3.7"
