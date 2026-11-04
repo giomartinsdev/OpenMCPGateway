@@ -14,7 +14,7 @@ import { Audit } from "./pages/Audit.jsx";
 import { Members } from "./pages/Members.jsx";
 import { Roles } from "./pages/Roles.jsx";
 import { Onboarding } from "./pages/Onboarding.jsx";
-import { Docs } from "./pages/Docs.jsx";
+import { DOCS_SITE } from "./links.js";
 import { Bone } from "./ui.jsx";
 
 // Hash routing: 15 lines instead of a router dependency, and it survives being
@@ -65,10 +65,6 @@ const NAV = [
       { to: "/roles", label: "Roles", read: "roles:read", icon: "shield" },
       { to: "/config", label: "Config as code", read: "config:read", icon: "code" },
     ],
-  },
-  {
-    group: "Help",
-    items: [{ to: "/docs", label: "Documentation", icon: "book" }],
   },
 ];
 
@@ -219,44 +215,15 @@ export function App() {
   // Signed out: the landing page *is* the sign-in page. A separate /login route
   // would be a second front door to keep painted.
   //
-  // `/docs` is checked first, and for both states: the manual is what someone
-  // reads *before* deciding to sign in, and it is the one page here that has no
-  // permission attached.
+  // `/docs` used to be a page here. It now lives on the public site, in five
+  // languages, with no session: the manual is what someone reads *before*
+  // deciding to sign in, and a manual behind a login is a manual nobody reads
+  // first. The redirect keeps old links working.
   if (path.startsWith("/docs")) {
-    const docs = <Docs signedIn={me !== null} />;
-    // Signed out, the manual stands alone: no rail, because there is nothing to
-    // navigate to yet, and it is the page a stranger reads before signing up.
-    if (me === null) {
-      return (
-        <div className="docs-shell">
-          <div className="docs-top">
-            <a className="logo docs-logo" href="#/" aria-label={t("OpenMCPGateway home")}>
-              <Mark size={34} />
-              <div className="logo-text">
-                OpenMCP<span>Gateway</span>
-              </div>
-            </a>
-            <div className="row">
-              <LanguagePicker />
-              <ThemeToggle theme={theme} onSelect={setTheme} />
-            </div>
-          </div>
-          {docs}
-        </div>
-      );
-    }
-    return (
-      <Frame
-        me={me}
-        page={docs}
-        path={path}
-        isDetail={false}
-        onSignOut={async () => {
-          await api.logout();
-          setMe(null);
-        }}
-      />
-    );
+    // `#/docs/auth` -> `/docs/#auth`; a bare `#/docs` -> the top of the manual.
+    const section = path.slice("/docs".length).replace(/^\/+/, "");
+    window.location.replace(`${DOCS_SITE}${section ? `#${section}` : ""}`);
+    return null;
   }
 
   if (me === null) {

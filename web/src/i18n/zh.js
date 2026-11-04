@@ -293,6 +293,7 @@ export default {
   "1 request was refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.": "本窗口内有 1 个请求被拒绝。拒绝不是网关的故障：这是防护在履行职责，该行会说明是哪一道。",
   "{count} requests were refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.": "本窗口内有 {count} 个请求被拒绝。拒绝不是网关的故障：这是防护在履行职责，该行会说明是哪一道。",
   "{count} rows": "{count} 行",
+  "{count} others": "{count} 个其他",
   "Loading recent requests": "正在加载最近请求",
   "Nothing recorded yet": "尚无记录",
   "Requests appear here as they arrive.": "请求到达时会显示在此。",

@@ -9,7 +9,7 @@ test("the mark is inline, sized, and needs no player", async ({ browser }) => {
   const requests = [];
   page.on("request", (request) => requests.push(request.url()));
 
-  await page.goto("/#/docs");
+  await page.goto("/");
 
   const mark = page.locator(".mark").first();
   await expect(mark).toBeVisible();
@@ -31,7 +31,7 @@ test("the mark is inline, sized, and needs no player", async ({ browser }) => {
 test("a reduced-motion reader sees the same mark", async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: "reduce" });
   const page = await context.newPage();
-  await page.goto("/#/docs");
+  await page.goto("/");
   await expect(page.locator(".mark").first()).toBeVisible();
   await expect(page.locator(".mark").first().locator("path")).toHaveCount(3);
   await context.close();

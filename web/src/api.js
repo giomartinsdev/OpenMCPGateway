@@ -142,7 +142,9 @@ export const api = {
   // CSV, not JSON, so the browser is pointed at it and saves it.
   eventsCsvUrl: (params) => `/api/events.csv?${query(params)}`,
   // The manual is served per language; an unknown code gets English.
-  docs: (lang) => call("GET", `/docs${lang ? `?lang=${lang}` : ""}`),
+  // The manual itself is not here: it is published as a page of the public site
+  // (`site/build-docs.mjs`), from the same JSON the console MCP searches. `/api/docs`
+  // stays as the machine-readable copy that `search_docs` and any agent read.
   // A read-only token for the console MCP; the plaintext is returned once.
   mintConsoleToken: () => call("POST", "/mcp/token"),
 

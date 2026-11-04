@@ -16,15 +16,37 @@ const WIDTH = 1000;
 const LABEL = 200; // room for the gateway names on the left and outcome names right
 const GAP = 12; // vertical space between two nodes in a column
 const PAD = 6;
+// A node never gets thinner than this, however small its share. With the
+// gateways folded there are at most thirteen rows, so even every row at the
+// floor only grows the box by thirteen pixels.
+const MIN_NODE = 1;
+
+// How many gateways the left column draws before folding the tail into one
+// node. "7 days" in a deployment with thirty gateways is thirty rows of 11px
+// text: at the 12px gap that is 408px of column inside a 280px box, which
+// overflows on both axes. Seven named gateways is what someone actually reads;
+// the rest is a number.
+const MAX_NODES = 8;
+
+// 11px JetBrains Mono advances about 0.6em, so a gutter of LABEL units fits this
+// many characters. Names longer than that are truncated rather than allowed to
+// write over the card edge.
+const MAX_CHARS = Math.floor((LABEL - 14) / 6.6);
 
 // A fixed order for the right column: allowed first, then refusals in the order
 // an operator reads them. Sorting by volume would move the outcome you are
 // looking for on every refresh.
-const ORDER = ["allowed", "unauthenticated", "forbidden", "rate_limited"];
+const ORDER = ["allowed", "unauthenticated", "forbidden", "rate_limited", "error"];
 
 function rank(outcome) {
   const index = ORDER.indexOf(outcome);
   return index === -1 ? ORDER.length : index;
+}
+
+/** Clip a label to the gutter, keeping the part that identifies it. */
+function clip(text) {
+  const value = String(text);
+  return value.length > MAX_CHARS ? `${value.slice(0, MAX_CHARS - 1)}…` : value;
 }
 
 /** Stack the flows into nodes: `[{key, value}]` per column, in draw order. */
@@ -39,16 +61,59 @@ function nodes(flows, key) {
 }
 
 /**
- * Lay a column out vertically, centred in `height`.
+ * Keep the biggest gateways by volume, fold the tail into one row.
+ *
+ * The fold happens on the *gateway*, never on the outcome: the right column is a
+ * fixed vocabulary of five names and is what the chart is for. Folding it would
+ * answer a different question.
+ */
+function foldGateways(flows, limit, otherLabel) {
+  const totals = nodes(flows, "gateway");
+  if (totals.length <= limit) return flows;
+  const keep = new Set(totals.slice(0, limit - 1).map((node) => node.name));
+  const rest = new Map();
+  const kept = [];
+  for (const flow of flows) {
+    if (keep.has(flow.gateway)) {
+      kept.push(flow);
+      continue;
+    }
+    rest.set(flow.outcome, (rest.get(flow.outcome) ?? 0) + flow.value);
+  }
+  for (const [outcome, value] of rest) {
+    kept.push({ gateway: otherLabel, outcome, value });
+  }
+  return kept;
+}
+
+/**
+ * The height a column actually occupies at a given scale.
+ *
+ * The box follows this rather than the other way round: sizing the box from
+ * `value * scale` while drawing `max(value * scale, MIN_NODE)` is how a column
+ * ends up taller than the space it was centred in, and the top row lands at a
+ * negative `y`.
+ */
+function stackHeight(list, scale) {
+  const drawn = list.reduce(
+    (sum, node) => sum + Math.max(node.value * scale, MIN_NODE),
+    0,
+  );
+  return drawn + GAP * Math.max(0, list.length - 1);
+}
+
+/**
+ * Lay a column out vertically, centred in `box`.
  *
  * Both columns share one scale, which is what makes a link horizontal-ish: the
  * same request is the same number of pixels on either side of the curve.
  */
-function place(list, scale, height) {
-  const used = list.reduce((sum, node) => sum + node.value * scale, 0);
-  let y = (height - used - GAP * (list.length - 1)) / 2;
-  return list.map((node) => {
-    const entry = { ...node, y, height: Math.max(node.value * scale, 2) };
+function place(list, scale, box) {
+  const heights = list.map((node) => Math.max(node.value * scale, MIN_NODE));
+  const used = heights.reduce((sum, value) => sum + value, 0);
+  let y = Math.max(PAD, (box - used - GAP * (list.length - 1)) / 2);
+  return list.map((node, index) => {
+    const entry = { ...node, y, height: heights[index] };
     y += entry.height + GAP;
     return entry;
   });
@@ -56,18 +121,28 @@ function place(list, scale, height) {
 
 export function Sankey({ flows, height = 280 }) {
   const t = useT();
-  const live = (flows ?? []).filter((flow) => flow.value > 0);
+  const moving = (flows ?? []).filter((flow) => flow.value > 0);
+  const otherLabel = t("{count} others", {
+    count: Math.max(0, nodes(moving, "gateway").length - (MAX_NODES - 1)),
+  });
+  const live = foldGateways(moving, MAX_NODES, otherLabel);
   const total = live.reduce((sum, flow) => sum + flow.value, 0);
   if (!total) return null;
 
   const left = nodes(live, "gateway");
   const right = nodes(live, "outcome");
-  // One scale for both sides, computed from the column with more nodes so the
-  // gaps always fit.
   const widest = Math.max(left.length, right.length);
-  const scale = Math.max((height - PAD * 2 - GAP * (widest - 1)) / total, 0.01);
-  const sources = place(left, scale, height);
-  const targets = place(right, scale, height);
+  // One scale for both sides, computed from the column with more nodes so the
+  // gaps always fit. No floor on the scale itself: a deployment with a million
+  // requests in the window gets thin rows, which is what it should get. A floor
+  // there would multiply the total *up* and overflow the box.
+  const scale = Math.max((height - PAD * 2 - GAP * (widest - 1)) / total, 1e-6);
+  const box = Math.max(
+    height,
+    PAD * 2 + Math.max(stackHeight(left, scale), stackHeight(right, scale)),
+  );
+  const sources = place(left, scale, box);
+  const targets = place(right, scale, box);
 
   // Cursors into each node, so consecutive links leave and arrive stacked
   // instead of all starting at the same point.
@@ -83,7 +158,9 @@ export function Sankey({ flows, height = 280 }) {
     .map((flow) => {
       const source = from.get(flow.gateway);
       const target = into.get(flow.outcome);
-      const size = Math.max(flow.value * scale, 1);
+      // No floor here: a link thinner than a pixel is honest, and rounding it up
+      // would make the links of a node add up to more than the node's own height.
+      const size = flow.value * scale;
       const y1 = source.cursor;
       const y2 = target.cursor;
       source.cursor += size;
@@ -101,7 +178,7 @@ export function Sankey({ flows, height = 280 }) {
   return (
     <div className="sankey">
       <svg
-        viewBox={`0 0 ${WIDTH} ${height}`}
+        viewBox={`0 0 ${WIDTH} ${box}`}
         role="img"
         aria-label={t("Request flow")}
       >
@@ -118,6 +195,9 @@ export function Sankey({ flows, height = 280 }) {
         ))}
         {sources.map((node) => (
           <g key={node.name}>
+            {/* The visible label is clipped to the gutter; the `<title>` keeps
+                the full name for the hover tooltip and the screen reader. */}
+            <title>{node.name}</title>
             <rect
               x={x1 - 3}
               y={node.y}
@@ -127,7 +207,7 @@ export function Sankey({ flows, height = 280 }) {
               className="sankey-node"
             />
             <text x={x1 - 12} y={node.y + node.height / 2} textAnchor="end">
-              {node.name}
+              {clip(node.name)}
             </text>
           </g>
         ))}
@@ -142,7 +222,7 @@ export function Sankey({ flows, height = 280 }) {
               className={`sankey-node ${node.name}`}
             />
             <text x={x2 + 12} y={node.y + node.height / 2}>
-              {outcomeLabel(t, node.name)} · {node.value}
+              {clip(`${outcomeLabel(t, node.name)} · ${node.value}`)}
             </text>
           </g>
         ))}

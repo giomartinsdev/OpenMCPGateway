@@ -1,4 +1,5 @@
 import { AuthCard } from "./Login.jsx";
+import { DOCS_SITE } from "../links.js";
 import { LanguagePicker, useT } from "../i18n.jsx";
 import { Mark } from "../Mark.jsx";
 import { ThemeToggle, useTheme } from "../theme.jsx";
@@ -85,9 +86,9 @@ export function Landing({ onLogin }) {
         <div className="links">
           <a href="#how">{t("How it works")}</a>
           <a href="#features">{t("Features")}</a>
-          {/* `#/docs` is a route, not an anchor: the manual is a page of the app,
-              reachable signed out, so the pitch and the reference cannot drift. */}
-          <a href="#/docs">{t("Docs")}</a>
+          {/* The manual is on the public site, so the pitch and the reference
+              cannot drift, and it stays readable with no account. */}
+          <a href={DOCS_SITE}>{t("Docs")}</a>
           <a href="https://github.com/giomartinsdev/OpenMCPGateway" target="_blank" rel="noreferrer">
             GitHub
           </a>
@@ -110,7 +111,7 @@ export function Landing({ onLogin }) {
           </p>
           <div className="cta">
             <a className="cta-primary" href="#signin">{t("Open the panel")}</a>
-            <a className="cta-secondary" href="#/docs">
+            <a className="cta-secondary" href={DOCS_SITE}>
               {t("Read the docs")}
             </a>
           </div>
@@ -192,21 +193,21 @@ export function Landing({ onLogin }) {
           </p>
         </header>
         <div className="docs-band">
-          <a className="docs-card" href="#/docs">
+          <a className="docs-card" href={`${DOCS_SITE}#gateways`}>
             <span className="eyebrow">{t("Reference")}</span>
             <h3>{t("Gateways, auth, limits, logs")}</h3>
             <p>
               {t("How a request gets through, what each auth mode costs you, and every field on a gateway.")}
             </p>
           </a>
-          <a className="docs-card" href="#/docs">
+          <a className="docs-card" href={`${DOCS_SITE}#config`}>
             <span className="eyebrow">{t("Operations")}</span>
             <h3>{t("Config as code, roles and members")}</h3>
             <p>
               {t("The full YAML schema — gateways, roles and members — with the merge and prune semantics spelled out.")}
             </p>
           </a>
-          <a className="docs-card" href="#/docs">
+          <a className="docs-card" href={`${DOCS_SITE}#ops`}>
             <span className="eyebrow">{t("Troubleshooting")}</span>
             <h3>503, 401, 403, 429</h3>
             <p>
@@ -220,7 +221,7 @@ export function Landing({ onLogin }) {
         <span>OpenMCPGateway · Apache-2.0</span>
         <div className="row">
           <a href="https://github.com/giomartinsdev/OpenMCPGateway">{t("Source")}</a>
-          <a href="#/docs">{t("Docs")}</a>
+          <a href={DOCS_SITE}>{t("Docs")}</a>
           <a href="#signin">{t("Sign in")}</a>
         </div>
       </footer>

@@ -1,28 +1,31 @@
 import { expect, test } from "@playwright/test";
 
-// The manual is a product surface, not a README mirror: it has to render from
-// the running build, be reachable signed out, and be linked from the landing
-// page — otherwise "the docs" is a page nobody can find.
+// The manual is a product surface, not a README mirror: it has to be reachable
+// signed out and linked from the landing page — otherwise "the docs" is a page
+// nobody can find. It is published by the site (`site/build-docs.mjs`), not by
+// this app, so what is asserted here is the address, not the rendering.
 const OWNER = { email: "docs@gateway.test", password: "docs-password-123" };
 
-test("the landing page links to the manual, and the manual renders signed out", async ({
+test("the landing links to the manual on the public site, and /docs redirects there", async ({
   page,
 }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
 
+  // The manual is published with the landing (`site/build-docs.mjs`), from the
+  // same JSON the console MCP searches. This app no longer renders it: a manual
+  // behind a login is a manual nobody reads before asking for access.
   await page.goto("/");
-  await page.getByRole("link", { name: /^docs$/i }).first().click();
+  const link = page.getByRole("link", { name: /^docs$/i }).first();
+  await expect(link).toHaveAttribute("href", "https://omg.giomartins.dev/docs/");
 
-  await expect(page.getByRole("heading", { level: 1, name: "The manual" })).toBeVisible();
-  // The table of contents is generated from the same list as the sections, so
-  // one without the other is impossible; both being non-empty is the assertion.
-  const sections = await page.locator(".docs-section").count();
-  expect(sections).toBeGreaterThanOrEqual(10);
-  await expect(page.locator(".docs-toc a")).toHaveCount(sections);
-
-  await page.goto("/#/config");
-  await expect(page.getByRole("heading", { name: "The manual" })).toBeVisible();
+  // The old address still works, section anchors included. Intercepted so the
+  // test does not depend on the public bucket being reachable from CI.
+  await page.route("https://omg.giomartins.dev/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/html", body: "<h1>The manual</h1>" }),
+  );
+  await page.goto("/#/docs/config");
+  await expect.poll(() => page.url()).toBe("https://omg.giomartins.dev/docs/#config");
 
   expect(errors).toEqual([]);
 });
@@ -40,7 +43,7 @@ test("the bar groups navigation and survives a narrow viewport", async ({ page }
 
   // One icon per entry, and one mark: the logo is the SVG itself now, not a
   // box waiting for a player to fill it.
-  await expect(page.locator(".nav a .icon")).toHaveCount(7);
+  await expect(page.locator(".nav a .icon")).toHaveCount(6);
   await expect(page.locator(".logo .mark")).toHaveCount(1);
   await expect(page.locator(".logo .mark path")).toHaveCount(3);
 

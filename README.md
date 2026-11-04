@@ -611,13 +611,19 @@ it.
 
 ## Documentation
 
-`/#/docs` serves the full manual from the running deployment — concepts, every
-gateway field, auth modes, the config-as-code schema, the HTTP API, the console
-MCP, environment variables and a troubleshooting table. It is reachable signed
-out, and linked from the landing page. The copy lives in
-`backend/src/gateway/docs/sections.json` — plus one `sections.<code>.json` per
-language — and is served by `GET /api/docs?lang=xx`, so the panel and the console
-MCP read the same text in the same language.
+`/docs/` on the public site serves the full manual — concepts, every gateway
+field, auth modes, the config-as-code schema, the HTTP API, the console MCP,
+environment variables and a troubleshooting table. It is reachable signed out,
+in five languages, in light and dark. `/#/docs` on the panel redirects there, so
+old links keep working.
+
+The copy lives once, in `backend/src/gateway/docs/sections.json` — plus one
+`sections.<code>.json` per language. `GET /api/docs?lang=xx` serves it as data for
+the console MCP's `search_docs`, and `node site/build-docs.mjs` turns the same
+files into the published page, so the site and the MCP cannot describe two
+different versions. The panel itself no longer renders the manual: a local
+`docker compose up` gives you the app, and `https://omg.giomartins.dev/docs/`
+gives you the reference.
 
 ## Schema
 

@@ -293,6 +293,7 @@ export default {
   "1 request was refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.": "1 requisição foi recusada nesta janela. Uma recusa não é uma falha do gateway: é a guarda fazendo seu trabalho, e a linha diz qual.",
   "{count} requests were refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.": "{count} requisições foram recusadas nesta janela. Uma recusa não é uma falha do gateway: é a guarda fazendo seu trabalho, e a linha diz qual.",
   "{count} rows": "{count} linhas",
+  "{count} others": "{count} outros",
   "Loading recent requests": "Carregando requisições recentes",
   "Nothing recorded yet": "Nada registrado ainda",
   "Requests appear here as they arrive.": "As requisições aparecem aqui conforme chegam.",

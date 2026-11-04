@@ -460,12 +460,9 @@ test("the manual is served as data and the console token is minted once", async 
   // The manual itself is public; minting a credential is not, so this test signs
   // in first — a token that any visitor could mint would not be a boundary.
   await signIn(page);
-  await page.goto("/#/docs");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "The manual" }),
-  ).toBeVisible();
 
-  // Same text, two consumers: the panel renders it, the console MCP searches it.
+  // Same text, two consumers: the public site publishes it (`site/build-docs.mjs`),
+  // the console MCP searches it through this endpoint.
   const manual = await page.evaluate(async () => {
     const response = await fetch("/api/docs");
     return { status: response.status, body: await response.json() };
@@ -483,4 +480,88 @@ test("the manual is served as data and the console token is minted once", async 
   expect(minted.status).toBe(201);
   expect(minted.body.token.startsWith("omgc_")).toBe(true);
   expect(minted.body.tools).toContain("search_requests");
+});
+
+test("the request flow keeps every node and label inside its own box", async ({ page }) => {
+  await signIn(page);
+
+  // More gateways than the chart draws. Each unauthenticated POST is one logged
+  // request, so this is also the shape of a real week: a dozen gateways, a few
+  // of them busy. The window is only wide enough for a handful of readable rows.
+  const slugs = await page.evaluate(async () => {
+    const made = [];
+    for (let index = 0; index < 14; index++) {
+      // A slug at the validation ceiling, so the label gutter is exercised.
+      const slug = `flow-${index}-${"x".repeat(30)}`.slice(0, 40);
+      const created = await fetch("/api/gateways", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          name: `Flow ${index}`,
+          target_url: "http://127.0.0.1:9/mcp",
+        }),
+      });
+      if (!created.ok) throw new Error(await created.text());
+      made.push(slug);
+      for (let call = 0; call < 3; call++) {
+        await fetch(`/g/${slug}/mcp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: call, method: "tools/list" }),
+        });
+      }
+    }
+    return made;
+  });
+  expect(slugs).toHaveLength(14);
+
+  await page.goto("/#/");
+  await page.reload();
+  // The widest window is the one with the most gateways, which is the case that
+  // used to draw rows above the top of the viewBox and labels past the card.
+  await page.getByRole("button", { name: "7 days" }).click();
+
+  const box = page.locator(".card", {
+    has: page.getByRole("heading", { name: "Request flow", exact: true }),
+  }).locator(".sankey");
+  await expect(box.locator(".sankey-node").first()).toBeVisible();
+  // More gateways than rows: the tail is folded into one node rather than drawn,
+  // which is what keeps the height bounded in the first place.
+  await expect(box.locator("text").filter({ hasText: /\d+ others/ })).toHaveCount(1);
+
+  const geometry = await box.evaluate((element) => {
+    const svg = element.querySelector("svg");
+    const [, , , height] = svg.getAttribute("viewBox").split(" ").map(Number);
+    const nodes = [...svg.querySelectorAll("rect.sankey-node")];
+    const frame = svg.getBoundingClientRect();
+    const labels = [...svg.querySelectorAll("text")].map((text) =>
+      text.getBoundingClientRect(),
+    );
+    return {
+      height,
+      top: Math.min(...nodes.map((node) => Number(node.getAttribute("y")))),
+      bottom: Math.max(
+        ...nodes.map(
+          (node) =>
+            Number(node.getAttribute("y")) + Number(node.getAttribute("height")),
+        ),
+      ),
+      // A label wider than its gutter used to paint over the card edge, because
+      // the SVG is `overflow: visible`.
+      labelLeft: Math.min(...labels.map((label) => label.left)),
+      labelRight: Math.max(...labels.map((label) => label.right)),
+      frameLeft: frame.left,
+      frameRight: frame.right,
+    };
+  });
+
+  expect(geometry.top).toBeGreaterThanOrEqual(0);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.height);
+  expect(geometry.labelLeft).toBeGreaterThanOrEqual(geometry.frameLeft - 1);
+  expect(geometry.labelRight).toBeLessThanOrEqual(geometry.frameRight + 1);
 });

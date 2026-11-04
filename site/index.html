@@ -1,12 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenMCPGateway — auth, limits and logs in front of any MCP server</title>
+    <title data-i18n="meta.title">OpenMCPGateway — auth, limits and logs in front of any MCP server</title>
     <meta
       name="description"
-      content="OpenMCPGateway puts auth, authorisation, rate limiting and a full request log in front of any MCP server. One endpoint per server, an identity provider you already run, and a call log that answers who used this and what broke."
+      data-i18n-attr="content:meta.description"
+      content="OpenMCPGateway puts auth, authorisation, rate limiting and a full request log in front of any MCP server."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="theme-color" content="#fbfbfc" media="(prefers-color-scheme: light)" />
@@ -25,117 +26,197 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/site.css" />
+    <!-- The theme is applied before the first paint: a page that flashes light
+         and then turns dark is worse than one that never had a switch. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("omg.site.theme");
+          var theme =
+            stored ||
+            (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          document.documentElement.dataset.theme = theme;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
+    <a class="skip" href="#main" data-i18n="nav.skip">Skip to content</a>
+
     <header class="bar">
       <div class="wrap bar-in">
         <a class="brand" href="/">
-          <svg class="mark" viewBox="0 0 360 420" width="22" height="26" aria-hidden="true" focusable="false">
+          <svg class="mark" viewBox="0 0 360 420" width="21" height="25" aria-hidden="true" focusable="false">
             <path d="M 125 130 A 55 55 0 0 1 235 130 L 235 155 L 205 155 L 205 130 A 25 25 0 0 0 155 130 L 155 155 L 125 155 Z" />
             <path d="M 152 220 L 208 220 L 208 245 C 208 268 180 282 180 282 C 180 282 152 268 152 245 Z" />
             <path fill-rule="evenodd" d="M 180 130 A 115 115 0 1 0 180 360 A 115 115 0 1 0 180 130 Z M 180 188 A 57 57 0 1 1 180 302 A 57 57 0 1 1 180 188 Z" />
           </svg>
           OpenMCP<span>Gateway</span>
         </a>
-        <nav aria-label="Main">
-          <a href="#how">How it works</a>
-          <a href="#panel">The panel</a>
-          <a href="#run">Run it</a>
-          <a href="https://mcp-gateway.giomartins.dev/#/docs">Docs</a>
-          <a class="pill" href="https://mcp-gateway.giomartins.dev/">Open panel</a>
+
+        <nav aria-label="Main" data-i18n-attr="aria-label:nav.main">
+          <a class="navlink" href="#how" data-i18n="nav.how">How it works</a>
+          <a class="navlink" href="#screens" data-i18n="nav.screens">Screens</a>
+          <a class="navlink" href="/docs/" data-i18n="nav.docs">Docs</a>
+          <a
+            class="navlink"
+            href="https://github.com/giomartinsdev/OpenMCPGateway"
+            target="_blank"
+            rel="noreferrer"
+            data-i18n="nav.source"
+            >Source</a
+          >
+
+          <div class="tools">
+            <label class="lang" data-i18n-attr="aria-label:nav.lang" aria-label="Language">
+              <select id="lang" aria-label="Language">
+                <option value="en">English</option>
+                <option value="pt">Português</option>
+                <option value="es">Español</option>
+                <option value="zh">中文</option>
+                <option value="ru">Русский</option>
+              </select>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            </label>
+
+            <div class="seg" role="group" aria-label="Theme" data-i18n-attr="aria-label:nav.theme">
+              <button type="button" data-theme-set="light" aria-pressed="true">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" />
+                </svg>
+                <span data-i18n="nav.light">Light</span>
+              </button>
+              <button type="button" data-theme-set="dark" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
+                </svg>
+                <span data-i18n="nav.dark">Dark</span>
+              </button>
+            </div>
+
+            <a class="pill" href="https://mcp-gateway.giomartins.dev/" data-i18n="nav.panel">Open panel</a>
+          </div>
         </nav>
       </div>
     </header>
 
-    <main>
-      <section class="wrap hero">
-        <span class="tag"><b></b> Apache-2.0 · self-hosted</span>
-        <h1>Auth, limits and logs in front of any <em>MCP server</em>.</h1>
-        <p class="lead">
-          An MCP server usually ships with one static token pasted into every client
-          config, or with no auth at all because it sits on a private network. Both
-          fail the moment the server is worth using: the token ends up in a dotfile on
-          five laptops and cannot be revoked per person, and “on the private network”
-          is one misrouted Service away from the internet.
-        </p>
-        <p class="lead" style="margin-top: var(--s4)">
-          Point the client at the gateway instead. It terminates the login or verifies
-          a bearer key, checks that the caller belongs to the gateway’s tenant,
-          enforces a per-caller budget, and records every call with its payload.
-        </p>
-        <div class="cta">
-          <a class="btn btn-primary" href="https://mcp-gateway.giomartins.dev/">Open the panel</a>
-          <a class="btn btn-ghost" href="https://github.com/giomartinsdev/OpenMCPGateway">Source on GitHub</a>
-        </div>
-        <p class="fineprint">
-          Live deployment: <code>mcp-gateway.giomartins.dev</code>. The manual is served
-          by the same app, signed out, so it can never describe a different version.
-        </p>
+    <main id="main">
+      <!-- hero ---------------------------------------------------------- -->
+      <section class="hero">
+        <div class="wrap hero-in">
+          <span class="tag"><b></b><span data-i18n="hero.tag">Apache-2.0 · self-hosted</span></span>
 
-        <figure class="shot">
-          <div class="shot-frame">
-            <div class="shot-bar">
-              <i></i><i></i><i></i>
-              <span>mcp-gateway.giomartins.dev/#/traffic</span>
-            </div>
-            <img
-              src="/img/panel-traffic.png"
-              width="1440"
-              height="900"
-              alt="The traffic page: a flow chart of gateways and outcomes, outcome totals, and a table of individual calls with tool, status and latency."
-            />
+          <h1 data-i18n-html="hero.title">
+            Auth, limits and logs in front of any <em>MCP server</em>.
+          </h1>
+
+          <p class="lead" data-i18n="hero.lead">
+            An MCP server ships with one static token pasted into every client, or with no
+            auth at all because it sits on a private network. Both fail the moment the server
+            is worth using: the token cannot be revoked per person, and “on the private
+            network” is one misrouted Service away from the internet.
+          </p>
+          <p class="lead" data-i18n="hero.lead2">
+            Point the client at the gateway instead. It terminates the login or verifies a
+            bearer key, checks that the caller belongs to the gateway's tenant, enforces a
+            per-caller budget, and records every call with its payload.
+          </p>
+
+          <div class="cta">
+            <a class="btn btn-primary" href="https://mcp-gateway.giomartins.dev/">
+              <span data-i18n="hero.cta">Open the panel</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+            </a>
+            <a class="btn btn-ghost" href="/docs/" data-i18n="hero.cta2">Read the manual</a>
           </div>
-          <figcaption>
-            Traffic: every call is a row — gateway, subject, outcome, status, tool,
-            latency and IP — and the flow chart says where the traffic went before the
-            table says exactly which call it was.
-          </figcaption>
-        </figure>
+
+          <p class="fineprint" data-i18n-html="hero.note">
+            Live deployment: <code>mcp-gateway.giomartins.dev</code>. The manual is on this
+            site and needs no account.
+          </p>
+
+          <div class="stats">
+            <div><b>3</b><span data-i18n="stats.actions">auth modes</span></div>
+            <div><b>6</b><span data-i18n="stats.providers">identity providers</span></div>
+            <div><b>5</b><span data-i18n="stats.languages">languages</span></div>
+            <div><b>1</b><span data-i18n="stats.deploy">command to start</span></div>
+          </div>
+        </div>
+
+        <div class="wrap-wide">
+          <figure class="shot">
+            <div class="shot-frame">
+              <div class="shot-bar">
+                <i></i><i></i><i></i>
+                <span>mcp-gateway.giomartins.dev/#/traffic</span>
+              </div>
+              <img
+                src="/img/panel-traffic.png"
+                width="1440"
+                height="900"
+                data-i18n-attr="alt:hero.shotAlt"
+                alt="The traffic page: a flow chart of gateways and outcomes, outcome totals, and a table of individual calls."
+              />
+            </div>
+            <figcaption data-i18n="hero.shotCap">
+              Traffic — every call is a row: gateway, subject, outcome, status, tool, latency
+              and IP. The flow chart says where the traffic went; the table says which call it
+              was.
+            </figcaption>
+          </figure>
+        </div>
       </section>
 
-      <section class="wrap band" id="how">
-        <div class="band-head">
-          <h2>Three decisions, in this order</h2>
-          <p>
-            The gateway does not care what your MCP server does. It decides who reaches
-            it, how often, and leaves a record of what happened.
-          </p>
-        </div>
-        <div class="grid grid-3">
-          <div class="step">
-            <b>01</b>
-            <h3>Point it at your server</h3>
-            <p>
-              Give the gateway a slug and the upstream MCP URL. The upstream stays
-              unreachable from outside; the gateway is the only door.
+      <!-- how ----------------------------------------------------------- -->
+      <section class="section" id="how">
+        <div class="wrap">
+          <header class="section-head">
+            <span class="eyebrow" data-i18n="hero.tag">Apache-2.0 · self-hosted</span>
+            <h2 data-i18n="how.title">Three decisions, in this order</h2>
+            <p data-i18n="how.lead">
+              The gateway does not care what your MCP server does. It decides who reaches it,
+              how often, and leaves a record of what happened.
             </p>
-          </div>
-          <div class="step">
-            <b>02</b>
-            <h3>Choose who gets in</h3>
-            <p>
-              No auth for a private network, a bearer key for machines, or SSO for
-              people — GitHub, Google, Microsoft, Discord, any OIDC provider, or the
-              gateway’s own identity provider when you have none. Each gateway decides
-              for itself, and a single gateway can accept keys and logins at once.
-            </p>
-          </div>
-          <div class="step">
-            <b>03</b>
-            <h3>Paste the endpoint</h3>
-            <p>
-              <code>/g/&lt;slug&gt;/mcp</code> goes into the client. For OAuth, the
-              client discovers the rest from the 401 challenge on its own. Every tenant
-              starts with one gateway already there: the deployment’s own read-only
-              console.
-            </p>
-          </div>
-        </div>
+          </header>
 
-        <div class="grid grid-2" style="margin-top: var(--s6)">
-          <div>
-            <p class="code-head">Client config</p>
-            <pre class="code"><span class="c">// ~/.config/mcp/config.json</span>
+          <div class="steps">
+            <div class="step">
+              <h3 data-i18n="how.s1.title">Point it at your server</h3>
+              <p data-i18n="how.s1.body">
+                Give the gateway a slug and the upstream MCP URL. The upstream stays
+                unreachable from outside; the gateway is the only door.
+              </p>
+            </div>
+            <div class="step">
+              <h3 data-i18n="how.s2.title">Choose who gets in</h3>
+              <p data-i18n="how.s2.body">
+                No auth for a private network, a bearer key for machines, or SSO for people —
+                GitHub, Google, Microsoft, Discord, any OIDC provider, or the gateway's own.
+              </p>
+            </div>
+            <div class="step">
+              <h3 data-i18n="how.s3.title">Paste the endpoint</h3>
+              <p data-i18n-html="how.s3.body">
+                You paste <code>/g/&lt;slug&gt;/mcp</code> into the client. For OAuth, the
+                client discovers the rest from the 401 challenge on its own.
+              </p>
+            </div>
+          </div>
+
+          <div class="code-pair">
+            <div class="code-block">
+              <div class="code-head">
+                <span data-i18n="how.client">Client config</span>
+                <button class="copy" type="button" data-copy-target="code-client">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15V5a1 1 0 0 1 1-1h9" />
+                  </svg>
+                  <span data-i18n="copy">Copy</span>
+                </button>
+              </div>
+              <pre class="code" id="code-client"><span class="c">// ~/.config/mcp/config.json</span>
 {
   <span class="s">"mcpServers"</span>: {
     <span class="s">"rancher"</span>: {
@@ -147,183 +228,243 @@
     }
   }
 }</pre>
-          </div>
-          <div>
-            <p class="code-head">The refusal, before the tool runs</p>
-            <pre class="code"><span class="c"># no credential on an OAuth gateway</span>
+            </div>
+
+            <div class="code-block">
+              <div class="code-head">
+                <span data-i18n="how.refusal">The refusal, before the tool runs</span>
+                <button class="copy" type="button" data-copy-target="code-refusal">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15V5a1 1 0 0 1 1-1h9" />
+                  </svg>
+                  <span data-i18n="copy">Copy</span>
+                </button>
+              </div>
+              <pre class="code" id="code-refusal"><span class="c" data-i18n="how.refusal1"># no credential on an OAuth gateway</span>
 $ curl -sS https://gateway.example.com/g/rancher/mcp \
     -H <span class="s">'Accept: application/json'</span>
 <span class="k">401</span>  WWW-Authenticate: Bearer resource_metadata=…
 
-<span class="c"># a key that belongs to another tenant</span>
+<span class="c" data-i18n="how.refusal2"># a key that belongs to another tenant</span>
 $ curl -sS …/g/postgres/mcp -H <span class="s">"Authorization: Bearer omg_…"</span>
 <span class="k">403</span>  {"error":"forbidden","message":"'api-key:key_…' is not allowed…"}
 
-<span class="c"># one caller over its ceiling</span>
+<span class="c" data-i18n="how.refusal3"># one caller over its ceiling</span>
 <span class="k">429</span>  Retry-After: 60</pre>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="wrap band" id="panel">
-        <div class="band-head">
-          <h2>What it does, and what it refuses</h2>
-          <p>
-            Fail closed is the default: an OAuth gateway with no credentials answers
-            503, never as an open proxy. Everything below is visible in the panel,
-            because a control you cannot audit is a control you cannot defend.
-          </p>
+      <!-- features ----------------------------------------------------- -->
+      <section class="section" id="features">
+        <div class="wrap">
+          <header class="section-head">
+            <span class="eyebrow" data-i18n="nav.features">Features</span>
+            <h2 data-i18n="feat.title">What it does, and what it refuses</h2>
+            <p data-i18n="feat.lead">
+              Fail closed is the default: an OAuth gateway with no credentials answers 503,
+              never as an open proxy.
+            </p>
+          </header>
+
+          <div class="features">
+            <div class="feature">
+              <div class="ico">403</div>
+              <h3 data-i18n="feat.f1.title">Identity you already have</h3>
+              <p data-i18n="feat.f1.body">
+                GitHub, Google, Microsoft, Discord or any OIDC provider — or the gateway's own
+                provider, so a self-hosted install with no IdP still gets SSO.
+              </p>
+            </div>
+            <div class="feature">
+              <div class="ico">{ }</div>
+              <h3 data-i18n="feat.f2.title">One endpoint per MCP server</h3>
+              <p data-i18n-html="feat.f2.body">
+                Clients point at <code>/g/&lt;slug&gt;/mcp</code>. The gateway terminates OAuth
+                or verifies a bearer key, then calls the real server over the private network.
+              </p>
+            </div>
+            <div class="feature">
+              <div class="ico">429</div>
+              <h3 data-i18n="feat.f3.title">Per-caller budgets</h3>
+              <p data-i18n="feat.f3.body">
+                Requests per minute per subject, counting JSON-RPC calls only — handshakes and
+                notifications are free — plus an optional monthly quota.
+              </p>
+            </div>
+            <div class="feature">
+              <div class="ico">log</div>
+              <h3 data-i18n="feat.f4.title">Every call is a row</h3>
+              <p data-i18n="feat.f4.body">
+                Subject, outcome, status, latency, IP, tool name and a capped payload trace,
+                appended to an event log that backs the traffic table and the audit trail.
+              </p>
+            </div>
+            <div class="feature">
+              <div class="ico">yaml</div>
+              <h3 data-i18n="feat.f5.title">Panel and file are the same</h3>
+              <p data-i18n="feat.f5.body">
+                Export the tenant to YAML, edit it, apply it back. Both paths reach one command
+                handler, so they cannot disagree.
+              </p>
+            </div>
+            <div class="feature">
+              <div class="ico">›_</div>
+              <h3 data-i18n="feat.f6.title">A console you can ask</h3>
+              <p data-i18n-html="feat.f6.body">
+                Every tenant ships with a gateway to this deployment's own read-only MCP. Point
+                an agent at <code>/g/console/mcp</code> and ask what broke.
+              </p>
+            </div>
+          </div>
         </div>
-        <div class="grid grid-3">
-          <div class="card">
-            <div class="ico">403</div>
-            <h3>Identity you already have</h3>
-            <p>
-              GitHub, Google, Microsoft, Discord or any OIDC provider — or the
-              gateway’s own provider, so a self-hosted install with no IdP still gets
-              SSO. Who may call is decided by the tenant that owns the gateway, read
-              fresh on every request.
+      </section>
+
+      <!-- screens ------------------------------------------------------ -->
+      <section class="section" id="screens">
+        <div class="wrap">
+          <header class="section-head">
+            <span class="eyebrow" data-i18n="nav.screens">Screens</span>
+            <h2 data-i18n="screens.title">The panel, screen by screen</h2>
+            <p data-i18n="screens.lead">
+              One control surface for gateways, keys, members and traffic. Light is the default
+              and dark is one click away, built from the same tokens.
             </p>
-          </div>
-          <div class="card">
-            <div class="ico">{ }</div>
-            <h3>One endpoint per MCP server</h3>
-            <p>
-              Clients point at <code>/g/&lt;slug&gt;/mcp</code>. The gateway terminates
-              OAuth or verifies a bearer key, then calls the real server over the
-              private network with an upstream credential the caller never holds.
-            </p>
-          </div>
-          <div class="card">
-            <div class="ico">429</div>
-            <h3>Per-caller budgets</h3>
-            <p>
-              Requests per minute per subject, counting JSON-RPC calls only —
-              handshakes and notifications are free — plus an optional monthly quota.
-              Redis-backed, so the limit is the same on every replica.
-            </p>
-          </div>
-          <div class="card">
-            <div class="ico">log</div>
-            <h3>Every call is a row</h3>
-            <p>
-              Subject, outcome, status, latency, IP, tool name and a capped payload
-              trace with the request and the response, appended to an event log that
-              backs both the traffic table and the audit trail.
-            </p>
-          </div>
-          <div class="card">
-            <div class="ico">yaml</div>
-            <h3>Panel and file are the same</h3>
-            <p>
-              Export the tenant to YAML, edit it, apply it back. Both paths reach one
-              command handler, so they cannot disagree — and the panel shows the diff
-              before an apply.
-            </p>
-          </div>
-          <div class="card">
-            <div class="ico">›_</div>
-            <h3>A console you can ask</h3>
-            <p>
-              Every tenant ships with a gateway to this deployment’s own read-only MCP.
-              Point an agent at <code>/g/console/mcp</code> and ask what broke, or what
-              the audit log says.
-            </p>
-          </div>
+          </header>
         </div>
 
-        <div class="gallery">
-          <figure>
+        <div class="wrap-wide">
+          <figure class="shot screen">
+            <div class="shot-frame">
+              <div class="shot-bar"><i></i><i></i><i></i><span>#/gateways</span></div>
+              <img
+                src="/img/panel-gateways.png"
+                width="1440"
+                height="900"
+                loading="lazy"
+                alt="The gateway list: slug, auth mode, upstream state and traffic, with filters under each column."
+              />
+            </div>
+            <div class="screen-note">
+              <h3 data-i18n="screens.s1.title">Every gateway on one line</h3>
+              <p data-i18n="screens.s1.body">
+                Slug, auth mode, upstream state and the traffic it is taking. The list filters
+                and sorts under each column header, and a cursor keeps the page honest.
+              </p>
+            </div>
+          </figure>
+
+          <figure class="shot screen">
             <div class="shot-frame">
               <div class="shot-bar"><i></i><i></i><i></i><span>/#/gateways/&lt;id&gt;</span></div>
               <img
                 src="/img/panel-gateway-detail.png"
                 width="1440"
                 height="900"
-                alt="A gateway page: endpoint, auth mode, upstream tools with call counts, and the connect guide."
                 loading="lazy"
+                alt="A gateway page: endpoint, auth mode, upstream tools with call counts, and the connect guide."
               />
             </div>
-            <figcaption>
-              One gateway: the endpoint to paste, the auth mode, the upstream’s tools
-              with how often each was called, and the connect guide.
-            </figcaption>
+            <div class="screen-note">
+              <h3 data-i18n="screens.s2.title">One gateway, in full</h3>
+              <p data-i18n="screens.s2.body">
+                The endpoint to paste, the auth mode, each upstream tool with how often it was
+                called, the allowlist, and a connect guide generated from the live proxy
+                configuration.
+              </p>
+            </div>
           </figure>
-          <figure>
+
+          <figure class="shot screen">
             <div class="shot-frame">
               <div class="shot-bar"><i></i><i></i><i></i><span>request drawer</span></div>
               <img
                 src="/img/panel-request-drawer.png"
                 width="1440"
                 height="900"
+                loading="lazy"
                 alt="The request drawer: outcome, subject, latency, and the formatted request and response bodies."
-                loading="lazy"
               />
             </div>
-            <figcaption>
-              The drawer behind a row: why it was refused or what came back, with the
-              body shaped as JSON and one click away from the raw bytes.
-            </figcaption>
-          </figure>
-          <figure>
-            <div class="shot-frame">
-              <div class="shot-bar"><i></i><i></i><i></i><span>#/audit</span></div>
-              <img
-                src="/img/panel-audit.png"
-                width="1440"
-                height="900"
-                alt="The audit log: who changed what, with the aggregate it touched."
-                loading="lazy"
-              />
+            <div class="screen-note">
+              <h3 data-i18n="screens.s3.title">The call behind the row</h3>
+              <p data-i18n="screens.s3.body">
+                Outcome, subject, latency, and the request and response bodies shaped as JSON —
+                one click from the raw bytes. This is where “403” turns into a sentence.
+              </p>
             </div>
-            <figcaption>
-              The audit log answers “who changed this” separately from “who called
-              this”, because they are different questions with different answers.
-            </figcaption>
           </figure>
-          <figure>
+
+          <figure class="shot screen">
             <div class="shot-frame">
               <div class="shot-bar"><i></i><i></i><i></i><span>#/traffic — dark</span></div>
               <img
                 src="/img/panel-traffic-dark.png"
                 width="1440"
                 height="900"
-                alt="The same traffic page in the dark palette."
                 loading="lazy"
+                alt="The same traffic page in the dark palette."
               />
             </div>
-            <figcaption>
-              Light is the default and dark is one click away, both built from the
-              same tokens — so no screen is styled twice and neither theme is an
-              afterthought.
-            </figcaption>
+            <div class="screen-note">
+              <h3 data-i18n="screens.s4.title">Light and dark, one palette</h3>
+              <p data-i18n="screens.s4.body">
+                The same traffic page with the dark tokens. Neither theme is an afterthought,
+                because neither is a filter painted over the other.
+              </p>
+            </div>
           </figure>
         </div>
       </section>
 
-      <section class="wrap band" id="run">
-        <div class="band-head">
-          <h2>Run it yourself</h2>
-          <p>
-            One compose file, Postgres included. The first account to register becomes
-            the deployment’s admin, and every tenant starts with a working read-only
-            console gateway, so there is something to call before you wire anything up.
-          </p>
-        </div>
-        <div class="grid grid-2" style="margin-top: var(--s6)">
-          <div>
-            <p class="code-head">Bring it up</p>
-            <pre class="code"><span class="c"># Postgres + the app, listening on :8000</span>
+      <!-- run ---------------------------------------------------------- -->
+      <section class="section" id="run">
+        <div class="wrap">
+          <header class="section-head">
+            <span class="eyebrow" data-i18n="nav.panel">Open panel</span>
+            <h2 data-i18n="run.title">Run it yourself</h2>
+            <p data-i18n="run.lead">
+              One compose file, Postgres included. The first account to register becomes the
+              deployment's admin, and every tenant starts with a working read-only console
+              gateway.
+            </p>
+          </header>
+
+          <div class="code-pair">
+            <div class="code-block">
+              <div class="code-head">
+                <span data-i18n="run.up">Bring it up</span>
+                <button class="copy" type="button" data-copy-target="code-up">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15V5a1 1 0 0 1 1-1h9" />
+                  </svg>
+                  <span data-i18n="copy">Copy</span>
+                </button>
+              </div>
+              <pre class="code" id="code-up"><span class="c"># Postgres + the app, listening on :8000</span>
 git clone https://github.com/giomartinsdev/OpenMCPGateway
 cd OpenMCPGateway
 docker compose up -d --build
 
-<span class="c"># the panel and the manual are the same app</span>
+<span class="c"># panel on :8000; the manual is on this site</span>
 open http://localhost:8000</pre>
-          </div>
-          <div>
-            <p class="code-head">Call a gateway</p>
-            <pre class="code"><span class="c"># initialize, then tools/list — the transport is stateful</span>
+            </div>
+
+            <div class="code-block">
+              <div class="code-head">
+                <span data-i18n="run.call">Call a gateway</span>
+                <button class="copy" type="button" data-copy-target="code-call">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15V5a1 1 0 0 1 1-1h9" />
+                  </svg>
+                  <span data-i18n="copy">Copy</span>
+                </button>
+              </div>
+              <pre class="code" id="code-call"><span class="c"># initialize, then tools/list — the transport is stateful</span>
 curl -sS http://localhost:8000/g/console/mcp \
   -H <span class="s">"Authorization: Bearer omg_…"</span> \
   -H <span class="s">'Accept: application/json, text/event-stream'</span> \
@@ -336,20 +477,124 @@ curl -sS http://localhost:8000/g/console/mcp \
 <span class="c"># a 200 here is an SSE frame, not a JSON document</span>
 event: message
 data: {"jsonrpc":"2.0","id":1,"result":{…}}</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- docs --------------------------------------------------------- -->
+      <section class="section" id="docs">
+        <div class="wrap">
+          <header class="section-head">
+            <span class="eyebrow" data-i18n="nav.docs">Docs</span>
+            <h2 data-i18n="docs.title">The manual, in five languages</h2>
+            <p data-i18n="docs.lead">
+              Not a README on another tab: the reference is generated from the same files this
+              deployment runs, so it can never describe a different version.
+            </p>
+          </header>
+
+          <div class="docs-band">
+            <a class="docs-card" href="/docs/#overview">
+              <span class="eyebrow" data-i18n="nav.docs">Docs</span>
+              <h3 data-i18n="docs.s1.title">Gateways, auth, limits, logs</h3>
+              <p data-i18n="docs.s1.body">
+                How a request gets through, what each auth mode costs you, and every field on a
+                gateway.
+              </p>
+              <span class="go">
+                <span data-i18n="docs.cta">Read the manual</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </span>
+            </a>
+
+            <a class="docs-card" href="/docs/#config">
+              <span class="eyebrow" data-i18n="nav.config">Config</span>
+              <h3 data-i18n="docs.s2.title">Config as code, roles, members</h3>
+              <p data-i18n="docs.s2.body">
+                The full YAML schema — gateways, roles and members — with the merge and prune
+                semantics spelled out.
+              </p>
+              <span class="go">
+                <span data-i18n="docs.cta">Read the manual</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </span>
+            </a>
+
+            <a class="docs-card" href="/docs/#ops">
+              <span class="eyebrow" data-i18n="nav.ops">Operations</span>
+              <h3>503, 401, 403, 429</h3>
+              <p data-i18n="docs.s3.body">
+                What each refusal means, and the ingress setting that makes an MCP stream look
+                like a hang.
+              </p>
+              <span class="go">
+                <span data-i18n="docs.cta">Read the manual</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </span>
+            </a>
           </div>
         </div>
       </section>
     </main>
 
-    <footer>
-      <div class="wrap foot-in">
-        <span>OpenMCPGateway · Apache-2.0 · self-hosted</span>
-        <div class="foot-links">
-          <a href="https://github.com/giomartinsdev/OpenMCPGateway">Source</a>
-          <a href="https://mcp-gateway.giomartins.dev/#/docs">Documentation</a>
-          <a href="https://mcp-gateway.giomartins.dev/">Panel</a>
+    <footer class="site">
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-brand">
+            <a class="brand" href="/">
+              <svg class="mark" viewBox="0 0 360 420" width="21" height="25" aria-hidden="true" focusable="false">
+                <path d="M 125 130 A 55 55 0 0 1 235 130 L 235 155 L 205 155 L 205 130 A 25 25 0 0 0 155 130 L 155 155 L 125 155 Z" />
+                <path d="M 152 220 L 208 220 L 208 245 C 208 268 180 282 180 282 C 180 282 152 268 152 245 Z" />
+                <path fill-rule="evenodd" d="M 180 130 A 115 115 0 1 0 180 360 A 115 115 0 1 0 180 130 Z M 180 188 A 57 57 0 1 1 180 302 A 57 57 0 1 1 180 188 Z" />
+              </svg>
+              OpenMCP<span>Gateway</span>
+            </a>
+            <p data-i18n="foot.tagline">
+              Auth, authorisation and a full request log in front of any MCP server.
+            </p>
+          </div>
+
+          <div class="foot-col">
+            <h4 data-i18n="foot.product">Product</h4>
+            <a href="#screens" data-i18n="nav.screens">Screens</a>
+            <a href="#how" data-i18n="nav.how">How it works</a>
+            <a href="#run" data-i18n="run.title">Run it yourself</a>
+            <a href="https://mcp-gateway.giomartins.dev/" data-i18n="foot.panel">Panel</a>
+          </div>
+
+          <div class="foot-col">
+            <h4 data-i18n="foot.docs">Documentation</h4>
+            <a href="/docs/" data-i18n="foot.manual">Manual</a>
+            <a href="/docs/#gateways" data-i18n="nav.gateways">Gateways</a>
+            <a href="/docs/#auth" data-i18n="nav.auth">Authentication</a>
+            <a href="/docs/#config" data-i18n="nav.config">Config as code</a>
+          </div>
+
+          <div class="foot-col">
+            <h4 data-i18n="nav.source">Source</h4>
+            <a href="https://github.com/giomartinsdev/OpenMCPGateway" target="_blank" rel="noreferrer"
+              >GitHub</a
+            >
+            <a
+              href="https://github.com/giomartinsdev/OpenMCPGateway/blob/main/LICENSE"
+              target="_blank"
+              rel="noreferrer"
+              >Apache-2.0</a
+            >
+            <a href="https://github.com/giomartinsdev/OpenMCPGateway/issues" target="_blank" rel="noreferrer"
+              data-i18n="nav.issues">Issues</a
+            >
+          </div>
+        </div>
+
+        <div class="foot-base">
+          <span data-i18n="foot.license">Apache-2.0 · self-hosted</span>
+          <span data-i18n="foot.built">Built with the same design system as the panel.</span>
         </div>
       </div>
     </footer>
+
+    <script src="/site.js" defer></script>
   </body>
 </html>

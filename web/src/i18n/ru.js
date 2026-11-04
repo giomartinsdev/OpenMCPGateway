@@ -293,6 +293,7 @@ export default {
   "1 request was refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.": "В этом окне отклонён 1 запрос. Отказ — не сбой шлюза: это страж делает свою работу, и в строке указано, какой именно.",
   "{count} requests were refused in this window. A refusal is not a failure of the gateway: it is the guard doing its job, and the row says which one.": "В этом окне отклонено {count} запросов. Отказ — не сбой шлюза: это страж делает свою работу, и в строке указано, какой именно.",
   "{count} rows": "{count} строк",
+  "{count} others": "{count} других",
   "Loading recent requests": "Загрузка последних запросов",
   "Nothing recorded yet": "Пока ничего не записано",
   "Requests appear here as they arrive.": "Запросы появляются здесь по мере поступления.",

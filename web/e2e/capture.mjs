@@ -287,10 +287,6 @@ await page.goto("/#/members");
 await page.getByRole("heading", { name: "Members", level: 1 }).waitFor();
 await shot("panel-members");
 
-await page.goto("/#/docs");
-await page.getByRole("heading", { level: 1 }).first().waitFor();
-await shot("panel-docs");
-
 // A outra paleta: o mesmo painel, os mesmos componentes, uma captura que
 // prova que o tema não é um filtro por cima e sim um conjunto de tokens.
 await theme("dark");

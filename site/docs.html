@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="docs.docTitle">The manual — OpenMCPGateway</title>
+    <meta
+      name="description"
+      content="What OpenMCPGateway does, how a request gets through, and how to keep the configuration in a file you can review."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#fbfbfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#08090c" media="(prefers-color-scheme: dark)" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/site.css" />
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("omg.site.theme");
+          document.documentElement.dataset.theme =
+            stored ||
+            (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="docs-page">
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="bar">
+      <div class="wrap bar-in">
+        <a class="brand" href="/">
+          <svg class="mark" viewBox="0 0 360 420" width="21" height="25" aria-hidden="true" focusable="false">
+            <path d="M 125 130 A 55 55 0 0 1 235 130 L 235 155 L 205 155 L 205 130 A 25 25 0 0 0 155 130 L 155 155 L 125 155 Z" />
+            <path d="M 152 220 L 208 220 L 208 245 C 208 268 180 282 180 282 C 180 282 152 268 152 245 Z" />
+            <path fill-rule="evenodd" d="M 180 130 A 115 115 0 1 0 180 360 A 115 115 0 1 0 180 130 Z M 180 188 A 57 57 0 1 1 180 302 A 57 57 0 1 1 180 188 Z" />
+          </svg>
+          OpenMCP<span>Gateway</span>
+        </a>
+
+        <nav aria-label="Main">
+          <a class="navlink" href="/" data-i18n="nav.home">Home</a>
+          <a class="navlink" href="/#screens" data-i18n="nav.screens">Screens</a>
+          <a class="navlink" href="/#run" data-i18n="nav.run">Run it</a>
+          <a
+            class="navlink"
+            href="https://github.com/giomartinsdev/OpenMCPGateway"
+            target="_blank"
+            rel="noreferrer"
+            data-i18n="nav.source"
+            >Source</a
+          >
+          <div class="tools">
+            <label class="lang" aria-label="Language">
+              <select id="lang" aria-label="Language">
+<option value="en">English</option>
+<option value="pt">Português</option>
+<option value="es">Español</option>
+<option value="zh">中文</option>
+<option value="ru">Русский</option>
+              </select>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            </label>
+            <div class="seg" role="group" aria-label="Theme">
+              <button type="button" data-theme-set="light" aria-pressed="true">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" />
+                </svg>
+                <span data-i18n="nav.light">Light</span>
+              </button>
+              <button type="button" data-theme-set="dark" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
+                </svg>
+                <span data-i18n="nav.dark">Dark</span>
+              </button>
+            </div>
+            <a class="pill" href="https://mcp-gateway.giomartins.dev/" data-i18n="nav.panel">Open panel</a>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="wrap docs-main">
+      <header class="docs-head">
+        <span class="eyebrow" data-i18n="nav.docs">Documentation</span>
+        <h1 data-i18n="docs.heading">The manual</h1>
+        <p class="sub" data-i18n="docs.sub">
+          What the gateway does, how a request gets through, and how to keep the configuration
+          in a file you can review. Apache-2.0, self-hosted, no account to create.
+        </p>
+        <div class="cta docs-cta">
+          <a class="btn btn-ghost" href="https://github.com/giomartinsdev/OpenMCPGateway" target="_blank" rel="noreferrer" data-i18n="docs.source">
+            Source on GitHub
+          </a>
+          <a class="btn btn-ghost" href="/" data-i18n="docs.back">Back to the site</a>
+        </div>
+      </header>
+
+<div class="docs-pane" data-lang-pane="en">
+<nav class="docs-toc" aria-label="On this page">
+<div class="nav-label" data-i18n="docs.onThisPage">On this page</div>
+<a href="#overview" data-jump="overview">What this is</a>
+<a href="#quickstart" data-jump="quickstart">Quickstart</a>
+<a href="#gateways" data-jump="gateways">Gateways</a>
+<a href="#auth" data-jump="auth">Authentication modes</a>
+<a href="#rbac" data-jump="rbac">Members and roles</a>
+<a href="#config" data-jump="config">Config as code</a>
+<a href="#api" data-jump="api">HTTP API</a>
+<a href="#console" data-jump="console">The console MCP</a>
+<a href="#ops" data-jump="ops">Operating it</a>
+<a href="#env" data-jump="env">Environment</a>
+</nav>
+<article class="docs-article">
+<section class="docs-section" id="en-overview" data-anchor="overview">
+<h2>What this is</h2>
+<p>OpenMCPGateway sits in front of one or more MCP servers. Clients point at <code>https://&lt;host&gt;/g/&lt;slug&gt;/mcp</code>; the gateway authenticates the caller, applies its gate and a per-minute budget, forwards the request to the real server over the private network, and records what happened.</p>
+<p>The upstream does not need to be reachable from the internet, and it does not need to know who the caller is: the gateway terminates identity and forwards its own credential when the upstream demands one (<code>upstream_token</code>).</p>
+<p>The panel answers the same questions in the same shape: the Traffic screen carries totals with the change against the previous window, a volume chart, and breakdowns by outcome, gateway and caller — and a row in any table opens a drawer with the rest of that row instead of navigating away from the list.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Layer</th><th>Behaviour</th></tr></thead>
+<tbody><tr><td class="strong">Authentication</td><td>OAuth proxy per gateway (Google, GitHub, Microsoft, Discord, custom OIDC) or a bearer key hashed with SHA-256</td></tr><tr><td class="strong">Authorisation</td><td>Members of the tenant that owns the gateway. A key issued here works too.</td></tr><tr><td class="strong">Rate limit</td><td>Per subject, per gateway, counting JSON-RPC requests. Handshakes are free</td></tr><tr><td class="strong">Observability</td><td>Every attempt logged: subject, outcome, status, latency, IP</td></tr><tr><td class="strong">Fail closed</td><td>An OAuth gateway without credentials answers 503, never as an open proxy</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="en-quickstart" data-anchor="quickstart">
+<h2>Quickstart</h2>
+<p>You need a Postgres the gateway can reach and a hostname that terminates TLS in front of it.</p>
+<pre class="code" tabindex="0"># 1. run it
+export OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg
+export OMG_SESSION_SECRET=$(openssl rand -hex 32)
+export OMG_BASE_URL=https://gateway.example.com
+omg serve
+
+# 2. create the first account, then a tenant, in the browser
+open https://gateway.example.com</pre>
+<p>The first account creates a tenant and becomes its <code>owner</code>. Everyone else either joins with the tenant's join code or is added by an administrator.</p>
+<p>The tenant arrives with a <code>console</code> gateway already pointing at this deployment's own read-only MCP. Point an agent at <code>/g/console/mcp</code> with the API key from its page and ask it what the deployment is doing — no upstream to configure.</p>
+<p>Point a client at a gateway as soon as one exists:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "my-server": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/my-server/mcp"
+    }
+  }
+}</pre>
+
+
+</section>
+<section class="docs-section" id="en-gateways" data-anchor="gateways">
+<h2>Gateways</h2>
+<p>A gateway is a slug, an upstream URL, and a policy. The slug is global: <code>/g/&lt;slug&gt;/mcp</code> is the string people paste into clients, so two tenants cannot both own <code>rancher</code>.</p>
+<p>One gateway is created for you: <code>console</code>, pointing at this deployment's own read-only MCP. The slug is global because <code>/g/&lt;slug&gt;/mcp</code> is a public URL, so on a deployment with several tenants the first one takes <code>console</code> and the others take <code>console-&lt;tenant id&gt;</code> — the id, not a counter, so the address still says whose gateway it is.</p>
+<p><code>target_url</code> is the streamable-HTTP endpoint of the upstream, including its path (<code>http://rancher-mcp.support.svc.cluster.local:8000/mcp</code>). It must be <code>http://</code> or <code>https://</code>.</p>
+<p>A gateway also decides <em>which</em> tools it exposes. The allowlist is a set of upstream tool names; empty means everything the upstream serves, which is how every gateway starts. It can be narrowed per credential source — the hosted identity provider (<code>google</code>, <code>github</code>, <code>oidc</code>), an extra verifier's label, or <code>api_key</code> — so one route gives a bot a smaller catalog than the person signed in beside it, without publishing two gateways to the same upstream. A source with no list of its own inherits the gateway's, and clearing a source's list puts it back to inheriting. A tool outside the list disappears from <code>tools/list</code> and a <code>tools/call</code> for it answers <code>403</code> naming the tool, so a client that kept an old name in its config gets a sentence instead of a silent success or a typo hunt. The gateway's page probes the upstream on demand: a real handshake, the tool count, and the reason it failed. A dead upstream used to look like a quiet, healthy gateway.</p>
+<p>The panel reads the upstream catalog directly to fill that list - not through the gateway, which would answer with the filter it is already applying. A configured name the upstream no longer serves stays visible and marked, because dropping it silently on the next save would erase a decision the operator made.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+<tbody><tr><td class="strong">slug</td><td><code>[a-z0-9-]+</code>, 2-40 chars. Appears in the public path</td></tr><tr><td class="strong">target_url</td><td>Upstream MCP endpoint, including the path</td></tr><tr><td class="strong">auth_mode</td><td><code>none</code>, <code>api_key</code> or <code>oauth</code></td></tr><tr><td class="strong">idp</td><td>With <code>oauth</code>: <code>self</code>, <code>github</code>, <code>google</code>, <code>azure</code>, <code>discord</code> or <code>oidc</code></td></tr><tr><td class="strong">upstream_token</td><td>Bearer the upstream demands. Write-only: never returned by the API</td></tr><tr><td class="strong">rate_limit</td><td>Requests per minute per subject. <code>0</code> means unlimited</td></tr><tr><td class="strong">enabled</td><td>A disabled gateway answers 404, not 403 - it is not advertised</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="en-auth" data-anchor="auth">
+<h2>Authentication modes</h2>
+<p><strong><code>none</code></strong> - no authentication. Fine on a private network; the panel warns while any such gateway is enabled.</p>
+<p><strong><code>api_key</code></strong> - the caller sends <code>Authorization: Bearer omg_...</code>. The key is stored as a SHA-256 hash (that is what authentication compares) next to a sealed copy of the plaintext, encrypted with the deployment secret. The response that mints it returns the plaintext, and the gateway's page carries an eye icon for a key that has never been read: clicking it decrypts the sealed copy, shows the key once, and wipes it. After that the hash is all that remains, and the only way back to a readable key is rotating it. A key can be issued with an expiry. Past it the key no longer authenticates, and a rotation inherits the deadline of the key it replaces — the point of rotating is to change the secret, not to extend how long it is trusted.</p>
+<p>The operator approves once, and that account is a member from then on.</p>
+<p>The client does not need a token checked into a dotfile for OAuth mode - that is the point. For API-key mode it does, which is why the key is per gateway and revocable on its own.</p>
+<p>A gateway can also have more than one way in. <code>oauth</code> mode accepts API keys on the same route when <code>allow_api_key</code> is set, and accepts tokens from additional issuers listed under <code>verifiers</code> - each with a label, issuer, optional audience and JWKS URL. The extra issuers have no login flow of their own: the client already holds a token from its provider, and the gateway only verifies the signature, the issuer and the audience. One URL, one gate, one rate limit, and no second gateway per credential type.</p>
+<p>Who may call is not a list on the gateway. A caller is admitted when their account belongs to the tenant that owns it - the same rule the panel applies to editing one, so 'who may use this' has one answer instead of two that drift. Membership is read per request, so removing someone or disabling their account closes the gateway door on their next call. API keys are exempt because a key embeds its own id rather than naming an account: a key is admitted while its hash matches a live key here, and revoked by revoking the key.</p>
+<pre class="code" tabindex="0"># API-key call
+curl -sS https://gateway.example.com/g/rancher/mcp \
+  -H 'Authorization: Bearer omg_...' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'</pre>
+
+
+</section>
+<section class="docs-section" id="en-rbac" data-anchor="rbac">
+<h2>Members and roles</h2>
+<p>Everything is scoped to a tenant: gateways, members, roles, traffic, the audit log. An id from another tenant is a 404, not a 403 that confirms it exists.</p>
+<p>Permissions are a closed catalog. A typo is refused with a 422 naming the field, because the alternative is a role that grants nothing and says nothing.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Permission</th><th>Grants</th></tr></thead>
+<tbody><tr><td class="strong">gateways:read / write</td><td>See the gateway list, and change slugs, targets, auth and limits</td></tr><tr><td class="strong">keys:read / write</td><td>See key ids, and issue, rotate or revoke them</td></tr><tr><td class="strong">traffic:read</td><td>Read request stats and the recent-request log</td></tr><tr><td class="strong">audit:read</td><td>Read the append-only event log</td></tr><tr><td class="strong">config:read / write</td><td>Export and apply the YAML file</td></tr><tr><td class="strong">members:read / write</td><td>See the address book, and add people</td></tr><tr><td class="strong">roles:read / write</td><td>See the role table, and define or edit roles</td></tr></tbody>
+</table></div>
+<p>Two roles are built in and cannot be edited or deleted, because neither is a policy decision:</p>
+<div class="docs-table"><table>
+<thead><tr><th>Role</th><th>Id</th><th>Permissions</th></tr></thead>
+<tbody><tr><td class="strong"><code>owner</code></td><td><code>role_owner</code></td><td>everything</td></tr><tr><td class="strong"><code>viewer</code></td><td><code>role_viewer</code></td><td>every read permission</td></tr></tbody>
+</table></div>
+<p>A member added without a role lands on <code>viewer</code>: an omission narrows access, never widens it. Delegation may only narrow too - nobody can grant a permission they do not hold themselves, or <code>members:write</code> would be a path to <code>role_owner</code>. The same rule applies to the config file.</p>
+<p>Permissions are resolved per request from the read models, so editing a role or reassigning someone takes effect on their next click. No re-login, no stale session.</p>
+</section>
+<section class="docs-section" id="en-config" data-anchor="config">
+<h2>Config as code</h2>
+<p>The panel and a YAML file are two front doors onto the same command handler. Neither is privileged: a gateway created in the browser exports to the file, and a file applied by CI lands in the same event log as a click.</p>
+<p><code>gateways</code>, <code>roles</code> and <code>members</code> are all declared in the file, so a tenant can be rebuilt from a commit. Secrets are never exported - write <code>${ENV_VAR}</code> and the server resolves it from its own environment at apply time.</p>
+<pre class="code" tabindex="0"># gateways.yaml
+gateways:
+  - slug: rancher
+    name: Rancher cluster
+    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp
+    description: read the cluster, restart and scale
+    auth:
+      mode: oauth
+      idp: google
+      client_id: ${GOOGLE_CLIENT_ID}
+      client_secret: ${GOOGLE_CLIENT_SECRET}
+      upstream_token: ${RANCHER_MCP_TOKEN}
+    rate_limit: 120
+    allow: [someone@example.com]
+
+roles:
+  - name: Auditor
+    permissions: [gateways:read, traffic:read, audit:read]
+
+members:
+  - email: auditor@example.com
+    password: ${MEMBER_PASSWORD}
+    roles: [Auditor]
+
+prune: false</pre>
+<p>Merge semantics: the file is authoritative for what it declares. A gateway left out of the file survives, so a typo cannot delete production. <code>prune: true</code> opts into deletion - it applies to gateways only; members are never pruned by omission, because an account that disappears from a file is far more likely to be a merge accident than an intention.</p>
+<p>Members reconcile by email: an existing member whose roles differ gets them replaced, and one whose roles match is left alone. <code>password</code> is only used when the account does not exist yet, so it appears in a reviewed file as <code>${MEMBER_PASSWORD}</code> and never in an export - which is also why exporting and re-applying is a no-op. A new account with no password is refused, because inventing one would be a credential nobody can sign in with.</p>
+<p>A role whose name matches a built-in (<code>owner</code>, <code>viewer</code>) may be named but not redefined: the file would otherwise narrow every existing member at once.</p>
+
+<pre class="code" tabindex="0"># round-trip from the shell
+omg export --tenant tn_local &gt; gateways.yaml
+omg apply gateways.yaml --tenant tn_local</pre>
+<p><code>omg apply</code> prints what changed and any errors, and exits non-zero when a declaration failed - which is what makes it usable in CI. Newly issued API keys are printed once, because that is the only time the plaintext exists.</p>
+<p>The panel's Config as code page does the same thing: <strong>Validate</strong> parses and resolves placeholders without touching state, <strong>Apply</strong> runs the commands.</p>
+</section>
+<section class="docs-section" id="en-api" data-anchor="api">
+<h2>HTTP API</h2>
+<p>Everything the panel does is an endpoint under <code>/api</code>, authenticated by an <code>HttpOnly</code> session cookie. The MCP routes themselves live at <code>/g/&lt;slug&gt;/mcp</code> and speak JSON-RPC, not this API.</p>
+<p>Every list is cursor-paginated: <code>?limit=50&amp;before=&lt;cursor&gt;</code>, answering <code>{items, next}</code>. <code>next</code> is null on the last page, and <code>limit</code> is clamped to 200 rather than refused.</p>
+<p>Each list also accepts its own filter fields as query parameters, one box per column in the panel. Text columns match a fragment (<code>?name=anch</code> finds <code>rancher</code>), <code>status</code> and <code>enabled</code> match exactly, and every list carries an <code>id</code> box for the row you only half copied. An unknown field is a 422 naming the fields that exist — a filter silently ignored is worse than an error.</p>
+<p>Ordering is <code>?sort=&lt;column&gt;&amp;order=asc|desc</code>. The sortable columns are a closed set per list: gateways by <code>created_at</code>, <code>updated_at</code>, <code>name</code> or <code>slug</code>; traffic by <code>occurred_at</code>, <code>duration_ms</code>, <code>status</code> or <code>subject</code>; the audit log by <code>occurred_at</code>, <code>actor</code> or <code>type</code>; members by <code>email</code> and <code>created_at</code>; roles by <code>name</code> and <code>created_at</code>. An unknown key is a 422 that lists the legal ones.</p>
+<p>A cursor means <em>after this row, in this order</em>, so it is bound to the sort it was minted under. Change <code>sort</code> or <code>order</code> and start from the first page: reusing the old cursor is a 422, not a silently holed list.</p>
+<p>Two endpoints do not fit the CRUD shape and are worth knowing: <code>POST /api/gateways/&lt;id&gt;/keys/&lt;key_id&gt;/reveal</code> answers the sealed plaintext once and <code>409</code> afterwards, and <code>GET /api/gateways/&lt;id&gt;/upstream-tools</code> asks the upstream what it serves so the allowlist can be ticked rather than typed. <code>PUT /api/gateways/&lt;id&gt;/tools</code> replaces the list, or one credential source's list when the body names a <code>source</code>. <code>GET /api/requests.csv</code> answers the same filters as <code>/requests</code>, as a file; <code>POST /api/config/plan</code> says what an apply would change without changing it, and <code>POST /api/gateways/&lt;id&gt;/test</code> probes the upstream with a real MCP handshake.</p>
+<p>Four endpoints answer questions the CRUD shape cannot: <code>GET /api/gateways/&lt;id&gt;/history</code> is that gateway's own event stream, newest first, paged and filtered with the audit log's own vocabulary and with secret values redacted; <code>POST /api/gateways/&lt;id&gt;/restore</code> re-applies the configuration at a version and appends one <code>gateway.restored</code> fact — credentials and keys are not restored, because a revoked key must stay revoked; <code>GET /api/events.csv</code> is the audit log as a file with the same filters and the same tenant scope; and <code>/api/gateways/&lt;id&gt;/webhooks</code> registers a URL that receives every observation the guard records, signed with an HMAC-SHA256 of the body.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Method and path</th><th>Does</th></tr></thead>
+<tbody><tr><td class="strong">POST /api/auth/login</td><td>Sign in with email and password</td></tr><tr><td class="strong">GET /api/auth/me</td><td>Identity, tenant, roles and flat permission list</td></tr><tr><td class="strong">GET /api/gateways?slug=&amp;name=&amp;auth_mode=&amp;enabled=</td><td>A page of gateways, newest first</td></tr><tr><td class="strong">POST /api/gateways</td><td>Create one (requires <code>gateways:write</code>)</td></tr><tr><td class="strong">GET /api/gateways/{id}/connect</td><td>Generated copy-paste guide for that gateway</td></tr><tr><td class="strong">PUT /api/gateways/{id}/auth</td><td>Auth mode and extra ways in (API keys, verifier issuers)</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys</td><td>Issue an API key; plaintext returned once</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys/{kid}/rotate</td><td>Rotate in place: old key dies in the same append</td></tr><tr><td class="strong">GET /api/stats?minutes=60</td><td>Totals for the window and the equal window before it, by outcome, caller IP and gateway slug, the busiest minute, and the series</td></tr><tr><td class="strong">GET /api/requests?gateway=&amp;gateway_id=&amp;subject=&amp;outcome=&amp;status=&amp;method=&amp;tool=&amp;ip=</td><td>A page of the request log; every column with a filter box narrows it</td></tr><tr><td class="strong">GET /api/events?type=&amp;aggregate=&amp;actor=&amp;since=&amp;until=</td><td>A page of the audit log</td></tr><tr><td class="strong">GET /api/docs</td><td>This manual, as data (public)</td></tr><tr><td class="strong">POST /api/mcp/token</td><td>Mint a read-only token for the console MCP</td></tr><tr><td class="strong">POST /api/config/validate</td><td>Parse a document without applying it</td></tr><tr><td class="strong">POST /api/config/apply</td><td>Reconcile gateways, roles and members</td></tr><tr><td class="strong">GET /api/config/export</td><td>Render current state as YAML, without secrets</td></tr><tr><td class="strong">GET /api/requests.csv?gateway=&amp;outcome=&amp;subject=…</td><td>The request log as one CSV file: same filters, same tenant scope, bounded by <code>limit</code></td></tr><tr><td class="strong">POST /api/config/plan</td><td>What an apply would create, update and delete — without applying it</td></tr><tr><td class="strong">POST /api/gateways/{id}/test</td><td>Probe the upstream now: real handshake, tool count, reason</td></tr><tr><td class="strong">GET /api/gateways/{id}/history</td><td>That gateway's own event stream, newest first, filterable and sortable like the audit log</td></tr><tr><td class="strong">POST /api/gateways/{id}/restore</td><td>Roll the configuration back to a version; keys are not resurrected</td></tr><tr><td class="strong">PUT /api/gateways/{id}/quota</td><td>Monthly call ceiling (0 = none), separate from the per-minute limit</td></tr><tr><td class="strong">GET|POST /api/gateways/{id}/webhooks</td><td>Hooks that receive observations, signed HMAC-SHA256</td></tr><tr><td class="strong">GET /api/events.csv</td><td>The audit log as one CSV file, same filters and tenant scope</td></tr><tr><td class="strong">POST /api/operators/{id}/disable</td><td>Stop sign-in and live sessions; <code>/enable</code> restores access</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="en-console" data-anchor="console">
+<h2>The console MCP</h2>
+<p>The gateway exposes a read-only MCP server of its own at <code>/mcp</code>, so an agent can answer questions about <em>this deployment</em>: which gateways exist, what failed in the last hour, what the audit log says about a role change.</p>
+<p>It is read-only by construction - every tool is a query, none is a command - and it is tenant-scoped: a token minted by one tenant's operator can only ever read that tenant's rows.</p>
+<p>Every new tenant already has one gateway pointing at it. It is created with the tenant, named <code>console</code>, with the deployment's own <code>/mcp</code> as its upstream and an API key for the caller — so the first thing a new tenant can do is plug an agent in without configuring anything. It is a gateway like any other: same auth, same rate limit, and its questions land in the traffic log next to every other call.</p>
+<p>Tenants that existed before this feature get the same gateway on the next boot: the backfill asks for tenants with no gateway row pointing at <code>/mcp</code>, so an owner who deleted theirs keeps it deleted.</p>
+<p>Connect to it exactly like a hand-made gateway:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/console/mcp",
+      "headers": { "Authorization": "Bearer omgc_gateway_api_key" }
+    }
+  }
+}</pre>
+<p>The key is issued when the tenant is created and shown once, on the gateway's page. Rotate it there if it leaks; delete the gateway if you would rather call <code>/mcp</code> directly.</p>
+<p>1. Mint a token: <code>POST /api/mcp/token</code> with your session cookie. The plaintext is returned once, exactly like an API key.</p>
+<p>2. Point a client at it:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/mcp",
+      "headers": { "Authorization": "Bearer omg_..." }
+    }
+  }
+}</pre>
+<p>3. Ask it things: <em>which gateways are failing right now</em>, <em>show me the last 20 rate-limited calls for the rancher gateway</em>, <em>what changed in the audit log today</em>.</p>
+<p>The token is signed with the deployment secret, carries the operator id and the minting time, and expires after 90 days. Revoke it by rotating <code>OMG_SESSION_SECRET</code> - which also signs everyone out, so prefer a short expiry if that matters more.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Tool</th><th>Answers</th></tr></thead>
+<tbody><tr><td class="strong">search_docs</td><td>Search this manual; returns matching sections with their text</td></tr><tr><td class="strong">list_gateways</td><td>Gateways in the tenant, filterable by slug, name, auth mode</td></tr><tr><td class="strong">get_gateway</td><td>One gateway: policy, keys, stats, recent calls</td></tr><tr><td class="strong">search_requests</td><td>The request log, filterable by gateway, outcome, subject, tool, status</td></tr><tr><td class="strong">search_events</td><td>The audit log, filterable by type, aggregate, actor, time</td></tr><tr><td class="strong">traffic_stats</td><td>Totals, per-outcome, per-IP and per-gateway counts for a window</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="en-ops" data-anchor="ops">
+<h2>Operating it</h2>
+<p>Logs are one JSON object per line on stdout, built for Loki / Grafana. Useful fields to build dashboards on: <code>event</code>, <code>gateway</code>, <code>subject</code>, <code>outcome</code>, <code>status</code>, <code>duration_ms</code>. Set the level with <code>OMG_LOG_LEVEL</code>.</p>
+<pre class="code" tabindex="0">{"ts":"2026-11-02T11:04:14.538Z","level":"info","logger":"gateway","msg":"proxy.request","event":"proxy.request","gateway":"rancher","subject":"api-key:key_ab12","outcome":"allowed","status":200,"duration_ms":18,"ip":"203.0.113.7"}</pre>
+<p>Rate limiting is a sliding window per (gateway, caller). With <code>OMG_REDIS_URL</code> set, the counters live in Redis and every replica shares them, so <code>replicas: 2</code> means the configured limit and not twice it. Without it the limiter is in-process: correct for a single replica, N times the limit at N. A Redis that is down fails open and logs - one lost window of accounting beats an outage.</p>
+<p>OAuth proxy state (client registrations, upstream tokens, <code>jti</code> mappings) lives in the same Postgres, encrypted at rest, so a rollout does not log every connected client out. That part is already replica-safe, and with <code>OMG_REDIS_URL</code> set the limiter is too.</p>
+<p>State is event-sourced. Every change is an append-only event and the read models are projections of it, which is what makes the audit log trustworthy and lets two replicas share one database without a cache-coherence story.</p>
+<p>The schema is versioned in code (<code>infrastructure/db/migrations.py</code>): a numbered list of steps, recorded in <code>schema_migrations</code>. Boot applies whatever this build has not applied yet, so an upgrade is a rollout, not a manual <code>psql</code> session. The read models live in their own schema, <code>readmodels</code> — every table prefixed <code>rm_</code> — while <code>events</code>, the uniqueness tables and the history stay in <code>public</code>. That split is the point: a projection is rebuildable from the log, so <code>DROP SCHEMA readmodels CASCADE</code> followed by a boot is a safe reset that the next boot notices and repairs. Nothing the log depends on is in there. <code>OMG_RETENTION_DAYS</code> prunes the request log at boot. Past the cutoff, <code>request.observed</code> events, <code>rm_requests_tail</code> and <code>rm_request_stats</code> are deleted; audit events never are, because the log of who changed what is not the log of who called. <code>0</code>, the default, keeps everything.</p>
+<p><code>GET /metrics</code> serves Prometheus's text format: <code>omg_proxy_requests_total</code> per gateway, outcome and status class; <code>omg_proxy_request_duration_ms_sum</code> to divide by the count for a mean; and gauges for live gateways, pending gateways, dropped observations and which rate-limit backend is in use. It is unauthenticated and on the same port, so restrict it at the ingress if the deployment faces the internet. Counters are in-process: with several replicas each pod is a series and <code>sum by (gateway)</code> is the correct query.</p>
+<p>Webhooks are delivered off the request path: three attempts with a short backoff, and an unsuccessful delivery is recorded as a <code>failed</code> row rather than retried forever. <code>GET /api/gateways/&lt;id&gt;/webhooks/&lt;hook_id&gt;/deliveries</code> is where "the hook is silent" gets answered — no matching event, or every POST failing. The monthly quota and the per-minute limit are different gates: the limiter charges a burst and lives in Redis when <code>OMG_REDIS_URL</code> is set; the quota is one row lock in Postgres, reserved before the call goes out, so two calls in a row cannot both read the same count. Both refuse with 429, and the row's <code>reason</code> says which one. Every response carries <code>X-Request-Id</code> — the caller's if it sent a sane one, otherwise one the guard minted — and the traffic row stores it, so a support ticket becomes one query.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Symptom</th><th>What it usually is</th></tr></thead>
+<tbody><tr><td class="strong">503 on a gateway route</td><td>An OAuth gateway with no client credentials. Fail closed, by design</td></tr><tr><td class="strong">401 on every call</td><td>The upstream token is wrong or unset, or the client's key was rotated</td></tr><tr><td class="strong">403 with a subject</td><td>The caller's account does not belong to the tenant that owns this gateway</td></tr><tr><td class="strong">429</td><td>Per-subject budget reached for that gateway</td></tr><tr><td class="strong">Tools appear to hang</td><td>Proxy buffering on the ingress in front of the gateway: turn it off, raise the read timeout</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="en-env" data-anchor="env">
+<h2>Environment</h2>
+<p>Sign-in configuration is deployment configuration, not tenant configuration: an owner of one tenant must never be able to change how everybody signs in. So it comes from the environment, and there is no screen for it.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+<tbody><tr><td class="strong">OMG_DATABASE_URL</td><td>Postgres DSN (required)</td></tr><tr><td class="strong">OMG_SESSION_SECRET</td><td>At least 32 bytes (required)</td></tr><tr><td class="strong">OMG_BASE_URL</td><td>Public URL; the OAuth redirect is derived from it</td></tr><tr><td class="strong">OMG_ADMIN_EMAIL / OMG_ADMIN_PASSWORD</td><td>Optional bootstrap account</td></tr><tr><td class="strong">OMG_GOOGLE_CLIENT_ID / SECRET</td><td>Google sign-in for the panel itself</td></tr><tr><td class="strong">OMG_OPERATOR_ALLOWLIST</td><td>Comma-separated addresses that may create an account</td></tr><tr><td class="strong">OMG_LOG_LEVEL</td><td><code>info</code> by default</td></tr><tr><td class="strong">OMG_CONFIG_FILE</td><td>Optional YAML applied at boot</td></tr><tr><td class="strong">OMG_REDIS_URL</td><td>Optional; shared rate-limit counters instead of in-process</td></tr><tr><td class="strong">OMG_RETENTION_DAYS</td><td>Delete request-log rows and request read models older than N days, at boot. <code>0</code> (default) keeps everything; audit events are never pruned</td></tr><tr><td class="strong">OMG_MAX_BODY_BYTES</td><td>Largest request body the guard will read, in bytes (default <code>1048576</code>). Anything bigger is refused with <code>413</code> before it is forwarded</td></tr><tr><td class="strong">OMG_TRUSTED_PROXIES</td><td>Comma-separated addresses or CIDRs whose <code>X-Forwarded-For</code> is believed, so the traffic log records the caller and not the ingress. Empty (default) trusts nobody; <code>*</code> trusts every peer and is only correct when the port is private</td></tr><tr><td class="strong">OMG_LOGIN_ATTEMPTS_PER_MINUTE</td><td>Password sign-in attempts allowed per address per minute (default <code>5</code>). Past that the route answers <code>429</code> with <code>Retry-After</code></td></tr></tbody>
+</table></div>
+
+</section>
+<footer class="docs-foot">
+<span>OpenMCPGateway · Apache-2.0</span>
+<a href="https://github.com/giomartinsdev/OpenMCPGateway#readme" target="_blank" rel="noreferrer">README →</a>
+</footer>
+</article>
+</div>
+<div class="docs-pane" data-lang-pane="pt" hidden>
+<nav class="docs-toc" aria-label="On this page">
+<div class="nav-label" data-i18n="docs.onThisPage">On this page</div>
+<a href="#overview" data-jump="overview">O que é isto</a>
+<a href="#quickstart" data-jump="quickstart">Início rápido</a>
+<a href="#gateways" data-jump="gateways">Gateways</a>
+<a href="#auth" data-jump="auth">Modos de autenticação</a>
+<a href="#rbac" data-jump="rbac">Membros e funções</a>
+<a href="#config" data-jump="config">Configuração como código</a>
+<a href="#api" data-jump="api">API HTTP</a>
+<a href="#console" data-jump="console">O console MCP</a>
+<a href="#ops" data-jump="ops">Operando</a>
+<a href="#env" data-jump="env">Ambiente</a>
+</nav>
+<article class="docs-article">
+<section class="docs-section" id="pt-overview" data-anchor="overview">
+<h2>O que é isto</h2>
+<p>OpenMCPGateway fica na frente de um ou mais servidores MCP. Os clientes apontam para <code>https://&lt;host&gt;/g/&lt;slug&gt;/mcp</code>; o gateway autentica quem chama, aplica seu portão e um orçamento por minuto, encaminha a requisição ao servidor real pela rede privada e registra o que aconteceu.</p>
+<p>O upstream não precisa ser alcançável pela internet e não precisa saber quem é o chamador: o gateway encerra a identidade e encaminha sua própria credencial quando o upstream exige uma (<code>upstream_token</code>).</p>
+<p>O painel responde às mesmas perguntas na mesma forma: a tela de Traffic traz totais com a variação contra a janela anterior, um gráfico de volume e quebras por desfecho, gateway e chamador — e uma linha em qualquer tabela abre um drawer com o resto daquela linha em vez de navegar para fora da lista.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Camada</th><th>Comportamento</th></tr></thead>
+<tbody><tr><td class="strong">Autenticação</td><td>Proxy OAuth por gateway (Google, GitHub, Microsoft, Discord, OIDC customizado) ou uma chave bearer com hash SHA-256</td></tr><tr><td class="strong">Autorização</td><td>Membros do tenant dono do gateway. Uma chave emitida aqui também serve.</td></tr><tr><td class="strong">Rate limit</td><td>Por subject, por gateway, contando requisições JSON-RPC. Handshakes são gratuitos</td></tr><tr><td class="strong">Observabilidade</td><td>Toda tentativa registrada: subject, desfecho, status, latência, IP</td></tr><tr><td class="strong">Fail closed</td><td>Um gateway OAuth sem credenciais responde 503, nunca como proxy aberto</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="pt-quickstart" data-anchor="quickstart">
+<h2>Início rápido</h2>
+<p>Você precisa de um Postgres que o gateway consiga alcançar e de um hostname que encerre TLS na frente dele.</p>
+<pre class="code" tabindex="0"># 1. run it
+export OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg
+export OMG_SESSION_SECRET=$(openssl rand -hex 32)
+export OMG_BASE_URL=https://gateway.example.com
+omg serve
+
+# 2. create the first account, then a tenant, in the browser
+open https://gateway.example.com</pre>
+<p>A primeira conta cria um tenant e se torna seu <code>owner</code>. Todos os outros entram com o código de join do tenant ou são adicionados por um administrador.</p>
+<p>O tenant chega com um gateway <code>console</code> já apontando para o MCP somente leitura desta própria implantação. Aponte um agente para <code>/g/console/mcp</code> com a API key da página dele e pergunte o que a implantação está fazendo — sem upstream para configurar.</p>
+<p>Aponte um cliente para um gateway assim que houver um:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "my-server": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/my-server/mcp"
+    }
+  }
+}</pre>
+
+
+</section>
+<section class="docs-section" id="pt-gateways" data-anchor="gateways">
+<h2>Gateways</h2>
+<p>Um gateway é um slug, uma URL de upstream e uma política. O slug é global: <code>/g/&lt;slug&gt;/mcp</code> é a string que as pessoas colam nos clientes, então dois tenants não podem ambos ser donos de <code>rancher</code>.</p>
+<p>Um gateway é criado para você: <code>console</code>, apontando para o MCP somente leitura desta própria implantação. O slug é global porque <code>/g/&lt;slug&gt;/mcp</code> é uma URL pública, então em uma implantação com vários tenants o primeiro fica com <code>console</code> e os outros com <code>console-&lt;tenant id&gt;</code> — o id, não um contador, para que o endereço ainda diga de quem é o gateway.</p>
+<p><code>target_url</code> é o endpoint streamable-HTTP do upstream, incluindo seu caminho (<code>http://rancher-mcp.support.svc.cluster.local:8000/mcp</code>). Precisa ser <code>http://</code> ou <code>https://</code>.</p>
+<p>Um gateway também decide <em>quais</em> ferramentas expõe. A lista é um conjunto de nomes de ferramentas do upstream; vazia significa tudo o que o upstream serve, que é como todo gateway começa. Ela pode ser estreitada por origem de credencial — o provedor de login (<code>google</code>, <code>github</code>, <code>oidc</code>), o rótulo de um verificador extra ou <code>api_key</code> — então uma rota dá a um bot um catálogo menor que o da pessoa logada ao lado, sem publicar dois gateways para o mesmo upstream. Uma origem sem lista própria herda a do gateway, e limpar a lista de uma origem a devolve a herdar. Uma ferramenta fora da lista desaparece de <code>tools/list</code> e um <code>tools/call</code> para ela responde <code>403</code> nomeando a ferramenta, então um cliente que manteve um nome antigo na config recebe uma frase em vez de um sucesso silencioso ou de uma caça a erro de digitação. A página do gateway sonda o upstream sob demanda: handshake de verdade, quantas ferramentas ele serve e o motivo da falha. Um upstream morto antes parecia um gateway silencioso e saudável.</p>
+<p>O painel lê o catálogo do upstream diretamente para preencher essa lista - não pelo gateway, que responderia com o filtro que já está aplicando. Um nome configurado que o upstream não serve mais continua visível e marcado, porque sumir com ele em silêncio no próximo salvamento apagaria uma decisão do operador.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Campo</th><th>Significado</th></tr></thead>
+<tbody><tr><td class="strong">slug</td><td><code>[a-z0-9-]+</code>, 2-40 caracteres. Aparece no caminho público</td></tr><tr><td class="strong">target_url</td><td>Endpoint MCP do upstream, incluindo o caminho</td></tr><tr><td class="strong">auth_mode</td><td><code>none</code>, <code>api_key</code> ou <code>oauth</code></td></tr><tr><td class="strong">idp</td><td>Com <code>oauth</code>: <code>self</code>, <code>github</code>, <code>google</code>, <code>azure</code>, <code>discord</code> ou <code>oidc</code></td></tr><tr><td class="strong">upstream_token</td><td>Bearer que o upstream exige. Somente escrita: nunca retornado pela API</td></tr><tr><td class="strong">rate_limit</td><td>Requisições por minuto por subject. <code>0</code> significa ilimitado</td></tr><tr><td class="strong">enabled</td><td>Um gateway desabilitado responde 404, não 403 - ele não é anunciado</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="pt-auth" data-anchor="auth">
+<h2>Modos de autenticação</h2>
+<p><strong><code>none</code></strong> - sem autenticação. Aceitável em rede privada; o painel avisa enquanto qualquer gateway assim estiver habilitado.</p>
+<p><strong><code>api_key</code></strong> - o chamador envia <code>Authorization: Bearer omg_...</code>. A chave é guardada como hash SHA-256 (é o que a autenticação compara) ao lado de uma cópia selada da plaintext, cifrada com o segredo da implantação. A resposta que a emite devolve a plaintext, e a página do gateway mostra um ícone de olho para chave que nunca foi lida: clicar decifra a cópia selada, mostra a chave uma vez e a apaga. Depois disso só resta o hash, e o único caminho de volta a uma chave legível é rotacioná-la. Uma chave pode ser emitida com validade. Depois dela a chave não autentica mais, e uma rotação herda o prazo da chave que substitui — o objetivo de rotacionar é trocar o segredo, não estender por quanto tempo ele é confiável.</p>
+<p>O operador aprova uma vez, e essa conta passa a ser membro a partir daí.</p>
+<p>O cliente não precisa de um token versionado em dotfile para o modo OAuth - essa é a ideia. Para o modo API-key precisa, e é por isso que a chave é por gateway e revogável isoladamente.</p>
+<p>Um gateway também pode ter mais de uma forma de entrar. O modo <code>oauth</code> aceita chaves de API na mesma rota quando <code>allow_api_key</code> está ligado, e aceita tokens de emissores adicionais listados em <code>verifiers</code> - cada um com rótulo, emissor, audience opcional e URL do JWKS. Os emissores extras não têm fluxo de login próprio: o cliente já tem o token do seu provedor, e o gateway apenas confere assinatura, emissor e audience. Uma URL, um portão, um limite, e nenhum segundo gateway por tipo de credencial.</p>
+<p>Quem pode chamar não é uma lista no gateway. Quem chama entra quando a conta pertence ao tenant dono do gateway - a mesma regra que o painel aplica para editá-lo, então "quem pode usar" tem uma resposta só, não duas que divergem. A associação é lida a cada requisição, então remover alguém ou desativar a conta fecha a porta do gateway na próxima chamada. Chaves de API são isentas porque a chave embute o próprio id em vez de nomear uma conta: uma chave entra enquanto o hash casar com uma chave viva aqui, e sai revogando a chave.</p>
+<pre class="code" tabindex="0"># API-key call
+curl -sS https://gateway.example.com/g/rancher/mcp \
+  -H 'Authorization: Bearer omg_...' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'</pre>
+
+
+</section>
+<section class="docs-section" id="pt-rbac" data-anchor="rbac">
+<h2>Membros e funções</h2>
+<p>Tudo é escopado a um tenant: gateways, membros, funções, tráfego, o log de auditoria. Um id de outro tenant é 404, não um 403 que confirma que ele existe.</p>
+<p>As permissões são um catálogo fechado. Um erro de digitação é recusado com 422 nomeando o campo, porque a alternativa é uma função que não concede nada e não diz nada.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Permissão</th><th>Concede</th></tr></thead>
+<tbody><tr><td class="strong">gateways:read / write</td><td>Ver a lista de gateways e alterar slugs, targets, autenticação e limites</td></tr><tr><td class="strong">keys:read / write</td><td>Ver ids de chaves e emitir, rotacionar ou revogar chaves</td></tr><tr><td class="strong">traffic:read</td><td>Ler estatísticas de requisições e o log de requisições recentes</td></tr><tr><td class="strong">audit:read</td><td>Ler o log de eventos append-only</td></tr><tr><td class="strong">config:read / write</td><td>Exportar e aplicar o arquivo YAML</td></tr><tr><td class="strong">members:read / write</td><td>Ver o catálogo de endereços e adicionar pessoas</td></tr><tr><td class="strong">roles:read / write</td><td>Ver a tabela de funções e definir ou editar funções</td></tr></tbody>
+</table></div>
+<p>Duas funções são embutidas e não podem ser editadas nem excluídas, porque nenhuma das duas é uma decisão de política:</p>
+<div class="docs-table"><table>
+<thead><tr><th>Função</th><th>Id</th><th>Permissões</th></tr></thead>
+<tbody><tr><td class="strong"><code>owner</code></td><td><code>role_owner</code></td><td>tudo</td></tr><tr><td class="strong"><code>viewer</code></td><td><code>role_viewer</code></td><td>todas as permissões de leitura</td></tr></tbody>
+</table></div>
+<p>Um membro adicionado sem função cai em <code>viewer</code>: uma omissão estreita o acesso, nunca o amplia. A delegação também só pode estreitar - ninguém pode conceder uma permissão que não possui, ou <code>members:write</code> seria um caminho para <code>role_owner</code>. A mesma regra vale para o arquivo de configuração.</p>
+<p>As permissões são resolvidas a cada requisição a partir dos read models, então editar uma função ou reatribuir alguém tem efeito no próximo clique. Sem novo login, sem sessão obsoleta.</p>
+</section>
+<section class="docs-section" id="pt-config" data-anchor="config">
+<h2>Configuração como código</h2>
+<p>O painel e um arquivo YAML são duas portas de entrada para o mesmo command handler. Nenhum é privilegiado: um gateway criado no navegador é exportado para o arquivo, e um arquivo aplicado pela CI chega ao mesmo log de eventos que um clique.</p>
+<p><code>gateways</code>, <code>roles</code> e <code>members</code> são todos declarados no arquivo, então um tenant pode ser reconstruído a partir de um commit. Segredos nunca são exportados - escreva <code>${ENV_VAR}</code> e o servidor resolve a partir do próprio ambiente no momento do apply.</p>
+<pre class="code" tabindex="0"># gateways.yaml
+gateways:
+  - slug: rancher
+    name: Rancher cluster
+    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp
+    description: read the cluster, restart and scale
+    auth:
+      mode: oauth
+      idp: google
+      client_id: ${GOOGLE_CLIENT_ID}
+      client_secret: ${GOOGLE_CLIENT_SECRET}
+      upstream_token: ${RANCHER_MCP_TOKEN}
+    rate_limit: 120
+    allow: [someone@example.com]
+
+roles:
+  - name: Auditor
+    permissions: [gateways:read, traffic:read, audit:read]
+
+members:
+  - email: auditor@example.com
+    password: ${MEMBER_PASSWORD}
+    roles: [Auditor]
+
+prune: false</pre>
+<p>Semântica de merge: o arquivo é autoritativo para o que declara. Um gateway omitido do arquivo sobrevive, então um erro de digitação não pode apagar produção. <code>prune: true</code> opta pela exclusão - vale apenas para gateways; membros nunca são removidos por omissão, porque uma conta que desaparece de um arquivo é muito mais provavelmente um acidente de merge do que uma intenção.</p>
+<p>Membros reconciliam por email: um membro existente cujas funções diferem tem as funções substituídas, e um cujas funções coincidem é deixado como está. <code>password</code> só é usado quando a conta ainda não existe, então aparece em um arquivo revisado como <code>${MEMBER_PASSWORD}</code> e nunca em uma exportação - o que também explica por que exportar e reaplicar é um no-op. Uma conta nova sem senha é recusada, porque inventar uma seria uma credencial com a qual ninguém consegue entrar.</p>
+<p>Uma função cujo nome coincide com uma embutida (<code>owner</code>, <code>viewer</code>) pode ser nomeada mas não redefinida: caso contrário, o arquivo estreitaria todos os membros existentes de uma vez.</p>
+
+<pre class="code" tabindex="0"># round-trip from the shell
+omg export --tenant tn_local &gt; gateways.yaml
+omg apply gateways.yaml --tenant tn_local</pre>
+<p><code>omg apply</code> imprime o que mudou e quaisquer erros, e sai com código não zero quando uma declaração falhou - o que o torna utilizável na CI. API keys recém-emitidas são impressas uma vez, porque é a única vez em que o texto claro existe.</p>
+<p>A página Config as code do painel faz o mesmo: <strong>Validate</strong> analisa e resolve placeholders sem tocar no estado, <strong>Apply</strong> executa os comandos.</p>
+</section>
+<section class="docs-section" id="pt-api" data-anchor="api">
+<h2>API HTTP</h2>
+<p>Tudo o que o painel faz é um endpoint sob <code>/api</code>, autenticado por um cookie de sessão <code>HttpOnly</code>. As rotas MCP em si ficam em <code>/g/&lt;slug&gt;/mcp</code> e falam JSON-RPC, não esta API.</p>
+<p>Toda lista é paginada por cursor: <code>?limit=50&amp;before=&lt;cursor&gt;</code>, respondendo <code>{items, next}</code>. <code>next</code> é null na última página, e <code>limit</code> é limitado a 200 em vez de recusado.</p>
+<p>Cada lista também aceita seus próprios campos de filtro como parâmetros de query, uma caixa por coluna no painel. Colunas de texto casam um fragmento (<code>?name=anch</code> encontra <code>rancher</code>), <code>status</code> e <code>enabled</code> casam exatamente, e toda lista carrega uma caixa <code>id</code> para a linha que você copiou pela metade. Um campo desconhecido é 422 nomeando os campos que existem — um filtro silenciosamente ignorado é pior que um erro.</p>
+<p>A ordenação é <code>?sort=&lt;column&gt;&amp;order=asc|desc</code>. As colunas ordenáveis são um conjunto fechado por lista: gateways por <code>created_at</code>, <code>updated_at</code>, <code>name</code> ou <code>slug</code>; traffic por <code>occurred_at</code>, <code>duration_ms</code>, <code>status</code> ou <code>subject</code>; o log de auditoria por <code>occurred_at</code>, <code>actor</code> ou <code>type</code>; membros por <code>email</code> e <code>created_at</code>; funções por <code>name</code> e <code>created_at</code>. Uma chave desconhecida é 422 que lista as válidas.</p>
+<p>Um cursor significa <em>depois desta linha, nesta ordem</em>, então fica vinculado à ordenação sob a qual foi emitido. Mude <code>sort</code> ou <code>order</code> e comece da primeira página: reutilizar o cursor antigo é 422, não uma lista silenciosamente furada.</p>
+<p>Dois endpoints não cabem na forma CRUD e vale conhecê-los: <code>POST /api/gateways/&lt;id&gt;/keys/&lt;key_id&gt;/reveal</code> devolve a plaintext selada uma vez e <code>409</code> depois disso, e <code>GET /api/gateways/&lt;id&gt;/upstream-tools</code> pergunta ao upstream o que ele serve para a lista ser marcada em vez de digitada. <code>PUT /api/gateways/&lt;id&gt;/tools</code> substitui a lista, ou a lista de uma origem de credencial quando o corpo nomeia um <code>source</code>. <code>GET /api/requests.csv</code> responde aos mesmos filtros de <code>/requests</code>, em arquivo; <code>POST /api/config/plan</code> diz o que um apply mudaria sem mudar nada, e <code>POST /api/gateways/&lt;id&gt;/test</code> sonda o upstream com um handshake MCP de verdade.</p>
+<p>Quatro endpoints respondem a perguntas que a forma CRUD não responde: <code>GET /api/gateways/&lt;id&gt;/history</code> é o fluxo de eventos daquele gateway, do mais novo ao mais antigo, paginado e filtrado com o vocabulário do log de auditoria e com valores secretos ocultados; <code>POST /api/gateways/&lt;id&gt;/restore</code> reaplica a configuração de uma versão e anexa um fato <code>gateway.restored</code> — credenciais e chaves não são restauradas, porque uma chave revogada tem de continuar revogada; <code>GET /api/events.csv</code> é o log de auditoria como arquivo, com os mesmos filtros e o mesmo escopo de tenant; e <code>/api/gateways/&lt;id&gt;/webhooks</code> registra uma URL que recebe toda observação que o guard grava, assinada com um HMAC-SHA256 do corpo.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Método e caminho</th><th>Faz</th></tr></thead>
+<tbody><tr><td class="strong">POST /api/auth/login</td><td>Entrar com email e senha</td></tr><tr><td class="strong">GET /api/auth/me</td><td>Identidade, tenant, funções e lista plana de permissões</td></tr><tr><td class="strong">GET /api/gateways?slug=&amp;name=&amp;auth_mode=&amp;enabled=</td><td>Uma página de gateways, mais recentes primeiro</td></tr><tr><td class="strong">POST /api/gateways</td><td>Criar um (requer <code>gateways:write</code>)</td></tr><tr><td class="strong">GET /api/gateways/{id}/connect</td><td>Guia de copiar e colar gerado para aquele gateway</td></tr><tr><td class="strong">PUT /api/gateways/{id}/auth</td><td>Modo de autenticação e formas extras de entrar (chaves de API, emissores verificadores)</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys</td><td>Emitir uma API key; texto claro retornado uma vez</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys/{kid}/rotate</td><td>Rotacionar no lugar: a chave antiga morre no mesmo append</td></tr><tr><td class="strong">GET /api/stats?minutes=60</td><td>Totais da janela e da janela igual anterior, por desfecho, IP do chamador e slug do gateway, o minuto mais movimentado e a série</td></tr><tr><td class="strong">GET /api/requests?gateway=&amp;gateway_id=&amp;subject=&amp;outcome=&amp;status=&amp;method=&amp;tool=&amp;ip=</td><td>Uma página do log de requisições; toda coluna com caixa de filtro o estreita</td></tr><tr><td class="strong">GET /api/events?type=&amp;aggregate=&amp;actor=&amp;since=&amp;until=</td><td>Uma página do log de auditoria</td></tr><tr><td class="strong">GET /api/docs</td><td>Este manual, como dados (público)</td></tr><tr><td class="strong">POST /api/mcp/token</td><td>Emitir um token somente leitura para o console MCP</td></tr><tr><td class="strong">POST /api/config/validate</td><td>Analisar um documento sem aplicá-lo</td></tr><tr><td class="strong">POST /api/config/apply</td><td>Reconciliar gateways, funções e membros</td></tr><tr><td class="strong">GET /api/config/export</td><td>Renderizar o estado atual como YAML, sem segredos</td></tr><tr><td class="strong">GET /api/requests.csv?gateway=&amp;outcome=&amp;subject=…</td><td>O log de requisições em um arquivo CSV: mesmos filtros, mesmo escopo de tenant, limitado por <code>limit</code></td></tr><tr><td class="strong">POST /api/config/plan</td><td>O que um apply criaria, atualizaria e apagaria — sem aplicar</td></tr><tr><td class="strong">POST /api/gateways/{id}/test</td><td>Sonda o upstream agora: handshake real, número de ferramentas, motivo</td></tr><tr><td class="strong">GET /api/gateways/{id}/history</td><td>O fluxo de eventos daquele gateway, do mais novo ao mais antigo, filtrável e ordenável como o log de auditoria</td></tr><tr><td class="strong">POST /api/gateways/{id}/restore</td><td>Volta a configuração para uma versão; chaves não ressuscitam</td></tr><tr><td class="strong">PUT /api/gateways/{id}/quota</td><td>Teto mensal de chamadas (0 = nenhum), separado do limite por minuto</td></tr><tr><td class="strong">GET|POST /api/gateways/{id}/webhooks</td><td>Hooks que recebem observações, assinados com HMAC-SHA256</td></tr><tr><td class="strong">GET /api/events.csv</td><td>O log de auditoria como um arquivo CSV, mesmos filtros e escopo de tenant</td></tr><tr><td class="strong">POST /api/operators/{id}/disable</td><td>Encerra login e sessões abertas; <code>/enable</code> devolve o acesso</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="pt-console" data-anchor="console">
+<h2>O console MCP</h2>
+<p>O gateway expõe um servidor MCP somente leitura próprio em <code>/mcp</code>, para que um agente possa responder perguntas sobre <em>esta implantação</em>: quais gateways existem, o que falhou na última hora, o que o log de auditoria diz sobre uma mudança de função.</p>
+<p>É somente leitura por construção - toda ferramenta é uma consulta, nenhuma é um comando - e é escopado por tenant: um token emitido pelo operador de um tenant só consegue ler as linhas daquele tenant.</p>
+<p>Todo tenant novo já tem um gateway apontando para ele. É criado junto com o tenant, chamado <code>console</code>, com o <code>/mcp</code> da própria implantação como upstream e uma API key para o chamador — então a primeira coisa que um tenant novo pode fazer é plugar um agente sem configurar nada. É um gateway como qualquer outro: mesma autenticação, mesmo rate limit, e suas perguntas caem no log de tráfego ao lado de qualquer outra chamada.</p>
+<p>Tenants que existiam antes deste recurso recebem o mesmo gateway no próximo boot: o backfill busca tenants sem linha de gateway apontando para <code>/mcp</code>, então um owner que apagou o seu continua com ele apagado.</p>
+<p>Conecte-se a ele exatamente como a um gateway feito à mão:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/console/mcp",
+      "headers": { "Authorization": "Bearer omgc_gateway_api_key" }
+    }
+  }
+}</pre>
+<p>A chave é emitida quando o tenant é criado e mostrada uma vez, na página do gateway. Rotacione-a ali se vazar; apague o gateway se preferir chamar <code>/mcp</code> diretamente.</p>
+<p>1. Emita um token: <code>POST /api/mcp/token</code> com seu cookie de sessão. O texto claro é retornado uma vez, exatamente como uma API key.</p>
+<p>2. Aponte um cliente para ele:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/mcp",
+      "headers": { "Authorization": "Bearer omg_..." }
+    }
+  }
+}</pre>
+<p>3. Pergunte coisas: <em>quais gateways estão falhando agora</em>, <em>mostre as últimas 20 chamadas com rate limit no gateway rancher</em>, <em>o que mudou no log de auditoria hoje</em>.</p>
+<p>O token é assinado com o segredo da implantação, carrega o id do operador e o horário de emissão, e expira após 90 dias. Revogue-o rotacionando <code>OMG_SESSION_SECRET</code> - o que também desconecta todo mundo, então prefira uma expiração curta se isso importar mais.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Ferramenta</th><th>Responde</th></tr></thead>
+<tbody><tr><td class="strong">search_docs</td><td>Buscar neste manual; retorna as seções correspondentes com seu texto</td></tr><tr><td class="strong">list_gateways</td><td>Gateways no tenant, filtráveis por slug, nome, modo de autenticação</td></tr><tr><td class="strong">get_gateway</td><td>Um gateway: política, chaves, estatísticas, chamadas recentes</td></tr><tr><td class="strong">search_requests</td><td>O log de requisições, filtrável por gateway, desfecho, subject, ferramenta, status</td></tr><tr><td class="strong">search_events</td><td>O log de auditoria, filtrável por tipo, aggregate, ator, horário</td></tr><tr><td class="strong">traffic_stats</td><td>Totais, contagens por desfecho, por IP e por gateway em uma janela</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="pt-ops" data-anchor="ops">
+<h2>Operando</h2>
+<p>Os logs são um objeto JSON por linha em stdout, feitos para Loki / Grafana. Campos úteis para montar dashboards: <code>event</code>, <code>gateway</code>, <code>subject</code>, <code>outcome</code>, <code>status</code>, <code>duration_ms</code>. Defina o nível com <code>OMG_LOG_LEVEL</code>.</p>
+<pre class="code" tabindex="0">{"ts":"2026-11-02T11:04:14.538Z","level":"info","logger":"gateway","msg":"proxy.request","event":"proxy.request","gateway":"rancher","subject":"api-key:key_ab12","outcome":"allowed","status":200,"duration_ms":18,"ip":"203.0.113.7"}</pre>
+<p>O rate limiting é uma janela deslizante por (gateway, chamador). Com <code>OMG_REDIS_URL</code> setado, os contadores vivem no Redis e todas as réplicas os compartilham, então <code>replicas: 2</code> significa o limite configurado e não o dobro dele. Sem isso o limiter é em processo: correto para uma réplica, N vezes o limite em N. Um Redis fora do ar falha aberto e loga - uma janela de contagem perdida é melhor que uma queda.</p>
+<p>O estado do proxy OAuth (registros de clientes, tokens de upstream, mapeamentos de <code>jti</code>) vive no mesmo Postgres, cifrado em repouso, então um rollout não desconecta todos os clientes conectados. Essa parte já é segura para réplicas, e com <code>OMG_REDIS_URL</code> setado o limiter também é.</p>
+<p>O estado é event-sourced. Toda mudança é um evento append-only e os read models são projeções dele, o que torna o log de auditoria confiável e permite que duas réplicas compartilhem um banco sem uma história de coerência de cache.</p>
+<p>O schema é versionado em código (<code>infrastructure/db/migrations.py</code>): uma lista numerada de passos, registrada em <code>schema_migrations</code>. O boot aplica o que esta build ainda não aplicou, então uma atualização é um rollout, não uma sessão manual de <code>psql</code>. Os read models moram no próprio schema, <code>readmodels</code> — toda tabela com prefixo <code>rm_</code> — enquanto <code>events</code>, as tabelas de unicidade e o histórico ficam em <code>public</code>. A divisão é o ponto: uma projeção é reconstruível a partir do log, então <code>DROP SCHEMA readmodels CASCADE</code> seguido de um boot é um reset seguro que o boot seguinte percebe e refaz. Nada de que o log depende está lá. <code>OMG_RETENTION_DAYS</code> poda o log de requisições no boot. Além do corte, eventos <code>request.observed</code>, <code>rm_requests_tail</code> e <code>rm_request_stats</code> são apagados; eventos de auditoria nunca, porque o log de quem mudou o quê não é o log de quem chamou. <code>0</code>, o padrão, guarda tudo.</p>
+<p><code>GET /metrics</code> serve o formato texto do Prometheus: <code>omg_proxy_requests_total</code> por gateway, desfecho e classe de status; <code>omg_proxy_request_duration_ms_sum</code> para dividir pela contagem e obter uma média; e gauges para gateways no ar, gateways pendentes, observações descartadas e qual backend de rate limit está em uso. É sem autenticação e na mesma porta, então restrinja no ingress se a implantação estiver exposta à internet. Os contadores são em processo: com várias réplicas cada pod é uma série e <code>sum by (gateway)</code> é a consulta correta.</p>
+<p>Webhooks são entregues fora do caminho da requisição: três tentativas com backoff curto, e uma entrega malsucedida vira uma linha <code>failed</code> em vez de retentar para sempre. <code>GET /api/gateways/&lt;id&gt;/webhooks/&lt;hook_id&gt;/deliveries</code> é onde "o hook está silencioso" ganha resposta — nenhum evento correspondente, ou todo POST falhando. A cota mensal e o limite por minuto são portões diferentes: o limitador cobra uma rajada e vive no Redis quando <code>OMG_REDIS_URL</code> está definido; a cota é um lock de linha no Postgres, reservado antes de a chamada sair, então duas chamadas seguidas não leem a mesma contagem. Ambos recusam com 429, e o <code>reason</code> da linha diz qual. Toda resposta carrega <code>X-Request-Id</code> — o do chamador, se veio um sensato, senão um que o guard gerou — e a linha de tráfego guarda esse id, então um chamado de suporte vira uma consulta.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Sintoma</th><th>O que costuma ser</th></tr></thead>
+<tbody><tr><td class="strong">503 on a gateway route</td><td>Um gateway OAuth sem credenciais de cliente. Fail closed, por desenho</td></tr><tr><td class="strong">401 on every call</td><td>O token do upstream está errado ou não definido, ou a chave do cliente foi rotacionada</td></tr><tr><td class="strong">403 with a subject</td><td>A conta do chamador não pertence ao tenant dono deste gateway</td></tr><tr><td class="strong">429</td><td>Orçamento por subject atingido para aquele gateway</td></tr><tr><td class="strong">Tools appear to hang</td><td>Buffering de proxy no ingress na frente do gateway: desligue, aumente o read timeout</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="pt-env" data-anchor="env">
+<h2>Ambiente</h2>
+<p>A configuração de login é configuração de implantação, não configuração de tenant: o owner de um tenant nunca deve poder mudar como todo mundo entra. Por isso ela vem do ambiente, e não há tela para isso.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Variável</th><th>Significado</th></tr></thead>
+<tbody><tr><td class="strong">OMG_DATABASE_URL</td><td>DSN do Postgres (obrigatório)</td></tr><tr><td class="strong">OMG_SESSION_SECRET</td><td>Pelo menos 32 bytes (obrigatório)</td></tr><tr><td class="strong">OMG_BASE_URL</td><td>URL pública; o redirect OAuth é derivado dela</td></tr><tr><td class="strong">OMG_ADMIN_EMAIL / OMG_ADMIN_PASSWORD</td><td>Conta de bootstrap opcional</td></tr><tr><td class="strong">OMG_GOOGLE_CLIENT_ID / SECRET</td><td>Login Google para o próprio painel</td></tr><tr><td class="strong">OMG_OPERATOR_ALLOWLIST</td><td>Endereços separados por vírgula que podem criar uma conta</td></tr><tr><td class="strong">OMG_LOG_LEVEL</td><td><code>info</code> por padrão</td></tr><tr><td class="strong">OMG_CONFIG_FILE</td><td>YAML opcional aplicado no boot</td></tr><tr><td class="strong">OMG_REDIS_URL</td><td>Opcional; contadores de rate limit compartilhados em vez de em processo</td></tr><tr><td class="strong">OMG_RETENTION_DAYS</td><td>Apaga linhas do log de requisições e read models de requisição mais antigos que N dias, no boot. <code>0</code> (padrão) guarda tudo; eventos de auditoria nunca são podados</td></tr><tr><td class="strong">OMG_MAX_BODY_BYTES</td><td>Maior corpo de requisição que o guard lê, em bytes (padrão <code>1048576</code>). Qualquer coisa maior é recusada com <code>413</code> antes de ser encaminhada</td></tr><tr><td class="strong">OMG_TRUSTED_PROXIES</td><td>Endereços ou CIDRs separados por vírgula cujo <code>X-Forwarded-For</code> é levado a sério, para o log de tráfego gravar o chamador e não o ingress. Vazio (padrão) não confia em ninguém; <code>*</code> confia em qualquer peer e só está correto quando a porta é privada</td></tr><tr><td class="strong">OMG_LOGIN_ATTEMPTS_PER_MINUTE</td><td>Tentativas de login por senha permitidas por endereço por minuto (padrão <code>5</code>). Acima disso a rota responde <code>429</code> com <code>Retry-After</code></td></tr></tbody>
+</table></div>
+
+</section>
+<footer class="docs-foot">
+<span>OpenMCPGateway · Apache-2.0</span>
+<a href="https://github.com/giomartinsdev/OpenMCPGateway#readme" target="_blank" rel="noreferrer">README →</a>
+</footer>
+</article>
+</div>
+<div class="docs-pane" data-lang-pane="es" hidden>
+<nav class="docs-toc" aria-label="On this page">
+<div class="nav-label" data-i18n="docs.onThisPage">On this page</div>
+<a href="#overview" data-jump="overview">Qué es esto</a>
+<a href="#quickstart" data-jump="quickstart">Inicio rápido</a>
+<a href="#gateways" data-jump="gateways">Gateways</a>
+<a href="#auth" data-jump="auth">Modos de autenticación</a>
+<a href="#rbac" data-jump="rbac">Miembros y roles</a>
+<a href="#config" data-jump="config">Configuración como código</a>
+<a href="#api" data-jump="api">API HTTP</a>
+<a href="#console" data-jump="console">El MCP de consola</a>
+<a href="#ops" data-jump="ops">Operarlo</a>
+<a href="#env" data-jump="env">Entorno</a>
+</nav>
+<article class="docs-article">
+<section class="docs-section" id="es-overview" data-anchor="overview">
+<h2>Qué es esto</h2>
+<p>OpenMCPGateway se sitúa delante de uno o varios servidores MCP. Los clientes apuntan a <code>https://&lt;host&gt;/g/&lt;slug&gt;/mcp</code>; el gateway autentica al llamante, aplica su puerta y un presupuesto por minuto, reenvía la petición al servidor real por la red privada y registra lo que ha ocurrido.</p>
+<p>El upstream no necesita ser accesible desde internet, y no necesita saber quién es el llamante: el gateway termina la identidad y reenvía su propia credencial cuando el upstream exige una (<code>upstream_token</code>).</p>
+<p>El panel responde las mismas preguntas con la misma forma: la pantalla Traffic lleva totales con la variación respecto a la ventana anterior, un gráfico de volumen y desgloses por resultado, gateway y llamante — y una fila de cualquier tabla abre un cajón con el resto de esa fila en lugar de navegar fuera de la lista.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Capa</th><th>Comportamiento</th></tr></thead>
+<tbody><tr><td class="strong">Autenticación</td><td>Proxy OAuth por gateway (Google, GitHub, Microsoft, Discord, OIDC personalizado) o una clave bearer hasheada con SHA-256</td></tr><tr><td class="strong">Autorización</td><td>Miembros del tenant dueño del gateway. Una clave emitida aquí también sirve.</td></tr><tr><td class="strong">Límite de tasa</td><td>Por sujeto, por gateway, contando peticiones JSON-RPC. Los handshakes son gratis</td></tr><tr><td class="strong">Observabilidad</td><td>Cada intento registrado: sujeto, resultado, estado, latencia, IP</td></tr><tr><td class="strong">Fallo cerrado</td><td>Un gateway OAuth sin credenciales responde 503, nunca como proxy abierto</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="es-quickstart" data-anchor="quickstart">
+<h2>Inicio rápido</h2>
+<p>Necesita un Postgres accesible desde el gateway y un nombre de host que termine TLS delante de él.</p>
+<pre class="code" tabindex="0"># 1. run it
+export OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg
+export OMG_SESSION_SECRET=$(openssl rand -hex 32)
+export OMG_BASE_URL=https://gateway.example.com
+omg serve
+
+# 2. create the first account, then a tenant, in the browser
+open https://gateway.example.com</pre>
+<p>La primera cuenta crea un tenant y pasa a ser su <code>owner</code>. El resto o bien se une con el código de unión del tenant o lo añade un administrador.</p>
+<p>El tenant llega con un gateway <code>console</code> ya apuntando al MCP de solo lectura de este propio despliegue. Apunte un agente a <code>/g/console/mcp</code> con la clave de API de su página y pregúntele qué está haciendo el despliegue — sin upstream que configurar.</p>
+<p>Apunte un cliente a un gateway en cuanto exista uno:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "my-server": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/my-server/mcp"
+    }
+  }
+}</pre>
+
+
+</section>
+<section class="docs-section" id="es-gateways" data-anchor="gateways">
+<h2>Gateways</h2>
+<p>Un gateway es un slug, una URL de upstream y una política. El slug es global: <code>/g/&lt;slug&gt;/mcp</code> es la cadena que la gente pega en los clientes, así que dos tenants no pueden poseer ambos <code>rancher</code>.</p>
+<p>Hay un gateway creado por usted: <code>console</code>, apuntando al MCP de solo lectura de este propio despliegue. El slug es global porque <code>/g/&lt;slug&gt;/mcp</code> es una URL pública, así que en un despliegue con varios tenants el primero toma <code>console</code> y los demás toman <code>console-&lt;tenant id&gt;</code> — el id, no un contador, para que la dirección siga diciendo de quién es el gateway.</p>
+<p><code>target_url</code> es el endpoint streamable-HTTP del upstream, incluida su ruta (<code>http://rancher-mcp.support.svc.cluster.local:8000/mcp</code>). Debe ser <code>http://</code> o <code>https://</code>.</p>
+<p>Un gateway también decide <em>qué</em> herramientas expone. La lista es un conjunto de nombres de herramientas del upstream; vacía significa todo lo que sirve el upstream, que es como empieza todo gateway. Puede acotarse por origen de credencial — el proveedor de login (<code>google</code>, <code>github</code>, <code>oidc</code>), la etiqueta de un verificador extra o <code>api_key</code> — así una ruta da a un bot un catálogo menor que el de la persona conectada al lado, sin publicar dos gateways al mismo upstream. Una fuente sin lista propia hereda la del gateway, y limpiar la lista de una fuente la devuelve a heredar. Una herramienta fuera de la lista desaparece de <code>tools/list</code> y un <code>tools/call</code> hacia ella responde <code>403</code> nombrando la herramienta, así que un cliente que conservó un nombre viejo en su config recibe una frase en vez de un éxito silencioso o de una cacería de errata. La página del gateway sondea el upstream a demanda: handshake real, cuántas herramientas sirve y el motivo del fallo. Un upstream muerto antes parecía un gateway silencioso y sano.</p>
+<p>El panel lee el catálogo del upstream directamente para llenar esa lista - no a través del gateway, que respondería con el filtro que ya aplica. Un nombre configurado que el upstream ya no sirve sigue visible y marcado, porque quitarlo en silencio en el siguiente guardado borraría una decisión del operador.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Campo</th><th>Significado</th></tr></thead>
+<tbody><tr><td class="strong">slug</td><td><code>[a-z0-9-]+</code>, 2-40 caracteres. Aparece en la ruta pública</td></tr><tr><td class="strong">target_url</td><td>Endpoint MCP del upstream, incluida la ruta</td></tr><tr><td class="strong">auth_mode</td><td><code>none</code>, <code>api_key</code> u <code>oauth</code></td></tr><tr><td class="strong">idp</td><td>Con <code>oauth</code>: <code>self</code>, <code>github</code>, <code>google</code>, <code>azure</code>, <code>discord</code> u <code>oidc</code></td></tr><tr><td class="strong">upstream_token</td><td>Bearer que exige el upstream. Solo escritura: nunca lo devuelve la API</td></tr><tr><td class="strong">rate_limit</td><td>Peticiones por minuto por sujeto. <code>0</code> significa ilimitado</td></tr><tr><td class="strong">enabled</td><td>Un gateway deshabilitado responde 404, no 403 - no se anuncia</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="es-auth" data-anchor="auth">
+<h2>Modos de autenticación</h2>
+<p><strong><code>none</code></strong> - sin autenticación. Correcto en una red privada; el panel avisa mientras haya habilitado un gateway así.</p>
+<p><strong><code>api_key</code></strong> - el llamador envía <code>Authorization: Bearer omg_...</code>. La clave se guarda como hash SHA-256 (eso es lo que compara la autenticación) junto a una copia sellada del texto plano, cifrada con el secreto del despliegue. La respuesta que la emite devuelve el texto plano, y la página del gateway muestra un icono de ojo para una clave que nunca se leyó: al pulsarlo se descifra la copia sellada, se muestra la clave una vez y se borra. Después de eso solo queda el hash, y el único camino de vuelta a una clave legible es rotarla. Una clave puede emitirse con caducidad. Pasada esa fecha la clave ya no autentica, y una rotación hereda el plazo de la clave que sustituye: rotar cambia el secreto, no cuánto tiempo se confía en él.</p>
+<p>El operador aprueba una vez, y esa cuenta pasa a ser miembro desde entonces.</p>
+<p>El cliente no necesita un token metido en un dotfile para el modo OAuth — de eso se trata. Para el modo API-key sí lo necesita, y por eso la clave es por gateway y revocable por sí sola.</p>
+<p>Un gateway también puede tener más de una forma de entrar. El modo <code>oauth</code> acepta claves de API en la misma ruta cuando <code>allow_api_key</code> está activo, y acepta tokens de emisores adicionales listados en <code>verifiers</code> - cada uno con etiqueta, emisor, audience opcional y URL del JWKS. Los emisores extra no tienen flujo de inicio de sesión propio: el cliente ya tiene el token de su proveedor y el gateway solo comprueba firma, emisor y audience. Una URL, una puerta, un límite, y ningún segundo gateway por tipo de credencial.</p>
+<p>Quién puede llamar no es una lista en el gateway. El llamante entra cuando su cuenta pertenece al tenant dueño del gateway — la misma regla que el panel aplica para editarlo, así que "quién puede usarlo" tiene una sola respuesta en vez de dos que se separan. La pertenencia se lee en cada petición, así que quitar a alguien o desactivar su cuenta cierra la puerta del gateway en su siguiente llamada. Las claves de API están exentas porque la clave incluye su propio id en lugar de nombrar una cuenta: una clave entra mientras su hash coincida con una clave viva aquí, y se revoca revocando la clave.</p>
+<pre class="code" tabindex="0"># API-key call
+curl -sS https://gateway.example.com/g/rancher/mcp \
+  -H 'Authorization: Bearer omg_...' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'</pre>
+
+
+</section>
+<section class="docs-section" id="es-rbac" data-anchor="rbac">
+<h2>Miembros y roles</h2>
+<p>Todo está acotado a un tenant: gateways, miembros, roles, tráfico, el registro de auditoría. Un id de otro tenant es un 404, no un 403 que confirma que existe.</p>
+<p>Los permisos son un catálogo cerrado. Una errata se rechaza con un 422 que nombra el campo, porque la alternativa es un rol que no concede nada y no dice nada.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Permiso</th><th>Concede</th></tr></thead>
+<tbody><tr><td class="strong">gateways:read / write</td><td>Ver la lista de gateways, y cambiar slugs, destinos, autenticación y límites</td></tr><tr><td class="strong">keys:read / write</td><td>Ver los ids de las claves, y emitirlas, rotarlas o revocarlas</td></tr><tr><td class="strong">traffic:read</td><td>Leer estadísticas de peticiones y el registro de peticiones recientes</td></tr><tr><td class="strong">audit:read</td><td>Leer el registro de eventos de solo adición</td></tr><tr><td class="strong">config:read / write</td><td>Exportar y aplicar el archivo YAML</td></tr><tr><td class="strong">members:read / write</td><td>Ver la libreta de direcciones, y añadir personas</td></tr><tr><td class="strong">roles:read / write</td><td>Ver la tabla de roles, y definir o editar roles</td></tr></tbody>
+</table></div>
+<p>Hay dos roles integrados que no se pueden editar ni borrar, porque ninguno es una decisión de política:</p>
+<div class="docs-table"><table>
+<thead><tr><th>Rol</th><th>Id</th><th>Permisos</th></tr></thead>
+<tbody><tr><td class="strong"><code>owner</code></td><td><code>role_owner</code></td><td>todo</td></tr><tr><td class="strong"><code>viewer</code></td><td><code>role_viewer</code></td><td>todos los permisos de lectura</td></tr></tbody>
+</table></div>
+<p>Un miembro añadido sin rol cae en <code>viewer</code>: una omisión estrecha el acceso, nunca lo amplía. La delegación también solo puede estrechar — nadie puede conceder un permiso que no tiene él mismo, o <code>members:write</code> sería un camino a <code>role_owner</code>. La misma regla se aplica al archivo de configuración.</p>
+<p>Los permisos se resuelven por petición desde los read models, así que editar un rol o reasignar a alguien surte efecto en su siguiente clic. Sin volver a iniciar sesión, sin sesión obsoleta.</p>
+</section>
+<section class="docs-section" id="es-config" data-anchor="config">
+<h2>Configuración como código</h2>
+<p>El panel y un archivo YAML son dos puertas de entrada al mismo manejador de comandos. Ninguno es privilegiado: un gateway creado en el navegador se exporta al archivo, y un archivo aplicado por CI llega al mismo registro de eventos que un clic.</p>
+<p><code>gateways</code>, <code>roles</code> y <code>members</code> se declaran todos en el archivo, así que un tenant se puede reconstruir desde un commit. Los secretos nunca se exportan — escriba <code>${ENV_VAR}</code> y el servidor lo resuelve desde su propio entorno en el momento de aplicar.</p>
+<pre class="code" tabindex="0"># gateways.yaml
+gateways:
+  - slug: rancher
+    name: Rancher cluster
+    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp
+    description: read the cluster, restart and scale
+    auth:
+      mode: oauth
+      idp: google
+      client_id: ${GOOGLE_CLIENT_ID}
+      client_secret: ${GOOGLE_CLIENT_SECRET}
+      upstream_token: ${RANCHER_MCP_TOKEN}
+    rate_limit: 120
+    allow: [someone@example.com]
+
+roles:
+  - name: Auditor
+    permissions: [gateways:read, traffic:read, audit:read]
+
+members:
+  - email: auditor@example.com
+    password: ${MEMBER_PASSWORD}
+    roles: [Auditor]
+
+prune: false</pre>
+<p>Semántica de fusión: el archivo es autoritativo sobre lo que declara. Un gateway omitido del archivo sobrevive, así que una errata no puede borrar producción. <code>prune: true</code> opta por el borrado — se aplica solo a gateways; los miembros nunca se purgan por omisión, porque una cuenta que desaparece de un archivo es mucho más probable que sea un accidente de fusión que una intención.</p>
+<p>Los miembros se reconcilian por email: a un miembro existente cuyos roles difieren se le reemplazan, y al que coincide se le deja igual. <code>password</code> solo se usa cuando la cuenta aún no existe, así que aparece en un archivo revisado como <code>${MEMBER_PASSWORD}</code> y nunca en una exportación — que es también por qué exportar y volver a aplicar es una no-op. Una cuenta nueva sin contraseña se rechaza, porque inventarla sería una credencial con la que nadie puede iniciar sesión.</p>
+<p>Un rol cuyo nombre coincide con uno integrado (<code>owner</code>, <code>viewer</code>) puede nombrarse pero no redefinirse: de lo contrario el archivo estrecharía a todos los miembros existentes a la vez.</p>
+
+<pre class="code" tabindex="0"># round-trip from the shell
+omg export --tenant tn_local &gt; gateways.yaml
+omg apply gateways.yaml --tenant tn_local</pre>
+<p><code>omg apply</code> imprime lo que cambió y cualquier error, y sale con código distinto de cero cuando una declaración falló — que es lo que lo hace usable en CI. Las claves de API recién emitidas se imprimen una vez, porque es la única vez que existe el texto plano.</p>
+<p>La página Config as code del panel hace lo mismo: <strong>Validate</strong> analiza y resuelve los marcadores de posición sin tocar el estado, <strong>Apply</strong> ejecuta los comandos.</p>
+</section>
+<section class="docs-section" id="es-api" data-anchor="api">
+<h2>API HTTP</h2>
+<p>Todo lo que hace el panel es un endpoint bajo <code>/api</code>, autenticado por una cookie de sesión <code>HttpOnly</code>. Las rutas MCP viven en <code>/g/&lt;slug&gt;/mcp</code> y hablan JSON-RPC, no esta API.</p>
+<p>Cada lista está paginada por cursor: <code>?limit=50&amp;before=&lt;cursor&gt;</code>, y responde <code>{items, next}</code>. <code>next</code> es null en la última página, y <code>limit</code> se recorta a 200 en lugar de rechazarse.</p>
+<p>Cada lista acepta además sus propios campos de filtro como parámetros de consulta, una caja por columna en el panel. Las columnas de texto coinciden por fragmento (<code>?name=anch</code> encuentra <code>rancher</code>), <code>status</code> y <code>enabled</code> coinciden exactamente, y cada lista lleva una caja <code>id</code> para la fila que copió a medias. Un campo desconocido es un 422 que nombra los campos que existen — un filtro ignorado en silencio es peor que un error.</p>
+<p>El orden es <code>?sort=&lt;column&gt;&amp;order=asc|desc</code>. Las columnas ordenables son un conjunto cerrado por lista: gateways por <code>created_at</code>, <code>updated_at</code>, <code>name</code> o <code>slug</code>; traffic por <code>occurred_at</code>, <code>duration_ms</code>, <code>status</code> o <code>subject</code>; el registro de auditoría por <code>occurred_at</code>, <code>actor</code> o <code>type</code>; members por <code>email</code> y <code>created_at</code>; roles por <code>name</code> y <code>created_at</code>. Una clave desconocida es un 422 que enumera las legales.</p>
+<p>Un cursor significa <em>después de esta fila, en este orden</em>, así que está ligado al orden con el que se emitió. Cambie <code>sort</code> u <code>order</code> y empiece por la primera página: reutilizar el cursor antiguo es un 422, no una lista con agujeros silenciosos.</p>
+<p>Dos endpoints no encajan en la forma CRUD y vale la pena conocerlos: <code>POST /api/gateways/&lt;id&gt;/keys/&lt;key_id&gt;/reveal</code> devuelve el texto plano sellado una vez y <code>409</code> después, y <code>GET /api/gateways/&lt;id&gt;/upstream-tools</code> pregunta al upstream qué sirve para que la lista se marque en vez de escribirse. <code>PUT /api/gateways/&lt;id&gt;/tools</code> reemplaza la lista, o la de un origen de credencial cuando el cuerpo nombra un <code>source</code>. <code>GET /api/requests.csv</code> responde a los mismos filtros de <code>/requests</code>, como archivo; <code>POST /api/config/plan</code> dice qué cambiaría un apply sin cambiar nada, y <code>POST /api/gateways/&lt;id&gt;/test</code> sondea el upstream con un handshake MCP real.</p>
+<p>Cuatro endpoints responden preguntas que la forma CRUD no responde: <code>GET /api/gateways/&lt;id&gt;/history</code> es el flujo de eventos de ese gateway, del más nuevo al más antiguo, paginado y filtrado con el vocabulario del registro de auditoría y con los valores secretos ocultos; <code>POST /api/gateways/&lt;id&gt;/restore</code> reaplica la configuración de una versión y anexa un hecho <code>gateway.restored</code> — las credenciales y las claves no se restauran, porque una clave revocada debe seguir revocada; <code>GET /api/events.csv</code> es el registro de auditoría como archivo, con los mismos filtros y el mismo alcance de tenant; y <code>/api/gateways/&lt;id&gt;/webhooks</code> registra una URL que recibe cada observación que graba el guard, firmada con un HMAC-SHA256 del cuerpo.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Método y ruta</th><th>Hace</th></tr></thead>
+<tbody><tr><td class="strong">POST /api/auth/login</td><td>Iniciar sesión con email y contraseña</td></tr><tr><td class="strong">GET /api/auth/me</td><td>Identidad, tenant, roles y lista plana de permisos</td></tr><tr><td class="strong">GET /api/gateways?slug=&amp;name=&amp;auth_mode=&amp;enabled=</td><td>Una página de gateways, los más recientes primero</td></tr><tr><td class="strong">POST /api/gateways</td><td>Crear uno (requiere <code>gateways:write</code>)</td></tr><tr><td class="strong">GET /api/gateways/{id}/connect</td><td>Guía generada para copiar y pegar de ese gateway</td></tr><tr><td class="strong">PUT /api/gateways/{id}/auth</td><td>Modo de autenticación y formas extra de entrar (claves de API, emisores verificadores)</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys</td><td>Emitir una clave de API; el texto plano se devuelve una vez</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys/{kid}/rotate</td><td>Rotar en sitio: la clave antigua muere en la misma adición</td></tr><tr><td class="strong">GET /api/stats?minutes=60</td><td>Totales de la ventana y de la ventana igual anterior, por resultado, IP del llamante y slug de gateway, el minuto más cargado y la serie</td></tr><tr><td class="strong">GET /api/requests?gateway=&amp;gateway_id=&amp;subject=&amp;outcome=&amp;status=&amp;method=&amp;tool=&amp;ip=</td><td>Una página del registro de peticiones; cada columna con caja de filtro lo estrecha</td></tr><tr><td class="strong">GET /api/events?type=&amp;aggregate=&amp;actor=&amp;since=&amp;until=</td><td>Una página del registro de auditoría</td></tr><tr><td class="strong">GET /api/docs</td><td>Este manual, como datos (público)</td></tr><tr><td class="strong">POST /api/mcp/token</td><td>Emitir un token de solo lectura para el MCP de consola</td></tr><tr><td class="strong">POST /api/config/validate</td><td>Analizar un documento sin aplicarlo</td></tr><tr><td class="strong">POST /api/config/apply</td><td>Reconciliar gateways, roles y miembros</td></tr><tr><td class="strong">GET /api/config/export</td><td>Renderizar el estado actual como YAML, sin secretos</td></tr><tr><td class="strong">GET /api/requests.csv?gateway=&amp;outcome=&amp;subject=…</td><td>El log de peticiones en un archivo CSV: mismos filtros, mismo alcance de tenant, acotado por <code>limit</code></td></tr><tr><td class="strong">POST /api/config/plan</td><td>Qué crearía, actualizaría y borraría un apply — sin aplicarlo</td></tr><tr><td class="strong">POST /api/gateways/{id}/test</td><td>Sondea el upstream ahora: handshake real, número de herramientas, motivo</td></tr><tr><td class="strong">GET /api/gateways/{id}/history</td><td>El flujo de eventos de ese gateway, del más nuevo al más antiguo, filtrable y ordenable como el registro de auditoría</td></tr><tr><td class="strong">POST /api/gateways/{id}/restore</td><td>Devuelve la configuración a una versión; las claves no resucitan</td></tr><tr><td class="strong">PUT /api/gateways/{id}/quota</td><td>Tope mensual de llamadas (0 = ninguno), aparte del límite por minuto</td></tr><tr><td class="strong">GET|POST /api/gateways/{id}/webhooks</td><td>Hooks que reciben observaciones, firmados con HMAC-SHA256</td></tr><tr><td class="strong">GET /api/events.csv</td><td>El registro de auditoría como un archivo CSV, mismos filtros y alcance de tenant</td></tr><tr><td class="strong">POST /api/operators/{id}/disable</td><td>Corta el inicio de sesión y las sesiones abiertas; <code>/enable</code> devuelve el acceso</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="es-console" data-anchor="console">
+<h2>El MCP de consola</h2>
+<p>El gateway expone un servidor MCP de solo lectura propio en <code>/mcp</code>, para que un agente pueda responder preguntas sobre <em>este despliegue</em>: qué gateways existen, qué falló en la última hora, qué dice el registro de auditoría sobre un cambio de rol.</p>
+<p>Es de solo lectura por construcción — cada herramienta es una consulta, ninguna es un comando — y está acotado al tenant: un token emitido por el operador de un tenant solo puede leer las filas de ese tenant.</p>
+<p>Todo tenant nuevo ya tiene un gateway apuntando a él. Se crea con el tenant, llamado <code>console</code>, con el <code>/mcp</code> del propio despliegue como upstream y una clave de API para el llamante — así que lo primero que puede hacer un tenant nuevo es enchufar un agente sin configurar nada. Es un gateway como cualquier otro: misma autenticación, mismo límite de tasa, y sus preguntas llegan al registro de tráfico junto a cualquier otra llamada.</p>
+<p>Los tenants que existían antes de esta función reciben el mismo gateway en el siguiente arranque: el backfill busca tenants sin ninguna fila de gateway que apunte a <code>/mcp</code>, así que un owner que borró el suyo lo mantiene borrado.</p>
+<p>Conéctese a él exactamente igual que a un gateway hecho a mano:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/console/mcp",
+      "headers": { "Authorization": "Bearer omgc_gateway_api_key" }
+    }
+  }
+}</pre>
+<p>La clave se emite al crear el tenant y se muestra una vez, en la página del gateway. Rótela allí si se filtra; borre el gateway si prefiere llamar a <code>/mcp</code> directamente.</p>
+<p>1. Emita un token: <code>POST /api/mcp/token</code> con su cookie de sesión. El texto plano se devuelve una vez, exactamente igual que una clave de API.</p>
+<p>2. Apunte un cliente a él:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/mcp",
+      "headers": { "Authorization": "Bearer omg_..." }
+    }
+  }
+}</pre>
+<p>3. Pregúntele cosas: <em>qué gateways están fallando ahora mismo</em>, <em>muéstrame las últimas 20 llamadas limitadas por tasa del gateway rancher</em>, <em>qué cambió hoy en el registro de auditoría</em>.</p>
+<p>El token se firma con el secreto del despliegue, lleva el id del operador y la hora de emisión, y caduca a los 90 días. Revóquelo rotando <code>OMG_SESSION_SECRET</code> — lo que además cierra la sesión de todos, así que prefiera una caducidad corta si eso importa más.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Herramienta</th><th>Responde</th></tr></thead>
+<tbody><tr><td class="strong">search_docs</td><td>Buscar en este manual; devuelve las secciones coincidentes con su texto</td></tr><tr><td class="strong">list_gateways</td><td>Gateways del tenant, filtrables por slug, nombre y modo de autenticación</td></tr><tr><td class="strong">get_gateway</td><td>Un gateway: política, claves, estadísticas, llamadas recientes</td></tr><tr><td class="strong">search_requests</td><td>El registro de peticiones, filtrable por gateway, resultado, sujeto, herramienta y estado</td></tr><tr><td class="strong">search_events</td><td>El registro de auditoría, filtrable por tipo, agregado, actor y tiempo</td></tr><tr><td class="strong">traffic_stats</td><td>Totales, recuentos por resultado, por IP y por gateway para una ventana</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="es-ops" data-anchor="ops">
+<h2>Operarlo</h2>
+<p>Los logs son un objeto JSON por línea en stdout, construidos para Loki / Grafana. Campos útiles sobre los que construir dashboards: <code>event</code>, <code>gateway</code>, <code>subject</code>, <code>outcome</code>, <code>status</code>, <code>duration_ms</code>. Fije el nivel con <code>OMG_LOG_LEVEL</code>.</p>
+<pre class="code" tabindex="0">{"ts":"2026-11-02T11:04:14.538Z","level":"info","logger":"gateway","msg":"proxy.request","event":"proxy.request","gateway":"rancher","subject":"api-key:key_ab12","outcome":"allowed","status":200,"duration_ms":18,"ip":"203.0.113.7"}</pre>
+<p>El rate limiting es una ventana deslizante por (gateway, llamador). Con <code>OMG_REDIS_URL</code> definido, los contadores viven en Redis y todas las réplicas los comparten, así que <code>replicas: 2</code> significa el límite configurado y no el doble. Sin eso el limitador es en proceso: correcto para una réplica, N veces el límite en N. Un Redis caído falla abierto y lo registra - una ventana de conteo perdida es mejor que una caída.</p>
+<p>El estado del proxy OAuth (registros de clientes, tokens de upstream, mapeos de <code>jti</code>) vive en el mismo Postgres, cifrado en reposo, así que un despliegue no desconecta a todos los clientes conectados. Esa parte ya es segura entre réplicas, y con <code>OMG_REDIS_URL</code> definido el limitador también lo es.</p>
+<p>El estado está basado en eventos. Cada cambio es un evento de solo adición y los read models son proyecciones de él, que es lo que hace fiable el registro de auditoría y permite que dos réplicas compartan una base de datos sin una historia de coherencia de caché.</p>
+<p>El esquema está versionado en código (<code>infrastructure/db/migrations.py</code>): una lista numerada de pasos, registrada en <code>schema_migrations</code>. El arranque aplica lo que esta build aún no ha aplicado, así que una actualización es un despliegue, no una sesión manual de <code>psql</code>. Los read models viven en su propio esquema, <code>readmodels</code> — toda tabla con prefijo <code>rm_</code> — mientras que <code>events</code>, las tablas de unicidad y el historial se quedan en <code>public</code>. La división es el punto: una proyección es reconstruible a partir del registro, así que <code>DROP SCHEMA readmodels CASCADE</code> seguido de un arranque es un reinicio seguro que el siguiente arranque detecta y repara. Nada de lo que el registro necesita está ahí. <code>OMG_RETENTION_DAYS</code> poda el log de peticiones al arrancar. Más allá del corte se borran los eventos <code>request.observed</code>, <code>rm_requests_tail</code> y <code>rm_request_stats</code>; los eventos de auditoría nunca, porque el log de quién cambió qué no es el log de quién llamó. <code>0</code>, el valor por defecto, lo guarda todo.</p>
+<p><code>GET /metrics</code> sirve el formato de texto de Prometheus: <code>omg_proxy_requests_total</code> por gateway, desenlace y clase de estado; <code>omg_proxy_request_duration_ms_sum</code> para dividir por el conteo y sacar una media; y gauges para gateways en servicio, gateways pendientes, observaciones descartadas y qué backend de rate limit está en uso. No pide autenticación y va en el mismo puerto, así que restríngelo en el ingress si el despliegue mira a internet. Los contadores son en proceso: con varias réplicas cada pod es una serie y <code>sum by (gateway)</code> es la consulta correcta.</p>
+<p>Los webhooks se entregan fuera del camino de la petición: tres intentos con un backoff corto, y una entrega fallida queda como fila <code>failed</code> en vez de reintentarse para siempre. <code>GET /api/gateways/&lt;id&gt;/webhooks/&lt;hook_id&gt;/deliveries</code> es donde "el hook está en silencio" obtiene respuesta — ningún evento coincidente, o todos los POST fallando. La cuota mensual y el límite por minuto son puertas distintas: el limitador cobra una ráfaga y vive en Redis cuando <code>OMG_REDIS_URL</code> está definido; la cuota es un bloqueo de fila en Postgres, reservado antes de que salga la llamada, así que dos llamadas seguidas no leen el mismo conteo. Ambos rechazan con 429, y el <code>reason</code> de la fila dice cuál. Cada respuesta lleva <code>X-Request-Id</code> — el del llamador, si envió uno sensato, si no uno que generó el guard — y la fila de tráfico guarda ese id, así que un ticket de soporte se convierte en una consulta.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Síntoma</th><th>Qué suele ser</th></tr></thead>
+<tbody><tr><td class="strong">503 en una ruta de gateway</td><td>Un gateway OAuth sin credenciales de cliente. Fallo cerrado, por diseño</td></tr><tr><td class="strong">401 en cada llamada</td><td>El token de upstream es incorrecto o no está puesto, o la clave del cliente fue rotada</td></tr><tr><td class="strong">403 con un sujeto</td><td>La cuenta del llamante no pertenece al tenant dueño de este gateway</td></tr><tr><td class="strong">429</td><td>Presupuesto por sujeto agotado para ese gateway</td></tr><tr><td class="strong">Las herramientas parecen colgarse</td><td>Buffering del proxy en el ingress delante del gateway: desactívelo, suba el timeout de lectura</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="es-env" data-anchor="env">
+<h2>Entorno</h2>
+<p>La configuración de inicio de sesión es configuración del despliegue, no del tenant: un owner de un tenant nunca debe poder cambiar cómo inicia sesión todo el mundo. Por eso viene del entorno, y no hay pantalla para ello.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Variable</th><th>Significado</th></tr></thead>
+<tbody><tr><td class="strong">OMG_DATABASE_URL</td><td>DSN de Postgres (obligatorio)</td></tr><tr><td class="strong">OMG_SESSION_SECRET</td><td>Al menos 32 bytes (obligatorio)</td></tr><tr><td class="strong">OMG_BASE_URL</td><td>URL pública; la redirección OAuth se deriva de ella</td></tr><tr><td class="strong">OMG_ADMIN_EMAIL / OMG_ADMIN_PASSWORD</td><td>Cuenta de arranque opcional</td></tr><tr><td class="strong">OMG_GOOGLE_CLIENT_ID / SECRET</td><td>Inicio de sesión con Google para el propio panel</td></tr><tr><td class="strong">OMG_OPERATOR_ALLOWLIST</td><td>Direcciones separadas por comas que pueden crear una cuenta</td></tr><tr><td class="strong">OMG_LOG_LEVEL</td><td><code>info</code> por defecto</td></tr><tr><td class="strong">OMG_CONFIG_FILE</td><td>YAML opcional aplicado en el arranque</td></tr><tr><td class="strong">OMG_REDIS_URL</td><td>Opcional; contadores de rate limit compartidos en vez de en proceso</td></tr><tr><td class="strong">OMG_RETENTION_DAYS</td><td>Borra filas del log de peticiones y read models de petición más antiguos que N días, al arrancar. <code>0</code> (por defecto) lo guarda todo; los eventos de auditoría nunca se podan</td></tr><tr><td class="strong">OMG_MAX_BODY_BYTES</td><td>Cuerpo de petición máximo que el guard lee, en bytes (por defecto <code>1048576</code>). Todo lo mayor se rechaza con <code>413</code> antes de reenviarse</td></tr><tr><td class="strong">OMG_TRUSTED_PROXIES</td><td>Direcciones o CIDR separados por comas cuyo <code>X-Forwarded-For</code> se cree, para que el log de tráfico anote al llamante y no al ingress. Vacío (por defecto) no confía en nadie; <code>*</code> confía en cualquier peer y solo es correcto si el puerto es privado</td></tr><tr><td class="strong">OMG_LOGIN_ATTEMPTS_PER_MINUTE</td><td>Intentos de inicio de sesión con contraseña permitidos por dirección por minuto (por defecto <code>5</code>). Por encima, la ruta responde <code>429</code> con <code>Retry-After</code></td></tr></tbody>
+</table></div>
+
+</section>
+<footer class="docs-foot">
+<span>OpenMCPGateway · Apache-2.0</span>
+<a href="https://github.com/giomartinsdev/OpenMCPGateway#readme" target="_blank" rel="noreferrer">README →</a>
+</footer>
+</article>
+</div>
+<div class="docs-pane" data-lang-pane="zh" hidden>
+<nav class="docs-toc" aria-label="On this page">
+<div class="nav-label" data-i18n="docs.onThisPage">On this page</div>
+<a href="#overview" data-jump="overview">这是什么</a>
+<a href="#quickstart" data-jump="quickstart">快速开始</a>
+<a href="#gateways" data-jump="gateways">网关</a>
+<a href="#auth" data-jump="auth">认证方式</a>
+<a href="#rbac" data-jump="rbac">成员与角色</a>
+<a href="#config" data-jump="config">配置即代码</a>
+<a href="#api" data-jump="api">HTTP API</a>
+<a href="#console" data-jump="console">console MCP</a>
+<a href="#ops" data-jump="ops">运维</a>
+<a href="#env" data-jump="env">环境变量</a>
+</nav>
+<article class="docs-article">
+<section class="docs-section" id="zh-overview" data-anchor="overview">
+<h2>这是什么</h2>
+<p>OpenMCPGateway 位于一个或多个 MCP 服务器之前。客户端指向 <code>https://&lt;host&gt;/g/&lt;slug&gt;/mcp</code>；网关认证调用方，应用它的准入判断和每分钟预算，通过私有网络将请求转发给真实服务器，并记录发生的情况。</p>
+<p>上游不需要能从互联网访问，也不需要知道调用方是谁：网关负责终止身份，并在上游要求凭据时代为转发自己的凭据（<code>upstream_token</code>）。</p>
+<p>面板以相同的形状回答同样的问题：Traffic 界面给出总量及与上一窗口的对比、一张流量图，以及按结果、网关和调用方的细分——任意表格中的一行都会打开抽屉显示该行的其余内容，而不是离开列表。</p>
+<div class="docs-table"><table>
+<thead><tr><th>层</th><th>行为</th></tr></thead>
+<tbody><tr><td class="strong">认证</td><td>每个网关的 OAuth 代理（Google、GitHub、Microsoft、Discord、自定义 OIDC），或使用 SHA-256 哈希的 bearer 密钥</td></tr><tr><td class="strong">授权</td><td>拥有该网关的租户成员。在此签发的密钥同样可用。</td></tr><tr><td class="strong">速率限制</td><td>按主体、按网关计数 JSON-RPC 请求。握手不计费</td></tr><tr><td class="strong">可观测性</td><td>记录每次尝试：主体、结果、状态、延迟、IP</td></tr><tr><td class="strong">故障关闭</td><td>没有凭据的 OAuth 网关返回 503，绝不表现为开放代理</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="zh-quickstart" data-anchor="quickstart">
+<h2>快速开始</h2>
+<p>你需要一个网关能连上的 Postgres，以及一个在其前面终止 TLS 的主机名。</p>
+<pre class="code" tabindex="0"># 1. run it
+export OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg
+export OMG_SESSION_SECRET=$(openssl rand -hex 32)
+export OMG_BASE_URL=https://gateway.example.com
+omg serve
+
+# 2. create the first account, then a tenant, in the browser
+open https://gateway.example.com</pre>
+<p>第一个账号会创建一个租户并成为其 <code>owner</code>。其他人要么用租户的加入码加入，要么由管理员添加。</p>
+<p>租户创建时自带一个 <code>console</code> 网关，已指向本部署自己的只读 MCP。用其页面上的 API 密钥将 agent 指向 <code>/g/console/mcp</code>，问它部署在做什么——无需配置任何上游。</p>
+<p>网关一存在就可以让客户端指向它：</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "my-server": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/my-server/mcp"
+    }
+  }
+}</pre>
+
+
+</section>
+<section class="docs-section" id="zh-gateways" data-anchor="gateways">
+<h2>网关</h2>
+<p>网关是一个 slug、一个上游 URL 和一套策略。slug 是全局的：<code>/g/&lt;slug&gt;/mcp</code> 是人们粘贴到客户端里的字符串，因此两个租户不能同时拥有 <code>rancher</code>。</p>
+<p>系统为你创建一个网关：<code>console</code>，指向本部署自己的只读 MCP。slug 是全局的，因为 <code>/g/&lt;slug&gt;/mcp</code> 是公开 URL，所以在有多个租户的部署上，第一个租户占用 <code>console</code>，其余租户使用 <code>console-&lt;tenant id&gt;</code>——用 id 而非计数器，这样地址仍然表明它是谁的网关。</p>
+<p><code>target_url</code> 是上游的 streamable-HTTP 端点，包含其路径（<code>http://rancher-mcp.support.svc.cluster.local:8000/mcp</code>）。必须是 <code>http://</code> 或 <code>https://</code>。</p>
+<p>网关还决定它暴露*哪些*工具。清单是一组上游工具名；为空表示上游提供的全部工具，这也是每个网关的初始状态。它可以按凭据来源收窄——托管的登录提供方（<code>google</code>、<code>github</code>、<code>oidc</code>）、额外验证器的标签，或 <code>api_key</code>——于是一条路由可以让机器人拿到的清单比旁边登录的人更小，不必为同一个上游发布两个网关。没有自己清单的来源继承网关的清单，清空某个来源的清单则让它重新继承。清单之外的工具会从 <code>tools/list</code> 消失，对它的 <code>tools/call</code> 会返回 <code>403</code> 并点名该工具，因此配置里还留着旧名字的客户端得到的是一句话，而不是静默成功或去猜拼写错在哪。网关页面可以按需探测上游：真实 handshake、可用的工具数量和失败原因。以前上游已死看起来只是网关安静而健康。</p>
+<p>面板直接向上游读取目录来填充这份清单 - 不走网关，因为网关会用自己正在施加的过滤器来回答。上游已不再提供的已配置名字仍然可见并带标记，因为下次保存时静默删掉它会抹去操作者做过的决定。</p>
+<div class="docs-table"><table>
+<thead><tr><th>字段</th><th>含义</th></tr></thead>
+<tbody><tr><td class="strong">slug</td><td><code>[a-z0-9-]+</code>，2-40 个字符。出现在公开路径中</td></tr><tr><td class="strong">target_url</td><td>上游 MCP 端点，包含路径</td></tr><tr><td class="strong">auth_mode</td><td><code>none</code>、<code>api_key</code> 或 <code>oauth</code></td></tr><tr><td class="strong">idp</td><td>配合 <code>oauth</code>：<code>self</code>、<code>github</code>、<code>google</code>、<code>azure</code>、<code>discord</code> 或 <code>oidc</code></td></tr><tr><td class="strong">upstream_token</td><td>上游要求的 Bearer。只写：API 从不返回</td></tr><tr><td class="strong">rate_limit</td><td>每个主体每分钟的请求数。<code>0</code> 表示不限制</td></tr><tr><td class="strong">enabled</td><td>已禁用的网关返回 404 而非 403——它不会被公告</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="zh-auth" data-anchor="auth">
+<h2>认证方式</h2>
+<p><strong><code>none</code></strong> - 无认证。在私有网络上没问题；只要有任何此类网关启用，面板就会警告。</p>
+<p><strong><code>api_key</code></strong> - 调用方发送 <code>Authorization: Bearer omg_...</code>。密钥以 SHA-256 哈希保存（鉴权比较的就是它），旁边是一份用部署密钥加密的明文封存副本。签发它的响应会返回明文，网关页面会给从未被读取过的密钥显示一个眼睛图标：点击会解密封存副本、把密钥显示一次，然后抹掉它。此后只剩哈希，想再拿到可读的密钥只能轮换。 密钥可以带有效期签发。过期后密钥不再通过认证，轮换会继承被替换密钥的期限——轮换是为了换密钥，而不是延长它被信任的时间。</p>
+<p>操作员批准一次，该账号此后即为成员。</p>
+<p>OAuth 模式下客户端不需要把令牌签入 dotfile——这正是重点。API 密钥模式则需如此，这也是密钥按网关划分、可单独吊销的原因。</p>
+<p>一个网关也可以有多种进入方式。开启 <code>allow_api_key</code> 后，<code>oauth</code> 模式在同一路由上同时接受 API 密钥，并接受 <code>verifiers</code> 中列出的额外签发方的令牌——每项包含标签、签发方、可选 audience 和 JWKS 地址。这些额外签发方没有自己的登录流程：客户端已持有其提供方的令牌，网关只校验签名、签发方和 audience。一个 URL、同一道准入、同一个速率限制，无需按凭据类型拆分网关。</p>
+<p>谁能调用不是网关上的一个名单。调用者的账号属于拥有该网关的租户时才放行——面板编辑网关用的也是同一条规则，于是「谁能使用」只有一个答案，而不是两个会逐渐分叉的答案。成员关系逐请求读取，因此移除某人或禁用其账号会在下一次调用时关闭网关的门。API 密钥不受此限，因为密钥内嵌自己的 id 而不是指向某个账号：密钥的哈希与本网关中有效密钥匹配即放行，撤销密钥即拒绝。</p>
+<pre class="code" tabindex="0"># API-key call
+curl -sS https://gateway.example.com/g/rancher/mcp \
+  -H 'Authorization: Bearer omg_...' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'</pre>
+
+
+</section>
+<section class="docs-section" id="zh-rbac" data-anchor="rbac">
+<h2>成员与角色</h2>
+<p>一切都以租户为范围：网关、成员、角色、流量、审计日志。来自其他租户的 id 返回 404，而不是会确认其存在的 403。</p>
+<p>权限是一个封闭的目录。拼写错误会以 422 拒绝并指出字段名，因为另一种结果是一个不授予任何权限也不说明任何事的角色。</p>
+<div class="docs-table"><table>
+<thead><tr><th>权限</th><th>授予</th></tr></thead>
+<tbody><tr><td class="strong">gateways:read / write</td><td>查看网关列表，并修改 slug、目标、认证和限制</td></tr><tr><td class="strong">keys:read / write</td><td>查看密钥 id，并签发、轮换或吊销密钥</td></tr><tr><td class="strong">traffic:read</td><td>读取请求统计和最近请求日志</td></tr><tr><td class="strong">audit:read</td><td>读取仅追加的事件日志</td></tr><tr><td class="strong">config:read / write</td><td>导出并应用 YAML 文件</td></tr><tr><td class="strong">members:read / write</td><td>查看通讯录，并添加人员</td></tr><tr><td class="strong">roles:read / write</td><td>查看角色表，并定义或编辑角色</td></tr></tbody>
+</table></div>
+<p>有两个内置角色，无法编辑或删除，因为两者都不是策略决策：</p>
+<div class="docs-table"><table>
+<thead><tr><th>角色</th><th>Id</th><th>权限</th></tr></thead>
+<tbody><tr><td class="strong"><code>owner</code></td><td><code>role_owner</code></td><td>全部</td></tr><tr><td class="strong"><code>viewer</code></td><td><code>role_viewer</code></td><td>所有读取权限</td></tr></tbody>
+</table></div>
+<p>未指定角色添加的成员会落到 <code>viewer</code>：遗漏只会收窄访问，绝不会放宽。委派也只能收窄——没有人能授予自己不拥有的权限，否则 <code>members:write</code> 就会成为通往 <code>role_owner</code> 的路径。同样的规则适用于配置文件。</p>
+<p>权限在每次请求时从读模型解析，因此编辑角色或重新分配某人会在其下一次点击时生效。无需重新登录，没有过期会话。</p>
+</section>
+<section class="docs-section" id="zh-config" data-anchor="config">
+<h2>配置即代码</h2>
+<p>面板和 YAML 文件是通向同一命令处理器的两扇前门。两者都没有特权：在浏览器中创建的网关会导出到文件，而由 CI 应用的文件与一次点击进入同一个事件日志。</p>
+<p><code>gateways</code>、<code>roles</code> 和 <code>members</code> 都在文件中声明，因此租户可以从一次提交重建。密钥永不导出——写下 <code>${ENV_VAR}</code>，服务器在应用时从自己的环境解析它。</p>
+<pre class="code" tabindex="0"># gateways.yaml
+gateways:
+  - slug: rancher
+    name: Rancher cluster
+    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp
+    description: read the cluster, restart and scale
+    auth:
+      mode: oauth
+      idp: google
+      client_id: ${GOOGLE_CLIENT_ID}
+      client_secret: ${GOOGLE_CLIENT_SECRET}
+      upstream_token: ${RANCHER_MCP_TOKEN}
+    rate_limit: 120
+    allow: [someone@example.com]
+
+roles:
+  - name: Auditor
+    permissions: [gateways:read, traffic:read, audit:read]
+
+members:
+  - email: auditor@example.com
+    password: ${MEMBER_PASSWORD}
+    roles: [Auditor]
+
+prune: false</pre>
+<p>合并语义：文件对其声明的内容具有权威性。文件中省略的网关会保留，因此拼写错误无法删除生产环境。<code>prune: true</code> 选择启用删除——它仅适用于网关；成员绝不会因为省略而被清理，因为从文件中消失的账号更可能是合并事故而非有意为之。</p>
+<p>成员按 email 对账：角色不同的现有成员会被替换角色，角色相同的则保持不变。<code>password</code> 仅在账号尚不存在时使用，因此它出现在经过审阅的文件中为 <code>${MEMBER_PASSWORD}</code>，而绝不会出现在导出中——这也是导出再重新应用是空操作的原因。没有密码的新账号会被拒绝，因为凭空编造一个将是谁都无法登录的凭据。</p>
+<p>名称与内置角色（<code>owner</code>、<code>viewer</code>）相同的角色可以被点名但不可重定义：否则文件会一次性收窄所有现有成员。</p>
+
+<pre class="code" tabindex="0"># round-trip from the shell
+omg export --tenant tn_local &gt; gateways.yaml
+omg apply gateways.yaml --tenant tn_local</pre>
+<p><code>omg apply</code> 打印变更内容和任何错误，并在某个声明失败时以非零退出——这正是它可用于 CI 的原因。新签发的 API 密钥只打印一次，因为那是明文唯一存在的时刻。</p>
+<p>面板的 Config as code 页面做同样的事：<strong>Validate</strong> 解析并解析占位符而不触碰状态，<strong>Apply</strong> 执行命令。</p>
+</section>
+<section class="docs-section" id="zh-api" data-anchor="api">
+<h2>HTTP API</h2>
+<p>面板所做的一切都是 <code>/api</code> 下的端点，由 <code>HttpOnly</code> 会话 cookie 认证。MCP 路由本身位于 <code>/g/&lt;slug&gt;/mcp</code>，使用 JSON-RPC，而不是这套 API。</p>
+<p>每个列表都是游标分页：<code>?limit=50&amp;before=&lt;cursor&gt;</code>，返回 <code>{items, next}</code>。<code>next</code> 在最后一页为 null，<code>limit</code> 会被钳制到 200 而不是被拒绝。</p>
+<p>每个列表还接受自己的过滤字段作为查询参数，对应面板中每列一个输入框。文本列匹配片段（<code>?name=anch</code> 可找到 <code>rancher</code>），<code>status</code> 和 <code>enabled</code> 精确匹配，每个列表都带有一个 <code>id</code> 输入框，用于你只复制了一半的那一行。未知字段会返回 422 并列出存在的字段——被静默忽略的过滤比报错更糟。</p>
+<p>排序是 <code>?sort=&lt;column&gt;&amp;order=asc|desc</code>。可排序列对每个列表是封闭集合：网关按 <code>created_at</code>、<code>updated_at</code>、<code>name</code> 或 <code>slug</code>；流量按 <code>occurred_at</code>、<code>duration_ms</code>、<code>status</code> 或 <code>subject</code>；审计日志按 <code>occurred_at</code>、<code>actor</code> 或 <code>type</code>；成员按 <code>email</code> 和 <code>created_at</code>；角色按 <code>name</code> 和 <code>created_at</code>。未知的键会返回 422 并列出合法的键。</p>
+<p>游标意味着*在此行之后，按此顺序*，因此它绑定于签发它的排序。更改 <code>sort</code> 或 <code>order</code> 后请从第一页开始：复用旧游标会得到 422，而不是一个静默有洞的列表。</p>
+<p>有两个端点不合 CRUD 的形状，值得了解：<code>POST /api/gateways/&lt;id&gt;/keys/&lt;key_id&gt;/reveal</code> 返回一次封存的明文，之后是 <code>409</code>；<code>GET /api/gateways/&lt;id&gt;/upstream-tools</code> 向上游询问它提供什么，好让清单被勾选而不是手打。<code>PUT /api/gateways/&lt;id&gt;/tools</code> 替换清单；请求体点名 <code>source</code> 时替换该来源的清单。 <code>GET /api/requests.csv</code> 以文件形式响应与 <code>/requests</code> 相同的筛选条件；<code>POST /api/config/plan</code> 说明 apply 会改什么而不改动任何东西；<code>POST /api/gateways/&lt;id&gt;/test</code> 用真实的 MCP handshake 探测上游。</p>
+<p>有四个端点回答 CRUD 形状无法回答的问题：<code>GET /api/gateways/&lt;id&gt;/history</code> 是该网关自己的事件流，从新到旧，按审计日志的词汇分页和过滤，敏感值已脱敏；<code>POST /api/gateways/&lt;id&gt;/restore</code> 重新应用某个版本的配置，并追加一条 <code>gateway.restored</code> 事实——凭据和密钥不会被恢复，因为已撤销的密钥必须保持撤销；<code>GET /api/events.csv</code> 是以文件形式导出的审计日志，过滤条件和租户范围相同；<code>/api/gateways/&lt;id&gt;/webhooks</code> 注册一个 URL，接收 guard 记录的每一条观测，并用请求体的 HMAC-SHA256 签名。</p>
+<div class="docs-table"><table>
+<thead><tr><th>方法与路径</th><th>作用</th></tr></thead>
+<tbody><tr><td class="strong">POST /api/auth/login</td><td>使用 email 和密码登录</td></tr><tr><td class="strong">GET /api/auth/me</td><td>身份、租户、角色和扁平权限列表</td></tr><tr><td class="strong">GET /api/gateways?slug=&amp;name=&amp;auth_mode=&amp;enabled=</td><td>一页网关，最新的在前</td></tr><tr><td class="strong">POST /api/gateways</td><td>创建一个（需要 <code>gateways:write</code>）</td></tr><tr><td class="strong">GET /api/gateways/{id}/connect</td><td>为该网关生成可复制粘贴的指引</td></tr><tr><td class="strong">PUT /api/gateways/{id}/auth</td><td>鉴权模式与额外进入方式（API 密钥、校验签发方）</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys</td><td>签发 API 密钥；明文只返回一次</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys/{kid}/rotate</td><td>原地轮换：旧密钥在同一次追加中失效</td></tr><tr><td class="strong">GET /api/stats?minutes=60</td><td>该窗口及前一个等长窗口的总量，按结果、调用方 IP 和网关 slug、最忙的一分钟以及时间序列</td></tr><tr><td class="strong">GET /api/requests?gateway=&amp;gateway_id=&amp;subject=&amp;outcome=&amp;status=&amp;method=&amp;tool=&amp;ip=</td><td>一页请求日志；每个带过滤框的列都会收窄它</td></tr><tr><td class="strong">GET /api/events?type=&amp;aggregate=&amp;actor=&amp;since=&amp;until=</td><td>一页审计日志</td></tr><tr><td class="strong">GET /api/docs</td><td>本手册，作为数据（公开）</td></tr><tr><td class="strong">POST /api/mcp/token</td><td>为 console MCP 签发只读令牌</td></tr><tr><td class="strong">POST /api/config/validate</td><td>解析文档而不应用</td></tr><tr><td class="strong">POST /api/config/apply</td><td>对账网关、角色和成员</td></tr><tr><td class="strong">GET /api/config/export</td><td>将当前状态渲染为 YAML，不含密钥</td></tr><tr><td class="strong">GET /api/requests.csv?gateway=&amp;outcome=&amp;subject=…</td><td>将请求日志导出为一个 CSV 文件：相同筛选、相同 tenant 范围，受 <code>limit</code> 限制</td></tr><tr><td class="strong">POST /api/config/plan</td><td>apply 会创建、更新和删除什么——但不执行</td></tr><tr><td class="strong">POST /api/gateways/{id}/test</td><td>立即探测上游：真实 handshake、工具数量、原因</td></tr><tr><td class="strong">GET /api/gateways/{id}/history</td><td>该网关自己的事件流，从新到旧，可像审计日志一样过滤和排序</td></tr><tr><td class="strong">POST /api/gateways/{id}/restore</td><td>把配置回滚到某个版本；密钥不会复活</td></tr><tr><td class="strong">PUT /api/gateways/{id}/quota</td><td>每月调用上限（0 = 不限），与每分钟限制分开</td></tr><tr><td class="strong">GET|POST /api/gateways/{id}/webhooks</td><td>接收观测的 Hook，使用 HMAC-SHA256 签名</td></tr><tr><td class="strong">GET /api/events.csv</td><td>以单个 CSV 文件导出的审计日志，过滤条件和租户范围相同</td></tr><tr><td class="strong">POST /api/operators/{id}/disable</td><td>停止登录和现有会话；<code>/enable</code> 恢复访问</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="zh-console" data-anchor="console">
+<h2>console MCP</h2>
+<p>网关在 <code>/mcp</code> 暴露自己的只读 MCP 服务器，因此 agent 可以回答关于*本部署*的问题：存在哪些网关、过去一小时什么失败了、审计日志对某次角色变更说了什么。</p>
+<p>它在构造上就是只读的——每个工具都是查询，没有一个是命令——并且以租户为范围：某个租户操作员签发的令牌只能读取该租户的行。</p>
+<p>每个新租户都已经有一个指向它的网关。它随租户一起创建，名为 <code>console</code>，以上游为本部署自己的 <code>/mcp</code>，并为调用方准备一个 API 密钥——因此新租户要做的第一件事就是接入一个 agent，无需任何配置。它和其他网关一样：相同的认证、相同的速率限制，它的问题会和其他每次调用一样落在流量日志中。</p>
+<p>在此功能之前存在的租户会在下次启动时获得相同的网关：回填会请求那些没有指向 <code>/mcp</code> 的网关行的租户，因此删除了自己网关的 owner 会保持删除状态。</p>
+<p>连接方式与手工创建的网关完全相同：</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/console/mcp",
+      "headers": { "Authorization": "Bearer omgc_gateway_api_key" }
+    }
+  }
+}</pre>
+<p>密钥在租户创建时签发，并在网关页面上显示一次。如果泄漏就在那里轮换；如果你更愿意直接调用 <code>/mcp</code>，就删除该网关。</p>
+<p>1. 签发令牌：用你的会话 cookie 调用 <code>POST /api/mcp/token</code>。明文只返回一次，与 API 密钥完全相同。</p>
+<p>2. 让客户端指向它：</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/mcp",
+      "headers": { "Authorization": "Bearer omg_..." }
+    }
+  }
+}</pre>
+<p>3. 向它提问：*现在哪些网关在失败*、*给我看 rancher 网关最近 20 次被限流的调用*、*今天审计日志里有什么变化*。</p>
+<p>令牌使用部署密钥签名，携带操作员 id 和签发时间，90 天后过期。通过轮换 <code>OMG_SESSION_SECRET</code> 来吊销它——这也会让所有人退出登录，所以如果这更要紧，请优先使用较短的过期时间。</p>
+<div class="docs-table"><table>
+<thead><tr><th>工具</th><th>回答</th></tr></thead>
+<tbody><tr><td class="strong">search_docs</td><td>搜索本手册；返回匹配的章节及其文本</td></tr><tr><td class="strong">list_gateways</td><td>租户中的网关，可按 slug、名称、认证模式过滤</td></tr><tr><td class="strong">get_gateway</td><td>单个网关：策略、密钥、统计、最近调用</td></tr><tr><td class="strong">search_requests</td><td>请求日志，可按网关、结果、主体、工具、状态过滤</td></tr><tr><td class="strong">search_events</td><td>审计日志，可按类型、聚合、操作者、时间过滤</td></tr><tr><td class="strong">traffic_stats</td><td>某窗口的总量、按结果、按 IP 和按网关的计数</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="zh-ops" data-anchor="ops">
+<h2>运维</h2>
+<p>日志在 stdout 上每行一个 JSON 对象，为 Loki / Grafana 构建。可用于构建仪表盘的有用字段：<code>event</code>、<code>gateway</code>、<code>subject</code>、<code>outcome</code>、<code>status</code>、<code>duration_ms</code>。用 <code>OMG_LOG_LEVEL</code> 设置级别。</p>
+<pre class="code" tabindex="0">{"ts":"2026-11-02T11:04:14.538Z","level":"info","logger":"gateway","msg":"proxy.request","event":"proxy.request","gateway":"rancher","subject":"api-key:key_ab12","outcome":"allowed","status":200,"duration_ms":18,"ip":"203.0.113.7"}</pre>
+<p>限流是按（网关、调用方）的滑动窗口。设置 <code>OMG_REDIS_URL</code> 后，计数器放在 Redis 里、由所有副本共享，因此 <code>replicas: 2</code> 意味着配置的限额而不是它的两倍。不设置时限流器在进程内：单副本时正确，N 个副本时限额是 N 倍。Redis 挂掉时放行并记录 - 丢一个计数窗口好过一次故障。</p>
+<p>OAuth 代理状态（客户端注册、上游令牌、<code>jti</code> 映射）存放在同一个 Postgres 里，静态加密，因此滚动发布不会把所有已连接的客户端踢下线。这部分本就是副本安全的；设置了 <code>OMG_REDIS_URL</code> 后限流器也是。</p>
+<p>状态是事件溯源的。每次变更都是一个仅追加的事件，读模型是其投影，这正是审计日志可信的原因，也让两个副本共享一个数据库而无需缓存一致性方案。</p>
+<p>schema 在代码中版本化（<code>infrastructure/db/migrations.py</code>）：一个编号的步骤列表，记录在 <code>schema_migrations</code> 中。启动时应用此构建尚未应用的所有内容，因此升级是一次滚动发布，而不是手动 <code>psql</code> 会话。读模型住在自己的 schema <code>readmodels</code> 里——所有以 <code>rm_</code> 为前缀的表——而 <code>events</code>、唯一性表和版本历史留在 <code>public</code>。这个划分正是重点：投影可以从日志重建，因此 <code>DROP SCHEMA readmodels CASCADE</code> 再加一次启动是安全的重置，下一次启动会发现并修好它。日志依赖的任何东西都不在那里。 <code>OMG_RETENTION_DAYS</code> 在启动时清理请求日志。超过截止时间后，<code>request.observed</code> 事件、<code>rm_requests_tail</code> 和 <code>rm_request_stats</code> 会被删除；审计事件永不删除，因为“谁改了什么”的日志不是“谁调用了什么”的日志。默认值 <code>0</code> 表示全部保留。</p>
+<p><code>GET /metrics</code> 输出 Prometheus 文本格式：按网关、结果和状态类别统计的 <code>omg_proxy_requests_total</code>；除以计数得到均值的 <code>omg_proxy_request_duration_ms_sum</code>；以及在线网关、待定网关、被丢弃的观测和当前限流后端的 gauge。它不鉴权且在同一端口上，因此如果部署面向公网，请在 ingress 上限制它。计数器在进程内：多副本时每个 pod 是一条序列，<code>sum by (gateway)</code> 才是正确的查询。</p>
+<p>Webhook 在请求路径之外投递：三次尝试、短暂退避，投递失败会写成一行 <code>failed</code>，而不是无限重试。<code>GET /api/gateways/&lt;id&gt;/webhooks/&lt;hook_id&gt;/deliveries</code> 回答"这个 hook 为什么没声了"——没有匹配的事件，还是每次 POST 都失败。月度配额和每分钟限制是两道不同的门：限流器计的是突发量，配置 <code>OMG_REDIS_URL</code> 时存在 Redis；配额是 Postgres 里的一次行锁，在调用发出前预留，所以连续两次调用不可能读到同一个计数。两者都用 429 拒绝，行里的 <code>reason</code> 说明是哪一道。每个响应都带 <code>X-Request-Id</code>——调用方给了合规的就用它，否则用 guard 生成的——流量行会存下它，于是一个工单就是一条查询。</p>
+<div class="docs-table"><table>
+<thead><tr><th>症状</th><th>通常是什么</th></tr></thead>
+<tbody><tr><td class="strong">网关路由返回 503</td><td>没有客户端凭据的 OAuth 网关。按设计故障关闭</td></tr><tr><td class="strong">每次调用都返回 401</td><td>上游令牌错误或未设置，或客户端的密钥已被轮换</td></tr><tr><td class="strong">带着主体返回 403</td><td>调用者的账号不属于拥有该网关的租户</td></tr><tr><td class="strong">429</td><td>该网关的每主体预算已用尽</td></tr><tr><td class="strong">工具似乎挂起</td><td>网关前面的 ingress 有代理缓冲：将其关闭，调高读取超时</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="zh-env" data-anchor="env">
+<h2>环境变量</h2>
+<p>登录配置是部署配置，不是租户配置：一个租户的 owner 绝不能改变所有人登录的方式。因此它来自环境，且没有对应的界面。</p>
+<div class="docs-table"><table>
+<thead><tr><th>变量</th><th>含义</th></tr></thead>
+<tbody><tr><td class="strong">OMG_DATABASE_URL</td><td>Postgres DSN（必需）</td></tr><tr><td class="strong">OMG_SESSION_SECRET</td><td>至少 32 字节（必需）</td></tr><tr><td class="strong">OMG_BASE_URL</td><td>公开 URL；OAuth 重定向由此派生</td></tr><tr><td class="strong">OMG_ADMIN_EMAIL / OMG_ADMIN_PASSWORD</td><td>可选的引导账号</td></tr><tr><td class="strong">OMG_GOOGLE_CLIENT_ID / SECRET</td><td>面板自身的 Google 登录</td></tr><tr><td class="strong">OMG_OPERATOR_ALLOWLIST</td><td>允许创建账号的地址，逗号分隔</td></tr><tr><td class="strong">OMG_LOG_LEVEL</td><td>默认 <code>info</code></td></tr><tr><td class="strong">OMG_CONFIG_FILE</td><td>启动时应用的可选 YAML</td></tr><tr><td class="strong">OMG_REDIS_URL</td><td>可选；用共享的限流计数替代进程内计数</td></tr><tr><td class="strong">OMG_RETENTION_DAYS</td><td>启动时删除早于 N 天的请求日志行与请求 read model。<code>0</code>（默认）全部保留；审计事件永不清理</td></tr><tr><td class="strong">OMG_MAX_BODY_BYTES</td><td>guard 读取的请求体上限，单位字节（默认 <code>1048576</code>）。更大的请求在转发前即以 <code>413</code> 拒绝</td></tr><tr><td class="strong">OMG_TRUSTED_PROXIES</td><td>以逗号分隔的地址或 CIDR，其 <code>X-Forwarded-For</code> 会被采信，使流量日志记录调用方而不是 ingress。为空（默认）表示不信任任何对端；<code>*</code> 信任所有对端，仅在端口不对外时正确</td></tr><tr><td class="strong">OMG_LOGIN_ATTEMPTS_PER_MINUTE</td><td>每个地址每分钟允许的密码登录尝试次数（默认 <code>5</code>）。超出后该路由以 <code>429</code> 加 <code>Retry-After</code> 响应</td></tr></tbody>
+</table></div>
+
+</section>
+<footer class="docs-foot">
+<span>OpenMCPGateway · Apache-2.0</span>
+<a href="https://github.com/giomartinsdev/OpenMCPGateway#readme" target="_blank" rel="noreferrer">README →</a>
+</footer>
+</article>
+</div>
+<div class="docs-pane" data-lang-pane="ru" hidden>
+<nav class="docs-toc" aria-label="On this page">
+<div class="nav-label" data-i18n="docs.onThisPage">On this page</div>
+<a href="#overview" data-jump="overview">Что это такое</a>
+<a href="#quickstart" data-jump="quickstart">Быстрый старт</a>
+<a href="#gateways" data-jump="gateways">Шлюзы</a>
+<a href="#auth" data-jump="auth">Режимы аутентификации</a>
+<a href="#rbac" data-jump="rbac">Участники и роли</a>
+<a href="#config" data-jump="config">Конфигурация как код</a>
+<a href="#api" data-jump="api">HTTP API</a>
+<a href="#console" data-jump="console">Console MCP</a>
+<a href="#ops" data-jump="ops">Эксплуатация</a>
+<a href="#env" data-jump="env">Окружение</a>
+</nav>
+<article class="docs-article">
+<section class="docs-section" id="ru-overview" data-anchor="overview">
+<h2>Что это такое</h2>
+<p>OpenMCPGateway стоит перед одним или несколькими серверами MCP. Клиенты обращаются к <code>https://&lt;host&gt;/g/&lt;slug&gt;/mcp</code>; шлюз аутентифицирует вызывающего, применяет свой шлюз доступа и лимит запросов в минуту, пересылает запрос на реальный сервер по приватной сети и записывает, что произошло.</p>
+<p>Апстриму не нужно быть доступным из интернета, и ему не нужно знать, кто вызывает: шлюз завершает идентификацию и пересылает собственный credential, когда апстрим его требует (<code>upstream_token</code>).</p>
+<p>Панель отвечает на те же вопросы в той же форме: экран Traffic несёт итоги с изменением относительно предыдущего окна, график объёма и разбивки по outcome, шлюзу и вызывающему — а строка в любой таблице открывает выдвижную панель с остальными полями этой строки вместо перехода со списка.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Слой</th><th>Поведение</th></tr></thead>
+<tbody><tr><td class="strong">Аутентификация</td><td>OAuth-прокси на каждый шлюз (Google, GitHub, Microsoft, Discord, кастомный OIDC) или bearer-ключ, хешированный SHA-256</td></tr><tr><td class="strong">Авторизация</td><td>Участники тенанта, которому принадлежит шлюз. Ключ, выпущенный здесь, тоже подходит.</td></tr><tr><td class="strong">Лимит частоты</td><td>На субъект, на шлюз, считаются JSON-RPC запросы. Handshake бесплатен</td></tr><tr><td class="strong">Наблюдаемость</td><td>Каждая попытка пишется в лог: субъект, outcome, статус, задержка, IP</td></tr><tr><td class="strong">Fail closed</td><td>OAuth-шлюз без credentials отвечает 503 и никогда не работает как открытый прокси</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="ru-quickstart" data-anchor="quickstart">
+<h2>Быстрый старт</h2>
+<p>Нужны Postgres, доступный шлюзу, и хостнейм, завершающий TLS перед ним.</p>
+<pre class="code" tabindex="0"># 1. run it
+export OMG_DATABASE_URL=postgresql://omg:omg@127.0.0.1:5432/omg
+export OMG_SESSION_SECRET=$(openssl rand -hex 32)
+export OMG_BASE_URL=https://gateway.example.com
+omg serve
+
+# 2. create the first account, then a tenant, in the browser
+open https://gateway.example.com</pre>
+<p>Первый аккаунт создаёт тенант и становится его <code>owner</code>. Остальные либо присоединяются по join-коду тенанта, либо их добавляет администратор.</p>
+<p>Тенант появляется с уже существующим шлюзом <code>console</code>, указывающим на собственный read-only MCP этого деплоймента. Направьте агента на <code>/g/console/mcp</code> с API-ключом со страницы шлюза и спросите, что делает деплоймент — апстрим настраивать не нужно.</p>
+<p>Направьте клиента на шлюз, как только он появится:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "my-server": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/my-server/mcp"
+    }
+  }
+}</pre>
+
+
+</section>
+<section class="docs-section" id="ru-gateways" data-anchor="gateways">
+<h2>Шлюзы</h2>
+<p>Шлюз — это slug, URL апстрима и политика. Slug глобальный: <code>/g/&lt;slug&gt;/mcp</code> — строка, которую люди вставляют в клиенты, поэтому два тенанта не могут оба владеть <code>rancher</code>.</p>
+<p>Один шлюз создаётся за вас: <code>console</code>, указывающий на собственный read-only MCP этого деплоймента. Slug глобальный, потому что <code>/g/&lt;slug&gt;/mcp</code> — публичный URL, поэтому на деплойменте с несколькими тенантами первый забирает <code>console</code>, а остальные — <code>console-&lt;tenant id&gt;</code>: id, а не счётчик, чтобы адрес всё ещё говорил, чей это шлюз.</p>
+<p><code>target_url</code> — это streamable-HTTP endpoint апстрима, включая его путь (<code>http://rancher-mcp.support.svc.cluster.local:8000/mcp</code>). Он должен быть <code>http://</code> или <code>https://</code>.</p>
+<p>Шлюз решает и <em>какие</em> инструменты он отдаёт. Список - это набор имён инструментов upstream; пустой означает всё, что отдаёт upstream, и именно так начинается каждый шлюз. Его можно сузить по источнику учётных данных — размещённый провайдер входа (<code>google</code>, <code>github</code>, <code>oidc</code>), метка дополнительного верификатора или <code>api_key</code> — и тогда один маршрут даёт боту меньший каталог, чем человеку, вошедшему рядом, без публикации двух шлюзов на один upstream. Источник без своего списка наследует список шлюза, а очистка списка источника возвращает его к наследованию. Инструмент вне списка исчезает из <code>tools/list</code>, а <code>tools/call</code> к нему отвечает <code>403</code> с именем инструмента, так что клиент, сохранивший старое имя в конфиге, получает фразу вместо тихого успеха или поиска опечатки. Страница шлюза проверяет upstream по требованию: настоящее рукопожатие, число инструментов и причину сбоя. Мёртвый upstream раньше выглядел как тихий и здоровый шлюз.</p>
+<p>Панель читает каталог upstream напрямую, чтобы заполнить этот список - не через шлюз, который ответил бы тем фильтром, который уже применяет. Настроенное имя, которое upstream больше не отдаёт, остаётся видимым и помеченным: тихо убрать его при следующем сохранении значило бы стереть решение оператора.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Поле</th><th>Значение</th></tr></thead>
+<tbody><tr><td class="strong">slug</td><td><code>[a-z0-9-]+</code>, 2-40 символов. Появляется в публичном пути</td></tr><tr><td class="strong">target_url</td><td>Endpoint MCP апстрима, включая путь</td></tr><tr><td class="strong">auth_mode</td><td><code>none</code>, <code>api_key</code> или <code>oauth</code></td></tr><tr><td class="strong">idp</td><td>С <code>oauth</code>: <code>self</code>, <code>github</code>, <code>google</code>, <code>azure</code>, <code>discord</code> или <code>oidc</code></td></tr><tr><td class="strong">upstream_token</td><td>Bearer, который требует апстрим. Write-only: никогда не возвращается API</td></tr><tr><td class="strong">rate_limit</td><td>Запросов в минуту на субъект. <code>0</code> означает без ограничений</td></tr><tr><td class="strong">enabled</td><td>Отключённый шлюз отвечает 404, не 403 — он не афишируется</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="ru-auth" data-anchor="auth">
+<h2>Режимы аутентификации</h2>
+<p><strong><code>none</code></strong> — без аутентификации. Нормально в приватной сети; панель предупреждает, пока любой такой шлюз включён.</p>
+<p><strong><code>api_key</code></strong> - вызывающий присылает <code>Authorization: Bearer omg_...</code>. Ключ хранится как SHA-256-хеш (именно с ним сравнивает аутентификация) рядом с запечатанной копией открытого текста, зашифрованной секретом деплоймента. Ответ, который его выдаёт, возвращает открытый текст, а на странице шлюза у никогда не прочитанного ключа есть значок глаза: нажатие расшифровывает запечатанную копию, показывает ключ один раз и стирает её. После этого остаётся только хеш, и единственный путь к читаемому ключу - ротация. Ключ можно выпустить со сроком действия. После него ключ не аутентифицирует, а ротация наследует срок заменяемого ключа: смысл ротации — сменить секрет, а не продлить доверие к нему.</p>
+<p>Оператор одобряет один раз, и эта учётная запись с этого момента становится участником.</p>
+<p>Клиенту не нужен токен, вписанный в dotfile, для режима OAuth — в этом и смысл. Для режима API-ключа нужен, поэтому ключ привязан к шлюзу и отзывается отдельно.</p>
+<p>У шлюза может быть несколько способов входа. В режиме <code>oauth</code> при включённом <code>allow_api_key</code> тот же маршрут принимает API-ключи, а в <code>verifiers</code> перечисляются дополнительные издатели - для каждого метка, издатель, необязательный audience и URL JWKS. У этих издателей нет своего входа: у клиента уже есть токен провайдера, а шлюз проверяет подпись, издателя и audience. Один URL, одни ворота, один лимит, и никаких отдельных шлюзов под каждый тип учётных данных.</p>
+<p>Кто может вызывать — это не список на шлюзе. Вызывающий проходит, когда его учётная запись принадлежит тенанту, владеющему шлюзом: то же правило панель применяет к редактированию, поэтому у вопроса «кто может пользоваться» один ответ, а не два, которые расходятся. Членство читается на каждом запросе, поэтому удаление участника или отключение учётной записи закрывает дверь шлюза на следующем вызове. API-ключи исключены, потому что ключ содержит собственный id, а не имя учётной записи: ключ проходит, пока его хеш совпадает с живым ключом шлюза, и отзывается отзывом ключа.</p>
+<pre class="code" tabindex="0"># API-key call
+curl -sS https://gateway.example.com/g/rancher/mcp \
+  -H 'Authorization: Bearer omg_...' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'</pre>
+
+
+</section>
+<section class="docs-section" id="ru-rbac" data-anchor="rbac">
+<h2>Участники и роли</h2>
+<p>Всё привязано к тенанту: шлюзы, участники, роли, трафик, аудит-лог. Id из другого тенанта — это 404, а не 403, подтверждающий, что он существует.</p>
+<p>Разрешения — закрытый каталог. Опечатка отклоняется с 422, называющим поле, потому что альтернатива — роль, которая ничего не даёт и ничего не сообщает.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Разрешение</th><th>Даёт</th></tr></thead>
+<tbody><tr><td class="strong">gateways:read / write</td><td>Видеть список шлюзов и менять slug, таргеты, auth и лимиты</td></tr><tr><td class="strong">keys:read / write</td><td>Видеть id ключей и выпускать, ротировать или отзывать их</td></tr><tr><td class="strong">traffic:read</td><td>Читать статистику запросов и лог последних запросов</td></tr><tr><td class="strong">audit:read</td><td>Читать append-only лог событий</td></tr><tr><td class="strong">config:read / write</td><td>Экспортировать и применять YAML-файл</td></tr><tr><td class="strong">members:read / write</td><td>Видеть адресную книгу и добавлять людей</td></tr><tr><td class="strong">roles:read / write</td><td>Видеть таблицу ролей и определять или редактировать роли</td></tr></tbody>
+</table></div>
+<p>Две роли встроены, и их нельзя редактировать или удалять, поскольку ни одна не является политическим решением:</p>
+<div class="docs-table"><table>
+<thead><tr><th>Роль</th><th>Id</th><th>Разрешения</th></tr></thead>
+<tbody><tr><td class="strong"><code>owner</code></td><td><code>role_owner</code></td><td>всё</td></tr><tr><td class="strong"><code>viewer</code></td><td><code>role_viewer</code></td><td>все read-разрешения</td></tr></tbody>
+</table></div>
+<p>Участник, добавленный без роли, попадает в <code>viewer</code>: пропуск сужает доступ, но никогда не расширяет. Делегирование тоже может только сужать — никто не может выдать разрешение, которым сам не владеет, иначе <code>members:write</code> стал бы путём к <code>role_owner</code>. То же правило применяется к конфиг-файлу.</p>
+<p>Разрешения вычисляются на каждый запрос из read-моделей, поэтому редактирование роли или переназначение кого-то вступает в силу при следующем клике. Без повторного входа, без устаревшей сессии.</p>
+</section>
+<section class="docs-section" id="ru-config" data-anchor="config">
+<h2>Конфигурация как код</h2>
+<p>Панель и YAML-файл — две передние двери к одному и тому же обработчику команд. Ни одна не привилегирована: шлюз, созданный в браузере, экспортируется в файл, а файл, применённый из CI, попадает в тот же лог событий, что и клик.</p>
+<p><code>gateways</code>, <code>roles</code> и <code>members</code> объявляются в файле, поэтому тенант можно восстановить из коммита. Секреты никогда не экспортируются — напишите <code>${ENV_VAR}</code>, и сервер разрешит её из своего окружения во время apply.</p>
+<pre class="code" tabindex="0"># gateways.yaml
+gateways:
+  - slug: rancher
+    name: Rancher cluster
+    target_url: http://rancher-mcp.support.svc.cluster.local:8000/mcp
+    description: read the cluster, restart and scale
+    auth:
+      mode: oauth
+      idp: google
+      client_id: ${GOOGLE_CLIENT_ID}
+      client_secret: ${GOOGLE_CLIENT_SECRET}
+      upstream_token: ${RANCHER_MCP_TOKEN}
+    rate_limit: 120
+    allow: [someone@example.com]
+
+roles:
+  - name: Auditor
+    permissions: [gateways:read, traffic:read, audit:read]
+
+members:
+  - email: auditor@example.com
+    password: ${MEMBER_PASSWORD}
+    roles: [Auditor]
+
+prune: false</pre>
+<p>Семантика слияния: файл авторитетен для того, что он объявляет. Шлюз, отсутствующий в файле, выживает, поэтому опечатка не может удалить продакшн. <code>prune: true</code> включает удаление — оно применяется только к шлюзам; участники никогда не удаляются по пропуску, потому что аккаунт, исчезнувший из файла, гораздо вероятнее случай слияния, чем намерение.</p>
+<p>Участники сверяются по email: существующему участнику с отличающимися ролями роли заменяются, а тот, чьи роли совпадают, остаётся нетронутым. <code>password</code> используется только когда аккаунта ещё нет, поэтому в проверяемом файле он выглядит как <code>${MEMBER_PASSWORD}</code> и никогда в экспорте — поэтому же экспорт и повторный apply ничего не меняют. Новый аккаунт без пароля отклоняется, потому что придуманный пароль был бы credential, которым никто не может войти.</p>
+<p>Роль, чьё имя совпадает со встроенной (<code>owner</code>, <code>viewer</code>), можно назвать, но не переопределить: иначе файл сузил бы сразу всех существующих участников.</p>
+
+<pre class="code" tabindex="0"># round-trip from the shell
+omg export --tenant tn_local &gt; gateways.yaml
+omg apply gateways.yaml --tenant tn_local</pre>
+<p><code>omg apply</code> печатает, что изменилось, и любые ошибки, и завершается с ненулевым кодом, когда объявление не удалось — именно это делает его пригодным для CI. Новые выпущенные API-ключи печатаются один раз, потому что это единственный момент, когда plaintext существует.</p>
+<p>Страница Config as code в панели делает то же самое: <strong>Validate</strong> разбирает и разрешает плейсхолдеры, не трогая состояние, <strong>Apply</strong> выполняет команды.</p>
+</section>
+<section class="docs-section" id="ru-api" data-anchor="api">
+<h2>HTTP API</h2>
+<p>Всё, что делает панель, — это endpoint под <code>/api</code>, аутентифицируемый <code>HttpOnly</code> session-cookie. Сами маршруты MCP живут на <code>/g/&lt;slug&gt;/mcp</code> и говорят JSON-RPC, а не на этом API.</p>
+<p>Каждый список курсорно пагинирован: <code>?limit=50&amp;before=&lt;cursor&gt;</code>, отвечает <code>{items, next}</code>. <code>next</code> равен null на последней странице, а <code>limit</code> приводится к 200, а не отклоняется.</p>
+<p>Каждый список также принимает свои поля-фильтры как query-параметры, по одному полю на колонку в панели. Текстовые колонки совпадают по фрагменту (<code>?name=anch</code> находит <code>rancher</code>), <code>status</code> и <code>enabled</code> совпадают точно, и каждый список несёт поле <code>id</code> для строки, которую вы скопировали только наполовину. Неизвестное поле — это 422, называющий существующие поля: молча проигнорированный фильтр хуже ошибки.</p>
+<p>Сортировка — <code>?sort=&lt;column&gt;&amp;order=asc|desc</code>. Сортируемые колонки — закрытый набор для каждого списка: шлюзы по <code>created_at</code>, <code>updated_at</code>, <code>name</code> или <code>slug</code>; трафик по <code>occurred_at</code>, <code>duration_ms</code>, <code>status</code> или <code>subject</code>; аудит-лог по <code>occurred_at</code>, <code>actor</code> или <code>type</code>; участники по <code>email</code> и <code>created_at</code>; роли по <code>name</code> и <code>created_at</code>. Неизвестный ключ — это 422, перечисляющий допустимые.</p>
+<p>Курсор означает <em>после этой строки, в этом порядке</em>, поэтому он привязан к сортировке, под которой был выпущен. Измените <code>sort</code> или <code>order</code> и начните с первой страницы: повторное использование старого курсора — это 422, а не молчаливо дырявый список.</p>
+<p>Два эндпоинта не вписываются в форму CRUD, и о них стоит знать: <code>POST /api/gateways/&lt;id&gt;/keys/&lt;key_id&gt;/reveal</code> один раз возвращает запечатанный открытый текст, а дальше <code>409</code>; <code>GET /api/gateways/&lt;id&gt;/upstream-tools</code> спрашивает upstream, что он отдаёт, чтобы список отмечали, а не печатали. <code>PUT /api/gateways/&lt;id&gt;/tools</code> заменяет список или список одного источника учётных данных, если в теле указан <code>source</code>. <code>GET /api/requests.csv</code> отвечает на те же фильтры, что <code>/requests</code>, файлом; <code>POST /api/config/plan</code> говорит, что изменит apply, ничего не меняя, а <code>POST /api/gateways/&lt;id&gt;/test</code> проверяет upstream настоящим MCP-рукопожатием.</p>
+<p>Четыре эндпоинта отвечают на вопросы, которых нет в CRUD-форме: <code>GET /api/gateways/&lt;id&gt;/history</code> — собственный поток событий этого шлюза, от новых к старым, с постраничной выдачей, фильтрами журнала аудита и вырезанными секретами; <code>POST /api/gateways/&lt;id&gt;/restore</code> заново применяет конфигурацию версии и добавляет один факт <code>gateway.restored</code> — учётные данные и ключи не восстанавливаются, потому что отозванный ключ должен остаться отозванным; <code>GET /api/events.csv</code> — журнал аудита в виде файла с теми же фильтрами и той же областью арендатора; <code>/api/gateways/&lt;id&gt;/webhooks</code> регистрирует URL, получающий каждое наблюдение guard'а, подписанное HMAC-SHA256 тела.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Метод и путь</th><th>Делает</th></tr></thead>
+<tbody><tr><td class="strong">POST /api/auth/login</td><td>Войти с email и паролем</td></tr><tr><td class="strong">GET /api/auth/me</td><td>Идентичность, тенант, роли и плоский список разрешений</td></tr><tr><td class="strong">GET /api/gateways?slug=&amp;name=&amp;auth_mode=&amp;enabled=</td><td>Страница шлюзов, сначала новые</td></tr><tr><td class="strong">POST /api/gateways</td><td>Создать шлюз (требует <code>gateways:write</code>)</td></tr><tr><td class="strong">GET /api/gateways/{id}/connect</td><td>Сгенерированное руководство copy-paste для этого шлюза</td></tr><tr><td class="strong">PUT /api/gateways/{id}/auth</td><td>Режим аутентификации и дополнительные способы входа (API-ключи, проверяемые издатели)</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys</td><td>Выпустить API-ключ; plaintext возвращается один раз</td></tr><tr><td class="strong">POST /api/gateways/{id}/keys/{kid}/rotate</td><td>Ротация на месте: старый ключ умирает в том же append</td></tr><tr><td class="strong">GET /api/stats?minutes=60</td><td>Итоги за окно и равное окно до него, по outcome, IP вызывающего и slug шлюза, самая загруженная минута и серия</td></tr><tr><td class="strong">GET /api/requests?gateway=&amp;gateway_id=&amp;subject=&amp;outcome=&amp;status=&amp;method=&amp;tool=&amp;ip=</td><td>Страница лога запросов; каждая колонка с полем-фильтром сужает его</td></tr><tr><td class="strong">GET /api/events?type=&amp;aggregate=&amp;actor=&amp;since=&amp;until=</td><td>Страница аудит-лога</td></tr><tr><td class="strong">GET /api/docs</td><td>Это руководство, как данные (публично)</td></tr><tr><td class="strong">POST /api/mcp/token</td><td>Выпустить read-only токен для console MCP</td></tr><tr><td class="strong">POST /api/config/validate</td><td>Разобрать документ, не применяя его</td></tr><tr><td class="strong">POST /api/config/apply</td><td>Согласовать шлюзы, роли и участников</td></tr><tr><td class="strong">GET /api/config/export</td><td>Отрендерить текущее состояние как YAML, без секретов</td></tr><tr><td class="strong">GET /api/requests.csv?gateway=&amp;outcome=&amp;subject=…</td><td>Журнал запросов одним CSV-файлом: те же фильтры, тот же tenant, ограничено <code>limit</code></td></tr><tr><td class="strong">POST /api/config/plan</td><td>Что apply создаст, обновит и удалит — без применения</td></tr><tr><td class="strong">POST /api/gateways/{id}/test</td><td>Проверить upstream сейчас: настоящее рукопожатие, число инструментов, причина</td></tr><tr><td class="strong">GET /api/gateways/{id}/history</td><td>Собственный поток событий шлюза, от новых к старым, с фильтрами и сортировкой как в журнале аудита</td></tr><tr><td class="strong">POST /api/gateways/{id}/restore</td><td>Возвращает конфигурацию к версии; ключи не воскресают</td></tr><tr><td class="strong">PUT /api/gateways/{id}/quota</td><td>Месячный потолок вызовов (0 = нет), отдельно от лимита в минуту</td></tr><tr><td class="strong">GET|POST /api/gateways/{id}/webhooks</td><td>Хуки, получающие наблюдения, с подписью HMAC-SHA256</td></tr><tr><td class="strong">GET /api/events.csv</td><td>Журнал аудита одним CSV-файлом, те же фильтры и область арендатора</td></tr><tr><td class="strong">POST /api/operators/{id}/disable</td><td>Останавливает вход и открытые сессии; <code>/enable</code> возвращает доступ</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="ru-console" data-anchor="console">
+<h2>Console MCP</h2>
+<p>Шлюз предоставляет собственный read-only MCP-сервер на <code>/mcp</code>, чтобы агент мог отвечать на вопросы об <em>этом деплойменте</em>: какие шлюзы существуют, что упало за последний час, что аудит-лог говорит об изменении роли.</p>
+<p>Он read-only по построению — каждый инструмент это запрос, ни один не команда — и ограничен тенантом: токен, выпущенный оператором одного тенанта, может читать только строки этого тенанта.</p>
+<p>У каждого нового тенанта уже есть один шлюз, указывающий на него. Он создаётся вместе с тенантом, называется <code>console</code>, его апстрим — собственный <code>/mcp</code> деплоймента, а для вызывающего выпускается API-ключ — так что первое, что может сделать новый тенант, — подключить агента, ничего не настраивая. Это шлюз как любой другой: та же auth, тот же лимит, и его вопросы попадают в лог трафика рядом со всеми остальными вызовами.</p>
+<p>Тенанты, существовавшие до этой функции, получают тот же шлюз при следующей загрузке: backfill ищет тенантов без строки шлюза, указывающей на <code>/mcp</code>, поэтому владелец, удаливший свой, сохраняет его удалённым.</p>
+<p>Подключайтесь к нему точно как к шлюзу, сделанному вручную:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/g/console/mcp",
+      "headers": { "Authorization": "Bearer omgc_gateway_api_key" }
+    }
+  }
+}</pre>
+<p>Ключ выпускается при создании тенанта и показывается один раз, на странице шлюза. Ротируйте его там, если он утёк; удалите шлюз, если предпочитаете вызывать <code>/mcp</code> напрямую.</p>
+<p>1. Выпустите токен: <code>POST /api/mcp/token</code> с вашим session-cookie. Plaintext возвращается один раз, точно как API-ключ.</p>
+<p>2. Направьте клиента на него:</p>
+<pre class="code" tabindex="0">// opencode.json
+{
+  "mcp": {
+    "gateway-console": {
+      "type": "remote",
+      "url": "https://gateway.example.com/mcp",
+      "headers": { "Authorization": "Bearer omg_..." }
+    }
+  }
+}</pre>
+<p>3. Спрашивайте его: <em>какие шлюзы сейчас падают</em>, <em>покажи последние 20 вызовов, ограниченных лимитом, для шлюза rancher</em>, <em>что изменилось в аудит-логе сегодня</em>.</p>
+<p>Токен подписан секретом деплоймента, несёт id оператора и время выпуска и истекает через 90 дней. Отзовите его, ротировав <code>OMG_SESSION_SECRET</code> — что также разлогинит всех, поэтому предпочтите короткий срок, если это важнее.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Инструмент</th><th>Отвечает</th></tr></thead>
+<tbody><tr><td class="strong">search_docs</td><td>Поиск по этому руководству; возвращает совпадающие разделы с их текстом</td></tr><tr><td class="strong">list_gateways</td><td>Шлюзы в тенанте, фильтруемые по slug, имени, режиму auth</td></tr><tr><td class="strong">get_gateway</td><td>Один шлюз: политика, ключи, статистика, последние вызовы</td></tr><tr><td class="strong">search_requests</td><td>Лог запросов, фильтруемый по шлюзу, outcome, субъекту, инструменту, статусу</td></tr><tr><td class="strong">search_events</td><td>Аудит-лог, фильтруемый по типу, агрегату, актору, времени</td></tr><tr><td class="strong">traffic_stats</td><td>Итоги, счётчики по outcome, по IP и по шлюзам за окно</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="ru-ops" data-anchor="ops">
+<h2>Эксплуатация</h2>
+<p>Логи — один JSON-объект на строку в stdout, собранный под Loki / Grafana. Полезные поля для дашбордов: <code>event</code>, <code>gateway</code>, <code>subject</code>, <code>outcome</code>, <code>status</code>, <code>duration_ms</code>. Уровень задаётся через <code>OMG_LOG_LEVEL</code>.</p>
+<pre class="code" tabindex="0">{"ts":"2026-11-02T11:04:14.538Z","level":"info","logger":"gateway","msg":"proxy.request","event":"proxy.request","gateway":"rancher","subject":"api-key:key_ab12","outcome":"allowed","status":200,"duration_ms":18,"ip":"203.0.113.7"}</pre>
+<p>Rate limiting - это скользящее окно на пару (шлюз, вызывающий). Если задан <code>OMG_REDIS_URL</code>, счётчики живут в Redis и общие для всех реплик, поэтому <code>replicas: 2</code> означает настроенный лимит, а не двойной. Без него лимитер в процессе: верно для одной реплики, N лимитов при N. Упавший Redis пропускает и пишет в лог - потерянное окно учёта лучше простоя.</p>
+<p>Состояние OAuth-прокси (регистрации клиентов, токены upstream, отображения <code>jti</code>) живёт в том же Postgres, зашифрованное при хранении, поэтому раскатка не разлогинивает всех подключённых клиентов. Эта часть уже безопасна для реплик, а с заданным <code>OMG_REDIS_URL</code> - и лимитер.</p>
+<p>Состояние event-sourced. Каждое изменение — append-only событие, а read-модели — его проекции, что делает аудит-лог достоверным и позволяет двум репликам делить одну базу без истории согласованности кеша.</p>
+<p>Схема версионируется в коде (<code>infrastructure/db/migrations.py</code>): нумерованный список шагов, записываемый в <code>schema_migrations</code>. Загрузка применяет всё, что эта сборка ещё не применила, поэтому обновление — это выкатка, а не ручная сессия <code>psql</code>. Read-модели живут в собственной схеме <code>readmodels</code> — все таблицы с префиксом <code>rm_</code> — а <code>events</code>, таблицы уникальности и история остаются в <code>public</code>. В этом и смысл разделения: проекция перестраивается из лога, поэтому <code>DROP SCHEMA readmodels CASCADE</code> и последующая загрузка — безопасный сброс, который следующая загрузка замечает и чинит. Ничего, от чего зависит лог, там нет. <code>OMG_RETENTION_DAYS</code> чистит журнал запросов при старте. За границей срока удаляются события <code>request.observed</code>, <code>rm_requests_tail</code> и <code>rm_request_stats</code>; события аудита — никогда, потому что журнал «кто что изменил» не то же, что журнал «кто вызвал». <code>0</code> по умолчанию хранит всё.</p>
+<p><code>GET /metrics</code> отдаёт текстовый формат Prometheus: <code>omg_proxy_requests_total</code> по шлюзу, исходу и классу статуса; <code>omg_proxy_request_duration_ms_sum</code>, чтобы поделить на счётчик и получить среднее; и gauges для работающих шлюзов, ожидающих шлюзов, отброшенных наблюдений и того, какой бэкенд rate limit используется. Он без аутентификации и на том же порту, поэтому ограничьте его на ingress, если деплоймент смотрит в интернет. Счётчики в процессе: при нескольких репликах каждый pod - отдельная серия, и <code>sum by (gateway)</code> - правильный запрос.</p>
+<p>Webhooks доставляются вне пути запроса: три попытки с короткой паузой, а неудачная доставка остаётся строкой <code>failed</code>, а не повторяется бесконечно. <code>GET /api/gateways/&lt;id&gt;/webhooks/&lt;hook_id&gt;/deliveries</code> — место, где у вопроса "почему хук молчит" появляется ответ: нет подходящего события или падают все POST. Месячная квота и лимит в минуту — разные ворота: лимитер считает всплеск и живёт в Redis, когда задан <code>OMG_REDIS_URL</code>; квота — это одна блокировка строки в Postgres, занятая до отправки вызова, поэтому два вызова подряд не могут прочитать один и тот же счётчик. Оба отказывают с 429, и <code>reason</code> в строке говорит, какой именно. Каждый ответ несёт <code>X-Request-Id</code> — вызывающего, если он прислал разумный, иначе сгенерированный guard'ом, — и строка трафика его хранит, так что обращение в поддержку превращается в один запрос.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Симптом</th><th>Что это обычно</th></tr></thead>
+<tbody><tr><td class="strong">503 на маршруте шлюза</td><td>OAuth-шлюз без client credentials. Fail closed, по замыслу</td></tr><tr><td class="strong">401 на каждом вызове</td><td>Токен апстрима неверен или не задан, либо ключ клиента был ротирован</td></tr><tr><td class="strong">403 с субъектом</td><td>Учётная запись вызывающего не принадлежит тенанту, владеющему этим шлюзом</td></tr><tr><td class="strong">429</td><td>Достигнут лимит на субъект для этого шлюза</td></tr><tr><td class="strong">Инструменты будто зависают</td><td>Буферизация прокси на ingress перед шлюзом: отключите её, увеличьте read timeout</td></tr></tbody>
+</table></div>
+
+</section>
+<section class="docs-section" id="ru-env" data-anchor="env">
+<h2>Окружение</h2>
+<p>Настройка входа — это конфигурация деплоймента, а не тенанта: владелец одного тенанта не должен иметь возможности менять то, как входят все. Поэтому она берётся из окружения, и экрана для неё нет.</p>
+<div class="docs-table"><table>
+<thead><tr><th>Переменная</th><th>Значение</th></tr></thead>
+<tbody><tr><td class="strong">OMG_DATABASE_URL</td><td>Postgres DSN (обязательно)</td></tr><tr><td class="strong">OMG_SESSION_SECRET</td><td>Не менее 32 байт (обязательно)</td></tr><tr><td class="strong">OMG_BASE_URL</td><td>Публичный URL; из него выводится OAuth redirect</td></tr><tr><td class="strong">OMG_ADMIN_EMAIL / OMG_ADMIN_PASSWORD</td><td>Опциональный bootstrap-аккаунт</td></tr><tr><td class="strong">OMG_GOOGLE_CLIENT_ID / SECRET</td><td>Google-вход для самой панели</td></tr><tr><td class="strong">OMG_OPERATOR_ALLOWLIST</td><td>Адреса через запятую, которым можно создать аккаунт</td></tr><tr><td class="strong">OMG_LOG_LEVEL</td><td><code>info</code> по умолчанию</td></tr><tr><td class="strong">OMG_CONFIG_FILE</td><td>Опциональный YAML, применяемый при загрузке</td></tr><tr><td class="strong">OMG_REDIS_URL</td><td>Необязательно; общие счётчики rate limit вместо процессных</td></tr><tr><td class="strong">OMG_RETENTION_DAYS</td><td>Удаляет строки журнала запросов и read models запросов старше N дней при старте. <code>0</code> (по умолчанию) хранит всё; события аудита не чистятся никогда</td></tr><tr><td class="strong">OMG_MAX_BODY_BYTES</td><td>Наибольшее тело запроса, которое читает guard, в байтах (по умолчанию <code>1048576</code>). Всё большее отклоняется с <code>413</code> до пересылки</td></tr><tr><td class="strong">OMG_TRUSTED_PROXIES</td><td>Адреса или CIDR через запятую, чьему <code>X-Forwarded-For</code> верят, чтобы в журнале трафика был вызывающий, а не ingress. Пусто (по умолчанию) — не доверять никому; <code>*</code> доверяет любому узлу и верен только при закрытом порте</td></tr><tr><td class="strong">OMG_LOGIN_ATTEMPTS_PER_MINUTE</td><td>Сколько попыток входа по паролю разрешено на адрес в минуту (по умолчанию <code>5</code>). Дальше маршрут отвечает <code>429</code> с <code>Retry-After</code></td></tr></tbody>
+</table></div>
+
+</section>
+<footer class="docs-foot">
+<span>OpenMCPGateway · Apache-2.0</span>
+<a href="https://github.com/giomartinsdev/OpenMCPGateway#readme" target="_blank" rel="noreferrer">README →</a>
+</footer>
+</article>
+</div>
+    </main>
+
+    <script src="/site.js" defer></script>
+  </body>
+</html>
