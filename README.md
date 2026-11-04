@@ -88,6 +88,29 @@ tenant choice and land in the installation's own tenant (`TENANT_OF_DEPLOYMENT`)
 with the viewer role. Everyone else gets an account with no tenant and is asked
 what to do next.
 
+### SSO with no setup at all
+
+`idp: self` makes the deployment its own identity provider. The human step of a
+gateway's OAuth flow is the operator session the panel already issues, so there is
+nothing to register anywhere — no client id, no secret, no per-gateway callback
+URI to add to somebody's console:
+
+```yaml
+auth:
+  mode: oauth
+  idp: self          # that is the whole configuration
+```
+
+Each gateway still gets its own issuer (`/g/<slug>`) and its tokens carry
+`aud: …/g/<slug>/mcp`, so a token earned on one gateway is refused on the next
+even though one deployment signs both. Clients need no special case: they read
+the 401 challenge, register themselves, and the browser is sent to the panel to
+sign in (if it is not already) and to approve the request.
+
+`self` and the upstream providers are not exclusive — `allow_api_key: true` and
+extra verifiers work the same way, and a deployment can mix: `self` for internal
+gateways, GitHub for the ones handed to outsiders.
+
 ### Tenants
 
 The first thing an account sees after signing up is not the panel but a choice:

@@ -57,6 +57,8 @@ class SignedIn:
     operator_id: str
     email: str
     is_admin: bool
+    #: Where to continue after the cookie is set. Empty means the panel.
+    next_path: str = ""
 
 
 def settings(container: Container) -> SignInSettings:
@@ -117,11 +119,12 @@ def is_known_address(container: Container, email: str) -> bool:
     return wanted in {entry.lower() for entry in current.operator_allowlist}
 
 
-async def start(container: Container) -> Started:
+async def start(container: Container, *, next_path: str = "") -> Started:
     oidc = await provider(container)
     state = issue_state(
         secret=container.settings.session_secret.get_secret_value(),
         redirect_uri=oidc.redirect_uri,
+        next_path=_safe_next(next_path),
     )
     return Started(url=await oidc.authorization_url(state=state), state=state)
 
@@ -137,7 +140,7 @@ async def complete(container: Container, *, cookie_state: str, state: str,
     if not cookie_state or not hmac.compare_digest(cookie_state, state):
         raise SignInRefused("login state does not match this browser")
     try:
-        read_state(state, secret=container.settings.session_secret.get_secret_value())
+        body = read_state(state, secret=container.settings.session_secret.get_secret_value())
     except LoginError as exc:
         raise SignInRefused(str(exc)) from exc
     if error:
@@ -154,7 +157,27 @@ async def complete(container: Container, *, cookie_state: str, state: str,
     operator_id = await container.store.fetch_operator_by_email(identity.email)
     if operator_id is None:
         operator_id = await _create(container, identity)
-    return await _signed_in(container, operator_id)
+    signed_in = await _signed_in(container, operator_id)
+    return SignedIn(
+        operator_id=signed_in.operator_id,
+        email=signed_in.email,
+        is_admin=signed_in.is_admin,
+        next_path=_safe_next(str(body.get("next") or "")),
+    )
+
+
+def _safe_next(value: str) -> str:
+    """Only an in-app path is a valid place to continue.
+
+    The value round-trips through the provider and the browser, so by the time it
+    is read back it is attacker-controlled. An absolute URL would turn the login
+    callback into an open redirect, so anything that is not a gateway's own path
+    is dropped rather than sanitised.
+    """
+    value = value.strip()
+    if value.startswith("/g/") and "//" not in value and "\\" not in value:
+        return value
+    return ""
 
 
 async def _create(container: Container, identity: Any) -> str:

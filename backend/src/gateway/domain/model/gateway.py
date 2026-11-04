@@ -207,6 +207,10 @@ class Gateway(_Aggregate):
         if mode is AuthMode.OAUTH:
             if idp is None:
                 raise DomainError("oauth auth requires an identity provider")
+            if idp is IdentityProvider.SELF:
+                # The deployment is the authorization server: there is no
+                # upstream client to register, so no credentials to demand.
+                return
             if not client_id:
                 raise DomainError("oauth auth requires client_id")
             if idp is IdentityProvider.OIDC and not config_url:

@@ -121,14 +121,18 @@ async def auth_methods(container: ContainerDep) -> dict[str, Any]:
 
 
 @router.get("/auth/google/start")
-async def google_start(container: ContainerDep) -> RedirectResponse:
+async def google_start(container: ContainerDep, next: str = "") -> RedirectResponse:
     """Send the browser to Google, with a state bound to this browser.
 
     The state lives in a signed cookie so the callback can prove the browser
     asking is the browser that started. Without it a callback is unauthenticated
     input that ends in a session.
+
+    `next` is where to land afterwards, carried inside the signed state — the
+    `self` identity provider sends the browser here mid-OAuth-flow and needs to
+    be returned to its consent screen, not to the panel's home.
     """
-    started = await signin.start(container)
+    started = await signin.start(container, next_path=next)
     response = RedirectResponse(started.url, status_code=302)
     response.set_cookie(
         STATE_COOKIE,
@@ -161,7 +165,7 @@ async def google_callback(request: Request, container: ContainerDep,
         log.info("signin.google_refused", reason=str(exc))
         return RedirectResponse(f"/#/login?error={quote(str(exc))}", status_code=303)
 
-    response = RedirectResponse("/#/gateways", status_code=303)
+    response = RedirectResponse(signed_in.next_path or "/#/gateways", status_code=303)
     _start_session(response, container, operator_id=signed_in.operator_id,
                    email=signed_in.email, is_admin=signed_in.is_admin)
     response.delete_cookie(STATE_COOKIE, path="/api/auth/google")

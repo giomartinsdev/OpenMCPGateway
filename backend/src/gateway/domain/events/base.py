@@ -30,13 +30,19 @@ class AuthMode(StrEnum):
 
 
 class IdentityProvider(StrEnum):
-    """Upstream identity providers the OAuth proxy can delegate to."""
+    """Upstream identity providers the OAuth proxy can delegate to.
+
+    `SELF` is not an upstream at all: the deployment is its own authorization
+    server and the human step is the operator session the panel issues. That is
+    what makes SSO work with no per-gateway redirect URI to register anywhere.
+    """
 
     GITHUB = "github"
     GOOGLE = "google"
     AZURE = "azure"
     DISCORD = "discord"
     OIDC = "oidc"  # any discovery-document-compliant issuer
+    SELF = "self"  # this deployment — no upstream, no external callback
 
 class VerifierSpec(BaseModel):
     """A second authorization server whose tokens this gateway accepts.

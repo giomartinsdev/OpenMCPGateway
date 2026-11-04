@@ -110,6 +110,7 @@ export function AuthForm({ gateway, onSaved }) {
             <label htmlFor="auth-idp">{t("Identity provider")}</label>
             <select id="auth-idp" value={form.idp} onChange={set("idp")}>
               <option value="">{t("Choose…")}</option>
+              <option value="self">{t("This deployment (no setup)")}</option>
               <option value="github">GitHub</option>
               <option value="google">Google</option>
               <option value="azure">Microsoft</option>
@@ -117,16 +118,20 @@ export function AuthForm({ gateway, onSaved }) {
               <option value="oidc">{t("Custom OIDC (Auth0, Keycloak…)")}</option>
             </select>
           </div>
-          <div className="field">
-            <label htmlFor="auth-client-id">{t("Client ID")}</label>
-            <input id="auth-client-id" value={form.client_id} onChange={set("client_id")}
-                   placeholder="Ov23li…" className="mono" />
-          </div>
-          <div className="field">
-            <label htmlFor="auth-client-secret">{t("Client secret")}</label>
-            <input id="auth-client-secret" type="password" value={form.client_secret} onChange={set("client_secret")}
-                   placeholder={t("leave blank to keep current")} className="mono" />
-          </div>
+          {form.idp !== "self" && (
+            <>
+              <div className="field">
+                <label htmlFor="auth-client-id">{t("Client ID")}</label>
+                <input id="auth-client-id" value={form.client_id} onChange={set("client_id")}
+                       placeholder="Ov23li…" className="mono" />
+              </div>
+              <div className="field">
+                <label htmlFor="auth-client-secret">{t("Client secret")}</label>
+                <input id="auth-client-secret" type="password" value={form.client_secret} onChange={set("client_secret")}
+                       placeholder={t("leave blank to keep current")} className="mono" />
+              </div>
+            </>
+          )}
           {form.idp === "oidc" && (
             <div className="field">
               <label htmlFor="auth-config-url">{t("Discovery URL")}</label>
