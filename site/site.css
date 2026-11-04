@@ -1,0 +1,578 @@
+/* The public site's palette. These values are copied from
+   `web/src/styles.css` on purpose: the marketing page is published to a bucket
+   of its own and must not depend on the panel's build, so it carries the same
+   warm ink, the same single accent and the same type ladder as a literal copy.
+
+   A token that changes there and not here is a page that stops looking like
+   the product — check both when the palette moves. */
+
+:root {
+  color-scheme: dark;
+
+  --tint: 250, 250, 249;
+  --ok-rgb: 61, 214, 140;
+  --danger-rgb: 228, 120, 79;
+
+  --bg: #0f0e0d;
+  --panel: #151412;
+  --panel-2: #1b1a17;
+  --panel-3: #22201d;
+  --panel-4: #2a2723;
+  --glass: rgba(21, 20, 18, 0.93);
+
+  --line: rgba(var(--tint), 0.07);
+  --line-2: rgba(var(--tint), 0.12);
+  --line-3: rgba(var(--tint), 0.2);
+
+  --fg: #fafaf9;
+  --fg-2: #d6d4cf;
+  --fg-3: #a6a39c;
+  --fg-4: #9a968e;
+  --fg-5: #938f87;
+
+  --apur: #3dd68c;
+  --danger: #e4784f;
+  /* The accent darkened/lightened to read as 12px code, not as a 54px title:
+     the same split the panel makes between `--apur` and `--code-ok-fg`. */
+  --code-ok: #8fd6b4;
+
+  /* The primary button is a filled accent, so its text needs its own pair: a
+     near-black on the bright accent here, the accent darkened enough for white
+     text in the light palette. */
+  --btn-bg: #3dd68c;
+  --btn-fg: #0b2a1c;
+
+  --sans: "Geist", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --serif: "Faustina", Georgia, "Times New Roman", serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --t-hero: 54px;
+  --t-display: 38px;
+  --t-title: 30px;
+  --t-name: 14px;
+  --t-body: 13px;
+  --t-label: 12px;
+  --t-micro: 11px;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --s8: 72px;
+  --s9: 112px;
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --hover: 0.13s;
+  --shadow-2: rgba(0, 0, 0, 0.95);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --tint: 27, 26, 23;
+    --ok-rgb: 18, 138, 82;
+    --danger-rgb: 184, 66, 42;
+
+    --bg: #f2f0ec;
+    --panel: #fffdfa;
+    --panel-2: #fbf9f5;
+    --panel-3: #f0ede7;
+    --panel-4: #e6e2da;
+    --glass: rgba(242, 240, 236, 0.93);
+
+    --fg: #1b1a17;
+    --fg-2: #3f3c36;
+    --fg-3: #5c584f;
+    --fg-4: #666158;
+    --fg-5: #68625a;
+
+    --apur: #128a52;
+    --danger: #b8422a;
+    --code-ok: #1c7a55;
+    --btn-bg: #0f7a49;
+    --btn-fg: #ffffff;
+
+    --shadow-2: rgba(40, 35, 25, 0.18);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg-2);
+  font: 400 15px / 1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  color: var(--fg);
+}
+
+h1 {
+  font: 300 clamp(34px, 5vw, var(--t-hero)) / 1.08 var(--serif);
+  letter-spacing: -0.02em;
+}
+
+h1 em {
+  font-style: italic;
+  color: var(--apur);
+}
+
+h2 {
+  font: 300 clamp(26px, 3.2vw, var(--t-display)) / 1.15 var(--serif);
+  letter-spacing: -0.02em;
+}
+
+h3 {
+  font: 500 15px / 1.4 var(--sans);
+}
+
+p {
+  margin: 0;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* -- layout ------------------------------------------------------------- */
+
+.wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 var(--s5);
+}
+
+/* -- bar ---------------------------------------------------------------- */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.bar-in {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  height: 60px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 15px / 1 var(--sans);
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+
+.brand span {
+  color: var(--fg-4);
+  font-weight: 400;
+}
+
+/* The mark: three dots, one accent. Same picture as the favicon and the panel
+   nav, drawn with CSS so the page stays a single file with no player. */
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 4.5px;
+}
+
+.mark i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--apur);
+}
+
+.mark i:nth-child(2) {
+  background: var(--fg);
+  opacity: 0.55;
+}
+
+.bar nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-left: auto;
+  font: 500 var(--t-body) / 1 var(--sans);
+}
+
+.bar nav a {
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  color: var(--fg-4);
+  transition: color var(--hover) var(--ease), background-color var(--hover) var(--ease);
+}
+
+.bar nav a:hover {
+  color: var(--fg);
+  background: var(--panel-2);
+}
+
+/* A 24px-minimum target even where the label is 12px (WCAG 2.5.8). */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-3);
+  color: var(--fg) !important;
+  font: 500 var(--t-body) / 1 var(--sans);
+  transition: border-color var(--hover) var(--ease), background-color var(--hover) var(--ease);
+}
+
+.pill:hover {
+  background: var(--panel-2);
+  border-color: var(--fg-5);
+}
+
+/* -- hero --------------------------------------------------------------- */
+
+.hero {
+  padding: var(--s9) 0 var(--s8);
+  border-bottom: 1px solid var(--line);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
+  color: var(--fg-4);
+  font: 500 var(--t-micro) / 1 var(--sans);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.tag b {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--apur);
+}
+
+.hero h1 {
+  margin: var(--s5) 0 var(--s4);
+  max-width: 20ch;
+}
+
+.hero .lead {
+  max-width: 62ch;
+  color: var(--fg-3);
+  font-size: 16px;
+}
+
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin-top: var(--s6);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 20px;
+  border-radius: var(--radius-sm);
+  font: 500 var(--t-name) / 1 var(--sans);
+  transition: transform var(--hover) var(--ease-out), background-color var(--hover) var(--ease);
+}
+
+.btn-primary {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  border: 1px solid var(--line-3);
+  color: var(--fg-2);
+}
+
+.btn-ghost:hover {
+  background: var(--panel-2);
+}
+
+.fineprint {
+  margin-top: var(--s4);
+  color: var(--fg-5);
+  font-size: var(--t-label);
+}
+
+/* -- screenshot frame --------------------------------------------------- */
+
+.shot {
+  margin: var(--s7) 0 0;
+}
+
+.shot-frame {
+  border-radius: var(--radius);
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  box-shadow: 0 40px 80px -40px var(--shadow-2);
+  overflow: hidden;
+}
+
+.shot-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.shot-bar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line-3);
+}
+
+.shot-bar span {
+  margin-left: var(--s2);
+  color: var(--fg-5);
+  font: 400 var(--t-micro) / 1 var(--mono);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* A caption under a figure is a label, not body copy. */
+figcaption {
+  margin-top: var(--s3);
+  color: var(--fg-5);
+  font-size: var(--t-label);
+}
+
+/* -- bands -------------------------------------------------------------- */
+
+.band {
+  padding: var(--s9) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.band-head {
+  max-width: 66ch;
+}
+
+.band-head p {
+  margin-top: var(--s3);
+  color: var(--fg-3);
+}
+
+.grid {
+  display: grid;
+  gap: var(--s4);
+  margin-top: var(--s6);
+}
+
+.grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.card {
+  padding: var(--s5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+}
+
+.card h3 {
+  margin-bottom: var(--s2);
+}
+
+.card p {
+  color: var(--fg-3);
+  font-size: 14px;
+}
+
+.card .ico {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: var(--s3);
+  border-radius: var(--radius-xs);
+  background: var(--panel-3);
+  color: var(--apur);
+  font: 500 var(--t-label) / 1 var(--mono);
+}
+
+/* Numbered steps read as a sequence, so the number is the whole decoration. */
+.step {
+  position: relative;
+  padding-top: var(--s5);
+  border-top: 1px solid var(--line-2);
+}
+
+.step b {
+  display: block;
+  margin-bottom: var(--s2);
+  color: var(--apur);
+  font: 400 var(--t-label) / 1 var(--mono);
+}
+
+.step p {
+  color: var(--fg-3);
+  font-size: 14px;
+}
+
+/* -- code --------------------------------------------------------------- */
+
+pre.code {
+  margin: 0;
+  padding: var(--s5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--fg-2);
+  line-height: 1.7;
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+pre.code .c {
+  color: var(--fg-5);
+}
+
+pre.code .s {
+  color: var(--code-ok);
+}
+
+pre.code .k {
+  color: var(--fg);
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s2);
+  color: var(--fg-5);
+  font: 500 var(--t-micro) / 1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* -- gallery ------------------------------------------------------------ */
+
+.gallery {
+  display: grid;
+  gap: var(--s5);
+  margin-top: var(--s6);
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+.gallery figure {
+  margin: 0;
+}
+
+.gallery .shot-frame img {
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top left;
+}
+
+/* -- footer ------------------------------------------------------------- */
+
+footer {
+  padding: var(--s7) 0 var(--s8);
+  color: var(--fg-5);
+  font-size: var(--t-label);
+}
+
+.foot-in {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s5);
+  justify-content: space-between;
+}
+
+.foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s5);
+}
+
+.foot-links a {
+  color: var(--fg-4);
+}
+
+.foot-links a:hover {
+  color: var(--fg);
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding-top: var(--s7);
+  }
+
+  .bar nav a:not(.pill) {
+    display: none;
+  }
+}

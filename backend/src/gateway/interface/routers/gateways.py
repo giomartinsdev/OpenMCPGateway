@@ -188,6 +188,10 @@ async def set_rate_limit(gateway_id: str, payload: RateLimitRequest,
         gateway_id, requests_per_minute=payload.requests_per_minute,
         actor=session.email,
     )
+    # The guard keeps the ceiling in its cached config, so the command alone
+    # changes nothing that serves traffic: without this, a new limit only lands
+    # when some *other* gateway change rebuilds the route.
+    await container.refresh_router()
     return {"status": "configured"}
 
 

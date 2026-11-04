@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenMCPGateway — auth, limits and logs in front of any MCP server</title>
+    <meta
+      name="description"
+      content="OpenMCPGateway puts auth, authorisation, rate limiting and a full request log in front of any MCP server. One endpoint per server, an identity provider you already run, and a call log that answers who used this and what broke."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0f0e0d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f2f0ec" media="(prefers-color-scheme: light)" />
+    <meta property="og:title" content="OpenMCPGateway" />
+    <meta
+      property="og:description"
+      content="Auth, authorisation, rate limiting and observability in front of any MCP server."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/img/panel-traffic.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Faustina:ital,wght@0,300;0,400;0,500;1,300&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="wrap bar-in">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          OpenMCP<span>Gateway</span>
+        </a>
+        <nav aria-label="Main">
+          <a href="#how">How it works</a>
+          <a href="#panel">The panel</a>
+          <a href="#run">Run it</a>
+          <a href="https://mcp-gateway.giomartins.dev/#/docs">Docs</a>
+          <a class="pill" href="https://mcp-gateway.giomartins.dev/">Open panel</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="wrap hero">
+        <span class="tag"><b></b> Apache-2.0 · self-hosted</span>
+        <h1>Auth, limits and logs in front of any <em>MCP server</em>.</h1>
+        <p class="lead">
+          An MCP server usually ships with one static token pasted into every client
+          config, or with no auth at all because it sits on a private network. Both
+          fail the moment the server is worth using: the token ends up in a dotfile on
+          five laptops and cannot be revoked per person, and “on the private network”
+          is one misrouted Service away from the internet.
+        </p>
+        <p class="lead" style="margin-top: var(--s4)">
+          Point the client at the gateway instead. It terminates the login or verifies
+          a bearer key, checks that the caller belongs to the gateway’s tenant,
+          enforces a per-caller budget, and records every call with its payload.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://mcp-gateway.giomartins.dev/">Open the panel</a>
+          <a class="btn btn-ghost" href="https://github.com/giomartinsdev/OpenMCPGateway">Source on GitHub</a>
+        </div>
+        <p class="fineprint">
+          Live deployment: <code>mcp-gateway.giomartins.dev</code>. The manual is served
+          by the same app, signed out, so it can never describe a different version.
+        </p>
+
+        <figure class="shot">
+          <div class="shot-frame">
+            <div class="shot-bar">
+              <i></i><i></i><i></i>
+              <span>mcp-gateway.giomartins.dev/#/traffic</span>
+            </div>
+            <img
+              src="/img/panel-traffic.png"
+              width="1440"
+              height="900"
+              alt="The traffic page: a flow chart of gateways and outcomes, outcome totals, and a table of individual calls with tool, status and latency."
+            />
+          </div>
+          <figcaption>
+            Traffic: every call is a row — gateway, subject, outcome, status, tool,
+            latency and IP — and the flow chart says where the traffic went before the
+            table says exactly which call it was.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="wrap band" id="how">
+        <div class="band-head">
+          <h2>Three decisions, in this order</h2>
+          <p>
+            The gateway does not care what your MCP server does. It decides who reaches
+            it, how often, and leaves a record of what happened.
+          </p>
+        </div>
+        <div class="grid grid-3">
+          <div class="step">
+            <b>01</b>
+            <h3>Point it at your server</h3>
+            <p>
+              Give the gateway a slug and the upstream MCP URL. The upstream stays
+              unreachable from outside; the gateway is the only door.
+            </p>
+          </div>
+          <div class="step">
+            <b>02</b>
+            <h3>Choose who gets in</h3>
+            <p>
+              No auth for a private network, a bearer key for machines, or SSO for
+              people — GitHub, Google, Microsoft, Discord, any OIDC provider, or the
+              gateway’s own identity provider when you have none. Each gateway decides
+              for itself, and a single gateway can accept keys and logins at once.
+            </p>
+          </div>
+          <div class="step">
+            <b>03</b>
+            <h3>Paste the endpoint</h3>
+            <p>
+              <code>/g/&lt;slug&gt;/mcp</code> goes into the client. For OAuth, the
+              client discovers the rest from the 401 challenge on its own. Every tenant
+              starts with one gateway already there: the deployment’s own read-only
+              console.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top: var(--s6)">
+          <div>
+            <p class="code-head">Client config</p>
+            <pre class="code"><span class="c">// ~/.config/mcp/config.json</span>
+{
+  <span class="s">"mcpServers"</span>: {
+    <span class="s">"rancher"</span>: {
+      <span class="s">"url"</span>: <span class="s">"https://gateway.example.com/g/rancher/mcp"</span>
+    },
+    <span class="s">"postgres"</span>: {
+      <span class="s">"url"</span>: <span class="s">"https://gateway.example.com/g/postgres/mcp"</span>,
+      <span class="s">"headers"</span>: { <span class="s">"Authorization"</span>: <span class="s">"Bearer omg_…"</span> }
+    }
+  }
+}</pre>
+          </div>
+          <div>
+            <p class="code-head">The refusal, before the tool runs</p>
+            <pre class="code"><span class="c"># no credential on an OAuth gateway</span>
+$ curl -sS https://gateway.example.com/g/rancher/mcp \
+    -H <span class="s">'Accept: application/json'</span>
+<span class="k">401</span>  WWW-Authenticate: Bearer resource_metadata=…
+
+<span class="c"># a key that belongs to another tenant</span>
+$ curl -sS …/g/postgres/mcp -H <span class="s">"Authorization: Bearer omg_…"</span>
+<span class="k">403</span>  {"error":"forbidden","message":"'api-key:key_…' is not allowed…"}
+
+<span class="c"># one caller over its ceiling</span>
+<span class="k">429</span>  Retry-After: 60</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap band" id="panel">
+        <div class="band-head">
+          <h2>What it does, and what it refuses</h2>
+          <p>
+            Fail closed is the default: an OAuth gateway with no credentials answers
+            503, never as an open proxy. Everything below is visible in the panel,
+            because a control you cannot audit is a control you cannot defend.
+          </p>
+        </div>
+        <div class="grid grid-3">
+          <div class="card">
+            <div class="ico">403</div>
+            <h3>Identity you already have</h3>
+            <p>
+              GitHub, Google, Microsoft, Discord or any OIDC provider — or the
+              gateway’s own provider, so a self-hosted install with no IdP still gets
+              SSO. Who may call is decided by the tenant that owns the gateway, read
+              fresh on every request.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">{ }</div>
+            <h3>One endpoint per MCP server</h3>
+            <p>
+              Clients point at <code>/g/&lt;slug&gt;/mcp</code>. The gateway terminates
+              OAuth or verifies a bearer key, then calls the real server over the
+              private network with an upstream credential the caller never holds.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">429</div>
+            <h3>Per-caller budgets</h3>
+            <p>
+              Requests per minute per subject, counting JSON-RPC calls only —
+              handshakes and notifications are free — plus an optional monthly quota.
+              Redis-backed, so the limit is the same on every replica.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">log</div>
+            <h3>Every call is a row</h3>
+            <p>
+              Subject, outcome, status, latency, IP, tool name and a capped payload
+              trace with the request and the response, appended to an event log that
+              backs both the traffic table and the audit trail.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">yaml</div>
+            <h3>Panel and file are the same</h3>
+            <p>
+              Export the tenant to YAML, edit it, apply it back. Both paths reach one
+              command handler, so they cannot disagree — and the panel shows the diff
+              before an apply.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">›_</div>
+            <h3>A console you can ask</h3>
+            <p>
+              Every tenant ships with a gateway to this deployment’s own read-only MCP.
+              Point an agent at <code>/g/console/mcp</code> and ask what broke, or what
+              the audit log says.
+            </p>
+          </div>
+        </div>
+
+        <div class="gallery">
+          <figure>
+            <div class="shot-frame">
+              <div class="shot-bar"><i></i><i></i><i></i><span>/#/gateways/&lt;id&gt;</span></div>
+              <img
+                src="/img/panel-gateway-detail.png"
+                width="1440"
+                height="900"
+                alt="A gateway page: endpoint, auth mode, upstream tools with call counts, and the connect guide."
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              One gateway: the endpoint to paste, the auth mode, the upstream’s tools
+              with how often each was called, and the connect guide.
+            </figcaption>
+          </figure>
+          <figure>
+            <div class="shot-frame">
+              <div class="shot-bar"><i></i><i></i><i></i><span>request drawer</span></div>
+              <img
+                src="/img/panel-request-drawer.png"
+                width="1440"
+                height="900"
+                alt="The request drawer: outcome, subject, latency, and the formatted request and response bodies."
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              The drawer behind a row: why it was refused or what came back, with the
+              body shaped as JSON and one click away from the raw bytes.
+            </figcaption>
+          </figure>
+          <figure>
+            <div class="shot-frame">
+              <div class="shot-bar"><i></i><i></i><i></i><span>#/audit</span></div>
+              <img
+                src="/img/panel-audit.png"
+                width="1440"
+                height="900"
+                alt="The audit log: who changed what, with the aggregate it touched."
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              The audit log answers “who changed this” separately from “who called
+              this”, because they are different questions with different answers.
+            </figcaption>
+          </figure>
+          <figure>
+            <div class="shot-frame">
+              <div class="shot-bar"><i></i><i></i><i></i><span>#/traffic — light</span></div>
+              <img
+                src="/img/panel-traffic-light.png"
+                width="1440"
+                height="900"
+                alt="The same traffic page in the light palette."
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              Two palettes, one set of names: the panel follows the system theme and
+              every colour is a token, so nothing is styled twice.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="wrap band" id="run">
+        <div class="band-head">
+          <h2>Run it yourself</h2>
+          <p>
+            One compose file, Postgres included. The first account to register becomes
+            the deployment’s admin, and every tenant starts with a working read-only
+            console gateway, so there is something to call before you wire anything up.
+          </p>
+        </div>
+        <div class="grid grid-2" style="margin-top: var(--s6)">
+          <div>
+            <p class="code-head">Bring it up</p>
+            <pre class="code"><span class="c"># Postgres + the app, listening on :8000</span>
+git clone https://github.com/giomartinsdev/OpenMCPGateway
+cd OpenMCPGateway
+docker compose up -d --build
+
+<span class="c"># the panel and the manual are the same app</span>
+open http://localhost:8000</pre>
+          </div>
+          <div>
+            <p class="code-head">Call a gateway</p>
+            <pre class="code"><span class="c"># initialize, then tools/list — the transport is stateful</span>
+curl -sS http://localhost:8000/g/console/mcp \
+  -H <span class="s">"Authorization: Bearer omg_…"</span> \
+  -H <span class="s">'Accept: application/json, text/event-stream'</span> \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{"jsonrpc":"2.0","id":1,"method":"initialize",
+       "params":{"protocolVersion":"2025-06-18",
+                 "capabilities":{},
+                 "clientInfo":{"name":"curl","version":"1"}}}'</span>
+
+<span class="c"># a 200 here is an SSE frame, not a JSON document</span>
+event: message
+data: {"jsonrpc":"2.0","id":1,"result":{…}}</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap foot-in">
+        <span>OpenMCPGateway · Apache-2.0 · self-hosted</span>
+        <div class="foot-links">
+          <a href="https://github.com/giomartinsdev/OpenMCPGateway">Source</a>
+          <a href="https://mcp-gateway.giomartins.dev/#/docs">Documentation</a>
+          <a href="https://mcp-gateway.giomartins.dev/">Panel</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

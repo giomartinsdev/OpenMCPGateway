@@ -165,6 +165,28 @@ def set_limit(container, runner, operator: str, gateway: dict, limit: str) -> No
     )
     runner.run(container.refresh_router())
 
+@when(parsers.re(r"the panel sets the usage limit to (?P<limit>\d+) requests? per minute"))
+def panel_sets_limit(live_server: str, operator: str, gateway: dict, limit: str) -> None:
+    """The same change, but through the route an operator actually clicks.
+
+    The command-only step above calls `refresh_router()` itself, which is exactly
+    how a missing refresh in the route stays invisible. This one touches nothing
+    but the API.
+    """
+    from tests.steps.support import PASSWORD, SecureCookieClient
+
+    with SecureCookieClient(base_url=live_server, follow_redirects=False) as session:
+        login = session.post(
+            "/api/auth/login", json={"email": operator, "password": PASSWORD}
+        )
+        assert login.status_code == 200, login.text
+        response = session.put(
+            f"/api/gateways/{gateway['id']}/rate-limit",
+            json={"requests_per_minute": int(limit)},
+        )
+        assert response.status_code == 200, response.text
+
+
 
 @pytest.fixture()
 def issued_key(container, runner, operator: str, gateway: dict) -> dict:
@@ -332,6 +354,10 @@ def disable_gateway(container, runner, operator: str, gateway: dict) -> None:
 @then(parsers.parse("the caller receives {status:d}"))
 def receives_status(probe: dict, status: int) -> None:
     assert probe["status"] == status, f"got {probe['status']}: {probe['body'][:200]}"
+
+@then(parsers.parse("the last call receives {status:d}"))
+def last_call_receives(probe: dict, status: int) -> None:
+    assert probe["statuses"][-1] == status, probe["statuses"]
 
 
 @then("the challenge names no bearer realm")

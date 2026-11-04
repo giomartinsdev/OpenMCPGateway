@@ -24,6 +24,18 @@ Feature: Rate limiting and traffic accounting
     And each key calls once
     Then neither call is rate limited
 
+  # The guard holds the ceiling in its cached route config, so the PUT alone
+  # changes nothing that serves traffic. Setting a limit and then calling must
+  # be enough; needing some *other* change to flush the cache is the bug this
+  # scenario exists to keep dead.
+  Scenario: A limit set through the panel applies to the very next call
+    Given a gateway "demo" with api_key auth proxying a real MCP server
+    And an API key was issued for the gateway
+    When the panel sets the usage limit to 2 requests per minute
+    And a caller with the issued key calls it 2 times
+    Then the last call receives 429
+    And the 429 response asks to retry later
+
   Scenario: An observation is recorded for a rejected call
     Given a gateway "demo" with api_key auth proxying a real MCP server
     When an anonymous caller probes the gateway

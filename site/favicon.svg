@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OpenMCPGateway">
+  <style>
+    .plate { fill: #151412; }
+    .ink { fill: #fafaf9; }
+    .accent { fill: #3dd68c; }
+    @media (prefers-color-scheme: light) {
+      .plate { fill: #f2f0ec; }
+      .ink { fill: #1b1a17; }
+      .accent { fill: #128a52; }
+    }
+  </style>
+  <rect class="plate" width="64" height="64" rx="14" />
+  <circle class="accent" cx="17" cy="32" r="5.5" />
+  <circle class="ink" cx="32" cy="32" r="5.5" />
+  <circle class="accent" cx="47" cy="32" r="5.5" />
+</svg>
