@@ -163,7 +163,7 @@ export function Roles({ me }) {
                     <th>{t("Permissions")}</th>
                     <th className="num">{t("Holders")}</th>
                     <th>{t("ID")}</th>
-                    <th><span className="sr-only">{t("Operations")}</span></th>
+                    <th><span className="sr-only">{t("Actions")}</span></th>
                   </tr>
                   <FilterRow
                     fields={[

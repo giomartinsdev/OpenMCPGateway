@@ -158,7 +158,7 @@ export function Docs({ signedIn = false }) {
           <article className="docs-article">
             <Bone height={28} width="40%" />
             <Bone height={14} />
-            <Bone height={14} width="92%" />
+            <Bone height={14} />
             <Bone height={14} width="80%" />
           </article>
         </div>
