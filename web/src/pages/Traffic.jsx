@@ -329,7 +329,7 @@ export function Traffic() {
           }
         >
           {(rows) => (
-            <div className="table-scroll">
+            <div className="table-scroll" tabIndex={0}>
               <table>
                 <thead>
                   <tr>
