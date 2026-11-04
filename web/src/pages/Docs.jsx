@@ -18,7 +18,7 @@ function Prose({ text }) {
   if (!fenced) return <Inline text={text} />;
   return parts.map((part, index) =>
     index % 2 === 1 ? (
-      <pre className="code docs-code" key={index}>
+      <pre className="code docs-code" key={index} tabIndex={0}>
         {part.replace(/\n$/, "")}
       </pre>
     ) : (
@@ -46,7 +46,7 @@ function Inline({ text }) {
 
 function Table({ table }) {
   return (
-    <div className="table-scroll">
+    <div className="table-scroll" tabIndex={0}>
       <table>
         <thead>
           <tr>
@@ -158,7 +158,7 @@ export function Docs({ signedIn = false }) {
           <article className="docs-article">
             <Bone height={28} width="40%" />
             <Bone height={14} />
-            <Bone height={14} />
+            <Bone height={14} width="92%" />
             <Bone height={14} width="80%" />
           </article>
         </div>

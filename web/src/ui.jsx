@@ -100,7 +100,9 @@ export function Notice({ kind = "info", children }) {
 export function Endpoint({ value }) {
   const t = useT();
   return (
-    <div className="endpoint">
+    // `tabIndex`: the URL overflows on a narrow window, and a scroll container
+    // that cannot take focus is content a keyboard user cannot read to the end.
+    <div className="endpoint" tabIndex={0}>
       <span>{value}</span>
       <button
         className="ghost sm copy"
@@ -345,4 +347,3 @@ export const OUTCOME_LABEL = {
 export function outcomeLabel(t, outcome) {
   return t(OUTCOME_LABEL[outcome] ?? outcome);
 }
-

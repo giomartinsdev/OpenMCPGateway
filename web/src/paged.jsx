@@ -152,7 +152,10 @@ export function FilterRow({ fields, value, onChange }) {
             </span>
           </th>
         ) : (
-          <th key={`spacer-${index}`} />
+          // A column with no filter still needs a cell here, but an empty `th`
+          // has no accessible name and is announced as a header with nothing to
+          // say. `presentation` says "this cell is layout, not a label".
+          <th key={`spacer-${index}`} role="presentation" />
         ),
       )}
     </tr>
