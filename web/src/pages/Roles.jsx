@@ -150,7 +150,7 @@ export function Roles({ me }) {
           }
         >
           {(rows) => (
-            <div className="table-scroll">
+            <div className="table-scroll" tabIndex={0}>
               <table>
                 <thead>
                   <tr>
@@ -163,7 +163,7 @@ export function Roles({ me }) {
                     <th>{t("Permissions")}</th>
                     <th className="num">{t("Holders")}</th>
                     <th>{t("ID")}</th>
-                    <th />
+                    <th><span className="sr-only">{t("Operations")}</span></th>
                   </tr>
                   <FilterRow
                     fields={[
@@ -346,4 +346,3 @@ export function Roles({ me }) {
     </>
   );
 }
-
