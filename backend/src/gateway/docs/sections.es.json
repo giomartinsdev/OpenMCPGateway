@@ -79,7 +79,7 @@
           ],
           [
             "idp",
-            "Con `oauth`: `github`, `google`, `azure`, `discord` u `oidc`"
+            "Con `oauth`: `self`, `github`, `google`, `azure`, `discord` u `oidc`"
           ],
           [
             "upstream_token",

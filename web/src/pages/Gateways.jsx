@@ -365,6 +365,7 @@ function CreateGateway({ onCreated }) {
             <label htmlFor="idp">{t("Identity provider")}</label>
             <select id="idp" value={form.idp} onChange={set("idp")}>
               <option value="">{t("Choose…")}</option>
+              <option value="self">{t("This deployment (no setup)")}</option>
               <option value="github">GitHub</option>
               <option value="google">Google</option>
               <option value="azure">Microsoft</option>

@@ -28,6 +28,10 @@ from gateway.proxy.identity import GatewayNotReady
 _CLIENT_STORES: dict[str, Any] = {}
 _BACKEND: Any = None
 _BACKEND_STORE: Any = None
+#: The deployment secret the panel signs sessions with. `self` reads operator
+#: sessions to authorise `self` gateways, so it needs the same key. Kept here
+#: because this is already the one place a process-wide secret is configured.
+_SESSION_SECRET: str = ""
 
 
 async def configure_client_storage(dsn: str, *, secret: str) -> None:
@@ -42,8 +46,9 @@ async def configure_client_storage(dsn: str, *, secret: str) -> None:
     The table is created here rather than on first use: a database user without
     DDL rights should fail the boot, not the first sign-in.
     """
-    global _BACKEND, _BACKEND_STORE
+    global _BACKEND, _BACKEND_STORE, _SESSION_SECRET
 
+    _SESSION_SECRET = secret
     from key_value.aio.stores.postgresql import PostgreSQLStore
     from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
 
@@ -224,6 +229,22 @@ def _oauth_server(
 ) -> AuthProvider:
     """The provider that hosts this gateway's own login flow."""
     idp = IdentityProvider(config["idp"])
+    if idp is IdentityProvider.SELF:
+        # No upstream: this deployment is the authorization server, and the
+        # human step is the operator session it already issues. Nothing to
+        # register anywhere, so no credentials to wait for.
+        from gateway.proxy.selfidp import DeploymentAuthServer
+
+        return DeploymentAuthServer(
+            base_url=f"{base_url.rstrip('/')}/g/{config['slug']}",
+            gateway_id=config["id"],
+            slug=config["slug"],
+            gateway_name=config.get("name") or config["slug"],
+            signing_key=credentials.get("jwt_signing_key") or "",
+            client_storage=_client_store(config["id"]),
+            session_secret=_SESSION_SECRET or None,
+            required_scopes=list(config.get("required_scopes") or []) or None,
+        )
     if not credentials.get("client_id"):
         raise GatewayNotReady("OAuth is selected but no client_id is configured")
     if idp is IdentityProvider.OIDC and not credentials.get("config_url"):

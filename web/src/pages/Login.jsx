@@ -27,6 +27,12 @@ export function AuthCard({ onLogin }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [methods, setMethods] = useState({ password: true, google: false });
+  // Where to go once signed in. Only an in-app path is honoured: a `next` taken
+  // from the URL is attacker-supplied, and an absolute one is an open redirect.
+  const next = (() => {
+    const value = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("next");
+    return value && /^\/g\/[\w-]+\//.test(value) ? value : "";
+  })();
 
   useEffect(() => {
     // A half-configured deployment must not show a button that 503s.
@@ -43,6 +49,10 @@ export function AuthCard({ onLogin }) {
     try {
       if (mode === "register") await api.register(email, password);
       await api.login(email, password);
+      if (next) {
+        window.location.href = next;
+        return;
+      }
       // Read the identity back rather than trust the login response: roles and
       // permissions are resolved server-side, and the panel must not guess them.
       onLogin(await api.me());
@@ -105,8 +115,10 @@ export function AuthCard({ onLogin }) {
             <span>{t("or")}</span>
           </div>
           {/* A plain link, not a fetch: the login is a browser redirect to
-              Google and back, so the browser must own the navigation. */}
-          <a className="btn google" href="/api/auth/google/start">
+              Google and back, so the browser must own the navigation. `next`
+              is carried so a login started from a gateway's consent screen
+              returns there instead of to the panel. */}
+          <a className="btn google" href={`/api/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`}>
             <GoogleMark />
             {t("Continue with Google")}
           </a>

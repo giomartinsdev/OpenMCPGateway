@@ -47,11 +47,17 @@ class Identity(BaseModel):
 
 # -- state binding ---------------------------------------------------------
 
-def issue_state(*, secret: str, redirect_uri: str) -> str:
-    """A signed triple: nonce, expiry, and the redirect this login started with."""
+def issue_state(*, secret: str, redirect_uri: str, next_path: str = "") -> str:
+    """A signed triple: nonce, expiry, and where to continue afterwards.
+
+    `next_path` is where the browser should land once signed in — used by the
+    `self` identity provider, whose consent screen lives outside the panel. It
+    is signed with the rest, so a callback cannot be talked into redirecting
+    somewhere the login did not start with.
+    """
     nonce = secrets.token_urlsafe(24)
     body = {"nonce": nonce, "exp": int(time.time()) + STATE_TTL_SECONDS,
-            "redirect_uri": redirect_uri}
+            "redirect_uri": redirect_uri, "next": next_path}
     encoded = base64.urlsafe_b64encode(
         json.dumps(body, separators=(",", ":")).encode()
     ).decode()

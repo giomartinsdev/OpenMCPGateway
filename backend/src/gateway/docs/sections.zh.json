@@ -79,7 +79,7 @@
           ],
           [
             "idp",
-            "配合 `oauth`：`github`、`google`、`azure`、`discord` 或 `oidc`"
+            "配合 `oauth`：`self`、`github`、`google`、`azure`、`discord` 或 `oidc`"
           ],
           [
             "upstream_token",
