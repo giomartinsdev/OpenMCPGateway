@@ -69,6 +69,9 @@ class Gateway(_Aggregate):
     #: Tools the upstream may expose through this gateway. Empty means every
     #: one of them, which is what every gateway did before this existed.
     tools: tuple[str, ...] = ()
+    #: Per credential source overrides: source (`google`, a verifier label,
+    #: `api_key`) -> tools. A source with no entry inherits `tools`.
+    tool_scopes: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     #: Hook id -> URL. The secret is in the event, sealed in the read model.
     webhooks: dict[str, str] = Field(default_factory=dict)
     deleted: bool = False
@@ -122,6 +125,10 @@ class Gateway(_Aggregate):
                 self.description = event.description
                 self.requests_per_minute = event.requests_per_minute
                 self.tools = tuple(event.tools)
+                self.tool_scopes = {
+                    source: tuple(tools)
+                    for source, tools in event.tool_scopes.items()
+                }
             case GatewayDisabled():
                 self.enabled = False
             case GatewayEnabled():
@@ -131,7 +138,16 @@ class Gateway(_Aggregate):
             case PrincipalRevoked():
                 self.allowed_subjects.discard(event.subject)
             case GatewayToolsConfigured():
-                self.tools = tuple(event.tools)
+                if event.source:
+                    # Empty list for a source is "no exception", not "nothing
+                    # allowed": a scope that allows nothing is a lockout the
+                    # operator expressed as a save, and the UI never offers it.
+                    if event.tools:
+                        self.tool_scopes[event.source] = tuple(event.tools)
+                    else:
+                        self.tool_scopes.pop(event.source, None)
+                else:
+                    self.tools = tuple(event.tools)
             case ApiKeyIssued():
                 self.api_key_ids[event.key_id] = event.key_hash
             case ApiKeyRevoked():
@@ -145,6 +161,34 @@ class Gateway(_Aggregate):
                 self.enabled = False
 
     # -- invariants -------------------------------------------------------
+
+    @property
+    def sources(self) -> set[str]:
+        """Every credential source this gateway can admit.
+
+        Mirrors what `build_auth_provider` and `GatewayAuth.resolve` produce, so
+        a scope can only name a source that can actually show up: the hosted
+        login provider, each verifier's label, and `api_key` when keys are
+        accepted. Empty for a public gateway, which has no source to scope.
+        """
+        found: set[str] = set()
+        if self.auth_mode is AuthMode.API_KEY:
+            found.add("api_key")
+        elif self.auth_mode is AuthMode.OAUTH:
+            if self.idp is not None:
+                found.add(self.idp.value)
+            if self.allow_api_key:
+                found.add("api_key")
+        found.update(verifier.label for verifier in self.verifiers)
+        return found
+
+    def tools_for(self, source: str) -> tuple[str, ...]:
+        """The allowlist that applies to `source`, falling back to the gateway's.
+
+        Empty means every tool, so an empty scope means "inherit": a source
+        whose list was cleared must not become a lockout nobody intended.
+        """
+        return self.tool_scopes.get(source) or self.tools
 
     def _ensure_live(self) -> None:
         if self.deleted:
@@ -348,9 +392,10 @@ class Gateway(_Aggregate):
             raise DomainError(f"no such version: {version}")
         target = previous
         if (target.name, target.target_url, target.description,
-                target.requests_per_minute, tuple(target.tools)) == (
+                target.requests_per_minute, tuple(target.tools),
+                target.tool_scopes) == (
                 self.name, self.target_url, self.description,
-                self.requests_per_minute, tuple(self.tools)):
+                self.requests_per_minute, tuple(self.tools), self.tool_scopes):
             # A no-op restore that writes an event fills the log with "nothing
             # happened", which costs a reader attention every time they audit.
             raise DomainError("nothing to restore: already at that configuration")
@@ -363,6 +408,10 @@ class Gateway(_Aggregate):
                 description=target.description,
                 requests_per_minute=target.requests_per_minute,
                 tools=tuple(target.tools),
+                tool_scopes={
+                    source: tuple(tools)
+                    for source, tools in target.tool_scopes.items()
+                },
             )
         ]
 
@@ -397,22 +446,33 @@ class Gateway(_Aggregate):
         self._ensure_live()
         return [GatewayDeleted(aggregate_id=self.id)]
 
-    def decide_set_tools(self, *, tools: Sequence[str]) -> list[Event]:
+    def decide_set_tools(self, *, tools: Sequence[str], source: str = "") -> list[Event]:
         """Allowlist of upstream tool names. Empty means "all of them".
 
         Names are not validated against the upstream here: the write side has no
         network and the upstream may be down. A name that does not exist simply
         matches nothing, and the panel shows the upstream's real list next to the
         configured one so the difference is visible rather than guessed at.
+
+        `source` narrows the list to one credential source. It must be a source
+        this gateway actually has — a typo would be a scope nothing matches,
+        which reads as "saved" and silently changes nothing.
         """
         self._ensure_live()
+        if source and source not in self.sources:
+            raise DomainError(
+                f"unknown source '{source}'; this gateway accepts "
+                f"{', '.join(sorted(self.sources))}"
+            )
         cleaned = tuple(dict.fromkeys(t.strip() for t in tools if t.strip()))
         if len(cleaned) > 256:
             raise DomainError("at most 256 tools can be allowed")
         for name in cleaned:
             if len(name) > 128:
                 raise DomainError("a tool name must be 128 characters or fewer")
-        return [GatewayToolsConfigured(aggregate_id=self.id, tools=cleaned)]
+        return [GatewayToolsConfigured(
+            aggregate_id=self.id, tools=cleaned, source=source
+        )]
 
     def decide_register_webhook(
         self, *, webhook_id: str, url: str, secret: str,

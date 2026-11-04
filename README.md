@@ -355,7 +355,7 @@ OAuth steps name endpoints the proxy itself serves.
 | --- | --- |
 | Authentication | OAuth proxy per gateway, or bearer key hashed with SHA-256; one gateway may accept both, plus tokens from extra issuers it only verifies |
 | Authorisation | Optional allowlist of subjects; empty means "any authenticated caller" |
-| Tools | Optional allowlist of tool names per gateway; empty means "every tool the upstream serves" |
+| Tools | Optional allowlist of tool names per gateway; empty means "every tool the upstream serves". A list may be narrowed per credential source (`google`, `github`, a verifier label, `api_key`) |
 | Rate limit | Per subject, per gateway, counting JSON-RPC requests (handshakes are free) |
 | Observability | Every attempt logged with subject, outcome, status, latency, IP; counters at `GET /metrics` |
 | Fail closed | An OAuth gateway without credentials serves 503, never an open proxy |
@@ -377,6 +377,12 @@ A gateway's tool allowlist is enforced twice: names outside it are hidden from
 fills the list from the upstream catalog itself (`GET
 /api/gateways/{id}/upstream-tools`) rather than through the gateway, which would
 answer with the filter it is already applying.
+
+The allowlist can be narrowed per credential source — `google`, `github`, an
+extra verifier's label, `api_key`. One route then serves a bot and a person with
+different catalogs, instead of publishing two gateways to the same upstream. A
+source with no list of its own inherits the gateway's, and clearing a source's
+list puts it back to inheriting rather than locking it out.
 
 Rate limiting is a sliding window per (gateway, caller). With `OMG_REDIS_URL` set
 the counters live in Redis and every replica shares them, so `replicas: 2` means

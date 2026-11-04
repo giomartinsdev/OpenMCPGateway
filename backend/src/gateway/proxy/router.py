@@ -22,7 +22,6 @@ from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.server import create_proxy
-from fastmcp.server.transforms import Visibility
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.routing import BaseRoute, Match, Mount, Route, Router
 from starlette.types import Receive, Scope, Send
@@ -38,6 +37,7 @@ from gateway.proxy.runtime import (
     build_auth_provider,
     forget_client_store,
 )
+from gateway.proxy.tool_scope import ToolScopeMiddleware
 
 
 class LiveGateway(BaseModel):
@@ -224,13 +224,11 @@ class GatewayRouter(BaseModel):
             auth=provider,
             provider_error_strategy="raise",
         )
-        if config.get("tools"):
-            # Two halves of one allowlist, and both are needed: this one hides
-            # the tools the gateway does not expose, and the guard refuses a
-            # `tools/call` for them, because a client that was told about a tool
-            # yesterday must not get a 200 by asking for it today.
-            proxy.add_transform(Visibility(False, match_all=True, components={"tool"}))
-            proxy.add_transform(Visibility(True, names=set(config["tools"])))
+        if config.get("tools") or config.get("tool_scopes"):
+            # Hides the tools a caller's credential source may not call. The
+            # guard refuses the call as well — this half exists so a client is
+            # never told about a tool it would then be refused.
+            proxy.add_middleware(ToolScopeMiddleware(config))
         mcp_app = proxy.http_app(path="/mcp")
         guarded = GuardMiddleware(
             mcp_app, config=config, auth=auth, limiter=self.limiter,
@@ -398,6 +396,9 @@ def _signature(gateway: dict[str, Any], credentials: dict[str, str]) -> str:
         repr(gateway.get("monthly_quota")),
         ",".join(sorted(gateway.get("allowed_subjects") or [])),
         ",".join(gateway.get("tools") or []),
+        # Per-source scopes are route-relevant for the same reason the gateway
+        # list is: the guard and the listing resolve them per request.
+        repr(sorted((gateway.get("tool_scopes") or {}).items())),
         # Extra ways in are route-relevant: a new issuer or "also accept keys"
         # must rebuild the guard, or the change only lands after a restart.
         "keys" if gateway.get("allow_api_key") else "",

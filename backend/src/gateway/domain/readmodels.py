@@ -65,6 +65,9 @@ class GatewayRow(ReadRow):
     requests_per_minute: int = 0
     #: Upstream tools exposed through this gateway. Empty means all of them.
     tools: list[str] = []
+    #: Per credential source overrides: source -> tools. A source with no entry
+    #: inherits `tools`.
+    tool_scopes: dict[str, list[str]] = {}
     enabled: bool = True
     deleted: bool = False
     created_at: datetime | None = None

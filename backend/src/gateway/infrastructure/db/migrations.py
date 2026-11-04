@@ -199,6 +199,17 @@ async def _multi_auth(connection: AsyncConnection) -> None:
     ):
         await connection.execute(text(statement))
 
+async def _tool_scopes(connection: AsyncConnection) -> None:
+    """One column: the per credential source tool allowlist.
+
+    `{}` for every gateway written before this release, which is exactly the
+    behaviour they had — one list for everyone.
+    """
+    await connection.execute(text(
+        f"ALTER TABLE IF EXISTS {READMODELS_SCHEMA}.rm_gateways "
+        "ADD COLUMN IF NOT EXISTS tool_scopes JSONB NOT NULL DEFAULT '{}'::jsonb"
+    ))
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline", _baseline),
     Migration(2, "tenancy", _tenancy),
@@ -207,6 +218,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(5, "key_expiry_and_reason", _key_expiry_and_reason),
     Migration(6, "correlation_quota_and_hooks", _correlation_quota_and_hooks),
     Migration(7, "multi_auth", _multi_auth),
+    Migration(8, "tool_scopes", _tool_scopes),
 )
 
 

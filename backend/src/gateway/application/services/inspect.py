@@ -93,6 +93,9 @@ def _snapshot(gateway: Gateway) -> dict[str, Any]:
         "requests_per_minute": gateway.requests_per_minute,
         "monthly_quota": gateway.monthly_quota,
         "tools": list(gateway.tools),
+        "tool_scopes": {
+            source: list(tools) for source, tools in gateway.tool_scopes.items()
+        },
         "auth_mode": gateway.auth_mode.value,
         "enabled": gateway.enabled,
     }

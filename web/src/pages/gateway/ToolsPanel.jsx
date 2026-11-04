@@ -18,22 +18,51 @@ import { api } from "../../api.js";
 import { useT } from "../../i18n.jsx";
 import { Badge, Bone, Empty, Notice, can } from "../../ui.jsx";
 
+// Which credential sources this gateway can admit, mirroring the domain's
+// `sources`: the hosted login provider, each verifier's label, and `api_key`
+// when keys are accepted. The panel only offers sources that can show up, so a
+// scope can never be keyed by a typo.
+export function gatewaySources(gateway) {
+  const mode = gateway?.auth_mode;
+  const found = [];
+  if (mode === "api_key") found.push("api_key");
+  if (mode === "oauth" && gateway.idp) found.push(gateway.idp);
+  if (mode === "oauth" && gateway.allow_api_key) found.push("api_key");
+  for (const verifier of gateway?.verifiers ?? []) {
+    if (verifier.label) found.push(verifier.label);
+  }
+  return [...new Set(found)];
+}
+
 export function ToolsPanel({ gateway, me, onSaved }) {
   const t = useT();
   const canEdit = can(me, "gateways:write");
+  // Which list is being edited: "" is the gateway-wide one every source
+  // inherits, and any other value is a credential source's narrower list
+  // (`google`, `api_key`, a verifier label). One card, because they are one
+  // policy — splitting them into cards would hide that a source falls back.
+  const sources = gatewaySources(gateway);
+  const [source, setSource] = useState("");
+  const scopes = gateway.tool_scopes ?? {};
   const [catalog, setCatalog] = useState(null); // {available, reason, tools}
   // Calls per tool over the last week, so the allowlist can say "nobody calls
   // this" instead of only "this is ticked". A week is the longest window the
   // stats endpoint serves, and it is enough to spot a forgotten tool.
   const [usage, setUsage] = useState(null);
-  const [selected, setSelected] = useState(gateway.tools ?? []);
+  const [selected, setSelected] = useState(scopes[source] ?? gateway.tools ?? []);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const saved = scopes[source] ?? gateway.tools ?? [];
+
   useEffect(() => {
-    setSelected(gateway.tools ?? []);
-  }, [gateway.id, gateway.tools]);
+    const saved = (gateway.tool_scopes ?? {})[source] ?? gateway.tools ?? [];
+    setSelected(saved);
+    // A source that was removed from the auth block takes its list with it;
+    // the selector must not keep pointing at it.
+    if (source && !sources.includes(source)) setSource("");
+  }, [gateway.id, gateway.tools, gateway.tool_scopes, source]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +108,11 @@ export function ToolsPanel({ gateway, me, onSaved }) {
     name.toLowerCase().includes(query.trim().toLowerCase()),
   );
   const all = selected.length === 0;
-  const dirty = JSON.stringify([...selected].sort()) !== JSON.stringify([...(gateway.tools ?? [])].sort());
+  const dirty = JSON.stringify([...selected].sort()) !== JSON.stringify([...saved].sort());
+  // A source with no list of its own is showing the gateway's, which is the
+  // truth worth stating: "this is not its own list" and "this list is empty"
+  // are different facts.
+  const inherited = Boolean(source) && scopes[source] === undefined;
 
   function toggle(name) {
     setSelected((current) =>
@@ -93,7 +126,9 @@ export function ToolsPanel({ gateway, me, onSaved }) {
     setBusy(true);
     setError("");
     try {
-      await api.setGatewayTools(gateway.id, tools);
+      // Empty is one meaning per level: "all tools" for the gateway, "inherit
+      // the gateway's" for a source. Both are the absence of a list.
+      await api.setGatewayTools(gateway.id, tools, source);
       onSaved?.();
     } catch (err) {
       setError(err.message);
@@ -113,6 +148,22 @@ export function ToolsPanel({ gateway, me, onSaved }) {
     <div className="tools">
       <div className="tools-head">
         <div className="row" style={{ gap: 8 }}>
+          {sources.length > 0 && (
+            <select
+              className="sm"
+              aria-label={t("Credential source")}
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+              disabled={busy}
+            >
+              <option value="">{t("Every source")}</option>
+              {sources.map((entry) => (
+                <option key={entry} value={entry}>
+                  {t("{source} only", { source: entry })}
+                </option>
+              ))}
+            </select>
+          )}
           <Badge kind={all ? "mute" : "info"}>
             {all
               ? t("Every tool the upstream serves")
@@ -121,14 +172,16 @@ export function ToolsPanel({ gateway, me, onSaved }) {
                   total: rows.length,
                 })}
           </Badge>
-          {canEdit && catalog?.available && rows.length > 0 && !all && (
+          {inherited && <Badge kind="warn">{t("inherits the gateway's list")}</Badge>}
+          {canEdit && catalog?.available && rows.length > 0
+            && (source ? scopes[source] !== undefined : !all) && (
             <button
               type="button"
               className="ghost sm"
               disabled={busy}
               onClick={() => save([])}
             >
-              {t("Allow all")}
+              {source ? t("Inherit again") : t("Allow all")}
             </button>
           )}
         </div>
@@ -201,6 +254,12 @@ export function ToolsPanel({ gateway, me, onSaved }) {
         <Empty title={t("No tool matches {query}", { query })}>
           {t("Clear the search box to see the whole catalog.")}
         </Empty>
+      ) : null}
+
+      {inherited && rows.length > 0 ? (
+        <p className="hint">
+          {t("This source has no list of its own: it inherits the gateway's. Saving the tiles below gives it one.")}
+        </p>
       ) : null}
 
       {canEdit ? (

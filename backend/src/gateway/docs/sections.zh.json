@@ -56,7 +56,7 @@
         "网关是一个 slug、一个上游 URL 和一套策略。slug 是全局的：`/g/<slug>/mcp` 是人们粘贴到客户端里的字符串，因此两个租户不能同时拥有 `rancher`。",
         "系统为你创建一个网关：`console`，指向本部署自己的只读 MCP。slug 是全局的，因为 `/g/<slug>/mcp` 是公开 URL，所以在有多个租户的部署上，第一个租户占用 `console`，其余租户使用 `console-<tenant id>`——用 id 而非计数器，这样地址仍然表明它是谁的网关。",
         "`target_url` 是上游的 streamable-HTTP 端点，包含其路径（`http://rancher-mcp.support.svc.cluster.local:8000/mcp`）。必须是 `http://` 或 `https://`。",
-        "网关还决定它暴露*哪些*工具。清单是一组上游工具名；为空表示上游提供的全部工具，这也是每个网关的初始状态。清单之外的工具会从 `tools/list` 消失，对它的 `tools/call` 会返回 `403` 并点名该工具，因此配置里还留着旧名字的客户端得到的是一句话，而不是静默成功或去猜拼写错在哪。 网关页面可以按需探测上游：真实 handshake、可用的工具数量和失败原因。以前上游已死看起来只是网关安静而健康。",
+        "网关还决定它暴露*哪些*工具。清单是一组上游工具名；为空表示上游提供的全部工具，这也是每个网关的初始状态。它可以按凭据来源收窄——托管的登录提供方（`google`、`github`、`oidc`）、额外验证器的标签，或 `api_key`——于是一条路由可以让机器人拿到的清单比旁边登录的人更小，不必为同一个上游发布两个网关。没有自己清单的来源继承网关的清单，清空某个来源的清单则让它重新继承。清单之外的工具会从 `tools/list` 消失，对它的 `tools/call` 会返回 `403` 并点名该工具，因此配置里还留着旧名字的客户端得到的是一句话，而不是静默成功或去猜拼写错在哪。网关页面可以按需探测上游：真实 handshake、可用的工具数量和失败原因。以前上游已死看起来只是网关安静而健康。",
         "面板直接向上游读取目录来填充这份清单 - 不走网关，因为网关会用自己正在施加的过滤器来回答。上游已不再提供的已配置名字仍然可见并带标记，因为下次保存时静默删掉它会抹去操作者做过的决定。"
       ],
       "table": {
@@ -185,7 +185,7 @@
         "每个列表还接受自己的过滤字段作为查询参数，对应面板中每列一个输入框。文本列匹配片段（`?name=anch` 可找到 `rancher`），`status` 和 `enabled` 精确匹配，每个列表都带有一个 `id` 输入框，用于你只复制了一半的那一行。未知字段会返回 422 并列出存在的字段——被静默忽略的过滤比报错更糟。",
         "排序是 `?sort=<column>&order=asc|desc`。可排序列对每个列表是封闭集合：网关按 `created_at`、`updated_at`、`name` 或 `slug`；流量按 `occurred_at`、`duration_ms`、`status` 或 `subject`；审计日志按 `occurred_at`、`actor` 或 `type`；成员按 `email` 和 `created_at`；角色按 `name` 和 `created_at`。未知的键会返回 422 并列出合法的键。",
         "游标意味着*在此行之后，按此顺序*，因此它绑定于签发它的排序。更改 `sort` 或 `order` 后请从第一页开始：复用旧游标会得到 422，而不是一个静默有洞的列表。",
-        "有两个端点不合 CRUD 的形状，值得了解：`POST /api/gateways/<id>/keys/<key_id>/reveal` 返回一次封存的明文，之后是 `409`；`GET /api/gateways/<id>/upstream-tools` 向上游询问它提供什么，好让清单被勾选而不是手打。`PUT /api/gateways/<id>/tools` 替换清单。 `GET /api/requests.csv` 以文件形式响应与 `/requests` 相同的筛选条件；`POST /api/config/plan` 说明 apply 会改什么而不改动任何东西；`POST /api/gateways/<id>/test` 用真实的 MCP handshake 探测上游。",
+        "有两个端点不合 CRUD 的形状，值得了解：`POST /api/gateways/<id>/keys/<key_id>/reveal` 返回一次封存的明文，之后是 `409`；`GET /api/gateways/<id>/upstream-tools` 向上游询问它提供什么，好让清单被勾选而不是手打。`PUT /api/gateways/<id>/tools` 替换清单；请求体点名 `source` 时替换该来源的清单。 `GET /api/requests.csv` 以文件形式响应与 `/requests` 相同的筛选条件；`POST /api/config/plan` 说明 apply 会改什么而不改动任何东西；`POST /api/gateways/<id>/test` 用真实的 MCP handshake 探测上游。",
         "有四个端点回答 CRUD 形状无法回答的问题：`GET /api/gateways/<id>/history` 是该网关自己的事件流，从新到旧，按审计日志的词汇分页和过滤，敏感值已脱敏；`POST /api/gateways/<id>/restore` 重新应用某个版本的配置，并追加一条 `gateway.restored` 事实——凭据和密钥不会被恢复，因为已撤销的密钥必须保持撤销；`GET /api/events.csv` 是以文件形式导出的审计日志，过滤条件和租户范围相同；`/api/gateways/<id>/webhooks` 注册一个 URL，接收 guard 记录的每一条观测，并用请求体的 HMAC-SHA256 签名。"
       ],
       "table": {

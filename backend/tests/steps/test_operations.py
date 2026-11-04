@@ -262,7 +262,7 @@ def outsider_call(container, live_server: str, gateway: dict) -> dict:
     )
 
     async def admit(_token: str | None) -> Identity:
-        return Identity(subject="stranger", method="oauth")
+        return Identity(subject="stranger", source="github")
 
     original = endpoint.auth.resolve
     endpoint.auth.resolve = admit  # type: ignore[method-assign]

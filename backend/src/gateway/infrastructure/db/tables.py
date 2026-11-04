@@ -181,6 +181,9 @@ rm_gateways = Table(
     Column("requests_this_month", Integer, nullable=False, default=0),
     #: Upstream tools this gateway exposes. Empty means all of them.
     Column("tools", JSONB, nullable=False, default=list),
+    #: Per credential source overrides: `{"api_key": ["issue_write"]}`. A source
+    #: with no entry inherits `tools`.
+    Column("tool_scopes", JSONB, nullable=False, default=dict),
     Column("enabled", Boolean, nullable=False, default=True, server_default=true()),
     Column("deleted", Boolean, nullable=False, default=False, server_default=false()),
     Column(

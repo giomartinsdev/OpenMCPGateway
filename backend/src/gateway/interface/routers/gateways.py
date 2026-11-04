@@ -332,14 +332,16 @@ async def set_tools(gateway_id: str, payload: GatewayToolsRequest,
     """Replace the allowlist of upstream tools this gateway exposes.
 
     A rebuild, not a restart: the guard and the proxy both read the new list on
-    the next request, and the signature change is what triggers it.
+    the next request, and the signature change is what triggers it. `source`
+    narrows the list to one credential source; empty is the list every source
+    inherits.
     """
     await gateways.owned(container, principal.caller, gateway_id)
-    await container.commands.set_gateway_tools(
-        gateway_id, tools=payload.tools, actor=session.email
+    tools = await container.commands.set_gateway_tools(
+        gateway_id, tools=payload.tools, source=payload.source, actor=session.email
     )
     await container.refresh_router()
-    return {"tools": payload.tools}
+    return {"tools": payload.tools, "source": payload.source, "events": len(tools)}
 
 
 @router.post("/gateways/{gateway_id}/keys", status_code=201)

@@ -20,7 +20,12 @@ class Identity(BaseModel):
 
     subject: str
     display: str = ""
-    method: str = "anonymous"
+    #: Which credential source accepted this token: an identity provider
+    #: (`google`, `github`, `oidc`), a verifier label, `api_key`, or `none`.
+    #: It is what per-source tool scopes are keyed by, and what traffic is
+    #: attributed to — "which provider let this in" is the first question after
+    #: a refusal.
+    source: str = "anonymous"
 
 
 class IdentityDenied(LookupError):
@@ -71,7 +76,7 @@ class GatewayAuth:
         and, more importantly, one that the transport agrees with.
         """
         if self.mode is AuthMode.NONE:
-            return Identity(subject="anonymous", method="none")
+            return Identity(subject="anonymous", source="none")
         if not token:
             return None
         if self.mode is AuthMode.API_KEY:
@@ -80,7 +85,7 @@ class GatewayAuth:
             subject = await self._read_models.subject_for_key_hash(
                 self._config["id"], hash_api_key(token)
             )
-            return Identity(subject=subject, method="api_key") if subject else None
+            return Identity(subject=subject, source="api_key") if subject else None
         if self._provider is None:
             return None
         access = await self._provider.verify_token(token)
@@ -98,16 +103,25 @@ class GatewayAuth:
         return Identity(
             subject=str(subject),
             display=str(claims.get("name") or claims.get("email") or ""),
-            method=_source_of(access, key_subject=access.subject) or self.mode.value,
+            source=_source_of(
+                access,
+                key_subject=access.subject,
+                hosted=self._config.get("idp") or self.mode.value,
+            ),
         )
 
-def _source_of(access: Any, *, key_subject: str | None) -> str:
-    """The source that accepted this token, for the traffic log.
+def _source_of(access: Any, *, key_subject: str | None, hosted: str) -> str:
+    """The source that accepted this token, for the traffic log and tool scopes.
 
     `MultiAuth` prefixes the client id with the label it was configured with
     (`["corp", ...]`), so a call can be attributed to *which* provider let it in
     instead of a flat "oauth". A key is not labelled by `MultiAuth`; its subject
     is already `api-key:<id>`, which is the more useful thing to log.
+
+    `hosted` names the gateway's own login provider (`google`, `github`, …) and
+    is what an unlabelled token — one the hosted server minted — resolves to.
+    Without it, every login would report the same flat "oauth" and a per-source
+    tool scope could not tell Google from the GitHub verifier.
     """
     if key_subject and key_subject.startswith("api-key:"):
         return "api_key"
@@ -115,14 +129,14 @@ def _source_of(access: Any, *, key_subject: str | None) -> str:
         access, "client_id", None
     )
     if not isinstance(client_id, str) or not client_id.startswith("["):
-        return ""
+        return hosted
     try:
         import json
 
         parts = json.loads(client_id)
     except ValueError:
-        return ""
-    return str(parts[0]) if isinstance(parts, list) and parts else ""
+        return hosted
+    return str(parts[0]) if isinstance(parts, list) and parts else hosted
 
 def is_key_subject(subject: str) -> bool:
     """True for the subject a gateway-minted API key resolves to.

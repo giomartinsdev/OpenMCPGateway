@@ -9,9 +9,18 @@ PORT="${E2E_PORT:-8100}"
 NAME="omg-e2e-$$"
 
 cleanup() {
-  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  # `-v`: a `docker rm` without it leaves the anonymous data dir behind, and
+  # fifty aborted runs leave fifty Postgres volumes nobody looks at again.
+  docker rm -fv "$NAME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
+
+# A run killed with SIGKILL never reaches the trap, so the container it started
+# holds its volume forever. `workers: 1` and `reuseExistingServer: false` mean a
+# second run cannot be alive on this host, so sweeping them all is safe.
+# ponytail: sweep-all assumes one e2e at a time; give the name a lock file if
+# that ever stops being true.
+docker ps -aq --filter "name=omg-e2e-" | xargs -r docker rm -fv >/dev/null 2>&1 || true
 
 # A random host port: a fixed one collides with a container left behind by an
 # aborted run, and "port already allocated" is not a test failure anyone should

@@ -229,11 +229,19 @@ class ApiKeyRevoked(Event):
 
 
 class GatewayToolsConfigured(Event):
-    """Which upstream tools this gateway exposes. Empty means all of them."""
+    """Which upstream tools this gateway exposes. Empty means all of them.
+
+    `source` scopes the list to one credential source — `google`, a verifier's
+    label, `api_key`. Empty is the gateway-wide list every source inherits,
+    which is what every gateway had before scopes existed. A call for a source
+    with no list of its own falls back to this one; an empty list for a source
+    removes it, so "no exception" and "no list" are the same fact.
+    """
 
     EVENT = "gateway.tools_configured"
 
     tools: tuple[str, ...] = ()
+    source: str = ""
 
 class GatewayQuotaSet(Event):
     """A monthly call ceiling, separate from the per-minute rate limit.
@@ -265,6 +273,10 @@ class GatewayRestored(Event):
     description: str = ""
     requests_per_minute: int = 0
     tools: tuple[str, ...] = ()
+    #: Per-source overrides as they were at `restored_from`. Part of the whole
+    #: configuration: a rollback that left a narrow scope behind would say it
+    #: restored and then keep refusing the bot's tools.
+    tool_scopes: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
 class OperatorDisabled(Event):
     """An account may no longer sign in, and its live sessions stop working.

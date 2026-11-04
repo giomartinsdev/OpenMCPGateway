@@ -67,6 +67,11 @@ class BackendServer:
         def echo(text: str) -> str:
             return text
 
+        @mcp.tool
+        def delete_repo(repo: str) -> str:
+            """A second tool, so a per-source allowlist has something to hide."""
+            return repo
+
         app = mcp.http_app(path="/mcp")
         if self.require_token:
             app = _RequireBearer(app, self.require_token, self.seen)

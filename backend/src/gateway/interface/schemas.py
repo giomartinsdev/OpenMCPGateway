@@ -77,6 +77,10 @@ class GatewayToolsRequest(BaseModel):
     #: upstream: the write side has no network, and a stale name matching
     #: nothing is visible in the panel next to the real catalog.
     tools: list[str] = Field(default_factory=list)
+    #: Narrow the list to one credential source (`google`, a verifier label,
+    #: `api_key`). Empty replaces the gateway-wide list every source inherits;
+    #: an empty list for a source removes its override.
+    source: str = ""
 
 
 class PrincipalRequest(BaseModel):

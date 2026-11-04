@@ -89,6 +89,51 @@ Feature: More than one way in
     When the operator rotates that key
     Then the rotated key lists the tools
 
+  # One route can serve callers with very different trust levels: a key minted
+  # for a bot, a person signed in through the IdP. A single tool allowlist for
+  # the whole gateway forced one gateway per credential type — exactly the
+  # duplication this feature removes. The scope is keyed by *source*, so a
+  # narrower list can name the bot without touching the human's.
+  Scenario: A credential source can have a narrower list than the gateway
+    Given a gateway "demo" accepting tokens from a second authorization server
+    And an API key was issued for the gateway
+    And the gateway also accepts API keys
+    When the operator allows only the tool "echo" for the source "api_key"
+    And a caller presents a token issued by that authorization server
+    Then the listed tools include "delete_repo"
+    And a caller with the issued key sees only "echo"
+
+  Scenario: A tool outside the source's list is refused even though the gateway allows it
+    # The guard, not just the listing: a caller that remembered the name from
+    # before the scope existed must get a sentence, not a 200.
+    Given a gateway "demo" accepting tokens from a second authorization server
+    And an API key was issued for the gateway
+    And the gateway also accepts API keys
+    When the operator allows only the tool "echo" for the source "api_key"
+    Then calling "delete_repo" with the issued key is refused with 403
+
+  Scenario: A source without a list inherits the gateway's
+    Given a gateway "demo" accepting tokens from a second authorization server
+    When the operator allows only the tool "echo"
+    And a caller presents a token issued by that authorization server
+    Then the listed tools are exactly "echo"
+
+  Scenario: Clearing a source's list makes it inherit again
+    Given a gateway "demo" accepting tokens from a second authorization server
+    And an API key was issued for the gateway
+    And the gateway also accepts API keys
+    When the operator allows only the tool "echo" for the source "api_key"
+    And the operator clears the list for the source "api_key"
+    And a caller with the issued key lists the tools
+    Then the backend tool "delete_repo" is visible
+
+  Scenario: A list for a source the gateway does not have is refused
+    # A typo would otherwise be a scope nobody matches, which reads as "it
+    # saved" and silently changes nothing.
+    Given a gateway "demo" with no auth
+    When the operator allows only the tool "echo" for the source "corp"
+    Then setting the allowlist fails with "unknown source"
+
   Scenario: Keys do not widen the allowlist for people
     Given a gateway "demo" with oauth github auth
     And the principal "octocat" is allowed

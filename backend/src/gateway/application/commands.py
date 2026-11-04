@@ -501,10 +501,11 @@ class CommandHandler:
         return plaintext
 
     async def set_gateway_tools(
-        self, gateway_id: str, *, tools: Sequence[str], actor: str = "system"
+        self, gateway_id: str, *, tools: Sequence[str], source: str = "",
+        actor: str = "system",
     ) -> list[Event]:
         gateway = await self._load_gateway(gateway_id)
-        events = gateway.decide_set_tools(tools=tools)
+        events = gateway.decide_set_tools(tools=tools, source=source)
         return await self._commit(gateway_id, events, gateway.version, actor=actor)
 
     async def revoke_api_key(

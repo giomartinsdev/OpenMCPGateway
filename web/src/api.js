@@ -110,9 +110,10 @@ export const api = {
   // The upstream's real catalog, fetched by the panel (not through the gateway,
   // which would answer with the filter it is already applying).
   upstreamTools: (id) => call("GET", `/gateways/${id}/upstream-tools`),
-  // Which upstream tools this gateway exposes. Empty means all of them.
-  setGatewayTools: (id, tools) =>
-    call("PUT", `/gateways/${id}/tools`, { tools }),
+  // Which upstream tools this gateway exposes. Empty means all of them; a
+  // `source` narrows the list to one credential source (empty = every source).
+  setGatewayTools: (id, tools, source = "") =>
+    call("PUT", `/gateways/${id}/tools`, { tools, source }),
 
   // The gateway's own stream, newest first, paged and filtered like `/events`,
   // with secrets redacted server-side.

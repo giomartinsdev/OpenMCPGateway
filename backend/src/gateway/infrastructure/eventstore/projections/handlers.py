@@ -11,10 +11,12 @@ Two rules keep this consistent:
     existing checkpoint is harmless
 """
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from sqlalchemy import func, update
+from sqlalchemy import cast, func, literal, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -158,6 +160,9 @@ async def on_restored(session: AsyncSession, event: Event) -> None:
             description=event.description,
             requests_per_minute=event.requests_per_minute,
             tools=list(event.tools),
+            tool_scopes={
+                source: list(tools) for source, tools in event.tool_scopes.items()
+            },
             updated_at=func.now(),
         )
     )
@@ -274,10 +279,28 @@ async def on_key_revealed(session: AsyncSession, event: Event) -> None:
 
 async def on_tools_configured(session: AsyncSession, event: Event) -> None:
     assert isinstance(event, GatewayToolsConfigured)
+    if not event.source:
+        await session.execute(
+            update(rm_gateways)
+            .where(rm_gateways.c.id == event.aggregate_id)
+            .values(tools=list(event.tools), updated_at=func.now())
+        )
+        return
+    # One source's list, rewritten in the map by Postgres rather than by reading
+    # it back here: `||` merges one key, and `-` drops it, without a round trip.
+    if event.tools:
+        # A one-key JSON object, built here and cast on the way in: a bound
+        # Python list is an untyped parameter to Postgres, and `jsonb_build_object`
+        # cannot infer what to do with it.
+        merged = rm_gateways.c.tool_scopes.op("||")(
+            cast(literal(json.dumps({event.source: list(event.tools)})), JSONB)
+        )
+    else:
+        merged = rm_gateways.c.tool_scopes.op("-")(event.source)
     await session.execute(
         update(rm_gateways)
         .where(rm_gateways.c.id == event.aggregate_id)
-        .values(tools=list(event.tools), updated_at=func.now())
+        .values(tool_scopes=merged, updated_at=func.now())
     )
 
 

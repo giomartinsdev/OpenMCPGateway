@@ -148,7 +148,12 @@ def allow_principal(container, runner, operator: str, gateway: dict,
 @given("the gateway also accepts API keys")
 def also_accepts_keys(container, runner, operator: str, gateway: dict,
                       issued_key: dict) -> None:
-    _configure(container, runner, operator, gateway, allow_api_key=True)
+    """Re-save auth with keys on. `PUT /auth` declares the whole block, so the
+    gateway's existing extra issuers have to be carried over by hand."""
+    _configure(container, runner, operator, gateway, allow_api_key=True,
+               verifiers=tuple(
+                   VerifierSpec(**verifier) for verifier in gateway.get("verifiers") or []
+               ))
 
 @given(
     "a gateway \"demo\" accepting tokens from a second authorization server",
@@ -235,7 +240,7 @@ def resolve_identity(container, runner, gateway: dict, subject: str) -> dict:
             route.endpoint for route in live.routes
             if hasattr(route.endpoint, "_authorized")
         )
-        identity = Identity(subject=subject, method="oauth")
+        identity = Identity(subject=subject, source="github")
         return {"subject": subject,
                 "allowed": bool(endpoint._authorized(identity.subject))}
 
@@ -370,7 +375,118 @@ def revoked_key_refused(live_server: str, gateway: dict, revoked_key: dict) -> N
 def configuring_fails(ctx: dict, reason: str) -> None:
     assert reason in ctx.get("error", ""), ctx.get("error") or "it succeeded"
 
+# -- per-source allowlist ---------------------------------------------------
+
+@when(parsers.parse('the operator allows only the tool "{tool}"'))
+def allow_one_tool(container, runner, operator: str, gateway: dict, tool: str) -> None:
+    async def save() -> None:
+        await container.commands.set_gateway_tools(
+            gateway["id"], tools=[tool], actor=operator
+        )
+        await container.refresh_router()
+
+    runner.run(save())
+
+@when(parsers.parse('the operator allows only the tool "{tool}" for the source "{source}"'))
+def allow_one_tool_for_source(container, runner, operator: str, gateway: dict,
+                              tool: str, source: str, ctx: dict) -> None:
+    """Set one source's list; a gateway-wide refusal lands in `ctx["error"]`."""
+    async def save() -> str:
+        try:
+            await container.commands.set_gateway_tools(
+                gateway["id"], tools=[tool], source=source, actor=operator
+            )
+        except DomainError as exc:
+            return str(exc)
+        await container.refresh_router()
+        return ""
+
+    ctx["error"] = runner.run(save())
+
+@when(parsers.parse('the operator clears the list for the source "{source}"'))
+def clear_source_list(container, runner, operator: str, gateway: dict,
+                      source: str) -> None:
+    async def save() -> None:
+        await container.commands.set_gateway_tools(
+            gateway["id"], tools=[], source=source, actor=operator
+        )
+        await container.refresh_router()
+
+    runner.run(save())
+
+@then(parsers.parse('the listed tools are exactly "{tool}"'))
+def listed_tools_exactly(probe: dict, tool: str) -> None:
+    assert probe["status"] == 200, probe["body"][:300]
+    assert _listed_names(probe["body"]) == [tool], probe["body"][:400]
+
+@then(parsers.parse('the listed tools include "{tool}"'))
+def listed_tools_include(probe: dict, tool: str) -> None:
+    """The other source is untouched: its catalog is the gateway's, not the key's."""
+    assert probe["status"] == 200, probe["body"][:300]
+    assert tool in _listed_names(probe["body"]), probe["body"][:400]
+
+@then(parsers.parse('a caller with the issued key sees only "{tool}"'))
+def key_sees_only(live_server: str, gateway: dict, issued_key: dict,
+                  tool: str) -> None:
+    probe = _tools_list(live_server, gateway["slug"], issued_key["plaintext"])
+    assert _listed_names(probe["body"]) == [tool], probe["body"][:400]
+
+@then(parsers.parse('calling "{tool}" with the issued key is refused with 403'))
+def blocked_for_source(live_server: str, gateway: dict, issued_key: dict,
+                       tool: str) -> None:
+    result = _call_tool(live_server, gateway["slug"], issued_key["plaintext"], tool)
+    assert result["status"] == 403, f"{result['status']}: {result['body'][:300]}"
+    assert tool in result["body"]
+
+@then(parsers.parse('setting the allowlist fails with "{reason}"'))
+def allowlist_fails(ctx: dict, reason: str) -> None:
+    assert reason in ctx.get("error", ""), ctx.get("error") or "it succeeded"
+
 # -- helpers ---------------------------------------------------------------
+
+def _listed_names(body: str) -> list[str]:
+    """Tool names out of a `tools/list` answer, JSON or SSE framed."""
+    import json
+
+    for line in body.splitlines():
+        if not line.startswith("data:"):
+            continue
+        payload = json.loads(line[len("data:"):].strip())
+        result = payload.get("result") or {}
+        if "tools" in result:
+            return [tool["name"] for tool in result["tools"]]
+    payload = json.loads(body)
+    return [tool["name"] for tool in payload["result"]["tools"]]
+
+def _call_tool(live_server: str, slug: str, token: str, tool: str) -> dict:
+    """Handshake, then one `tools/call`; the call's own status is what matters."""
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {token}",
+    }
+    with httpx.Client(timeout=20) as client:
+        started = client.post(
+            f"{live_server}/g/{slug}/mcp", json=_initialize_payload(), headers=headers
+        )
+        if started.status_code != 200:
+            return {"status": started.status_code, "body": started.text}
+        headers = {**headers, "mcp-session-id": started.headers.get("mcp-session-id", "")}
+        client.post(
+            f"{live_server}/g/{slug}/mcp",
+            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+            headers=headers,
+        )
+        called = client.post(
+            f"{live_server}/g/{slug}/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": tool, "arguments": {"repo": "x", "text": "x"}},
+            },
+            headers=headers,
+        )
+        return {"status": called.status_code, "body": called.text}
 
 def _initialize_payload() -> dict:
     return {

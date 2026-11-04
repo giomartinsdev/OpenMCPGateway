@@ -86,7 +86,7 @@ class GuardMiddleware:
                 body = await _read_body(receive)
                 receive = _replay(body, receive)
                 tool = _called_tool(body)
-                blocked = self._blocked_tool(body)
+                blocked = self._blocked_tool(body, identity.source)
                 if blocked is not None:
                     # A tool outside the allowlist is a 403 with the name in it,
                     # not a silent removal from `tools/list`: the caller asked
@@ -215,15 +215,21 @@ class GuardMiddleware:
         # subject after the hash matched a live key.
         return is_key_subject(subject)
 
-    def _blocked_tool(self, body: bytes) -> str | None:
+    def _blocked_tool(self, body: bytes, source: str) -> str | None:
         """The tool name this request asks for that the gateway does not expose.
 
         Only `tools/call` is checked here. `tools/list` is filtered by the
         server itself (a `Visibility` transform), because that answer is built
         from the upstream catalog and rewriting it mid-stream would mean parsing
         SSE frames in the guard.
+
+        The list is resolved per credential source: a gateway that admits a bot
+        with a key and a person through the IdP can give each its own catalog
+        without publishing two gateways to the same upstream.
         """
-        allowed = self.config.get("tools") or []
+        allowed = (self.config.get("tool_scopes") or {}).get(source)
+        if not allowed:
+            allowed = self.config.get("tools") or []
         if not allowed or not body:
             return None
         try:

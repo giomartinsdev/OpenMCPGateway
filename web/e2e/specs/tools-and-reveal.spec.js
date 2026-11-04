@@ -52,6 +52,49 @@ test("the allowlist can be narrowed and widened again", async ({ page }) => {
   await expect(card.getByText("Every tool the upstream serves")).toBeVisible();
 });
 
+async function signIn(page) {
+  await page.goto("/");
+  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await expect(page.getByRole("heading", { name: "Gateways", level: 1 })).toBeVisible();
+  await page.goto("/#/gateways");
+  await page.locator("tbody tr", { hasText: "console" }).first().click();
+  await expect(page.getByRole("heading", { name: "API keys" })).toBeVisible();
+}
+
+test("a credential source can have its own narrower list", async ({ page }) => {
+  await signIn(page);
+  const card = toolsCard(page);
+
+  // The console gateway is api_key-only, so it has exactly one source to scope.
+  // The selector is the whole point: one route, two trust levels, no second
+  // gateway pointed at the same upstream.
+  const source = card.getByLabel("Credential source");
+  await expect(source).toBeVisible();
+  await expect(source.locator("option")).toHaveCount(2);
+
+  await source.selectOption("api_key");
+  // Nothing saved for this source yet, and saying so is the difference between
+  // "inherits" and "this list is empty".
+  await expect(card.getByText("inherits the gateway's list")).toBeVisible();
+
+  const echo = card.locator(".tools-list li", { hasText: "list_gateways" });
+  await echo.locator("input[type=checkbox]").uncheck();
+  await card.getByRole("button", { name: "Save allowlist" }).click();
+  await expect(card.getByText(/\d+ of \d+ tools/)).toBeVisible();
+  await expect(card.getByText("inherits the gateway's list")).toHaveCount(0);
+
+  // The gateway-wide list is untouched: narrowing a source must not narrow the
+  // list every other source falls back to.
+  await source.selectOption("");
+  await expect(card.getByText("Every tool the upstream serves")).toBeVisible();
+
+  await source.selectOption("api_key");
+  await card.getByRole("button", { name: "Inherit again" }).click();
+  await expect(card.getByText("inherits the gateway's list")).toBeVisible();
+});
+
 test("the eye reveals a key once, then it is gone", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Email", { exact: true }).fill(OWNER.email);

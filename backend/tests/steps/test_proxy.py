@@ -272,7 +272,7 @@ def resolve_identity(container, runner, gateway: dict, subject: str) -> dict:
         async def resolve(token: str | None) -> Identity | None:
             if not token:
                 return None
-            return Identity(subject=subject, method="oauth")
+            return Identity(subject=subject, source="github")
 
         auth.resolve = resolve  # type: ignore[method-assign]
         try:
