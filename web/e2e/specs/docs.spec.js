@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 // signed out and linked from the landing page — otherwise "the docs" is a page
 // nobody can find. It is published by the site (`site/build-docs.mjs`), not by
 // this app, so what is asserted here is the address, not the rendering.
-const OWNER = { email: "docs@gateway.test", password: "docs-password-123" };
+const OWNER_PASSWORD = "docs-password-123";
 
 test("the landing links to the manual on the public site, and /docs redirects there", async ({
   page,
@@ -31,11 +31,18 @@ test("the landing links to the manual on the public site, and /docs redirects th
 });
 
 test("the bar groups navigation and survives a narrow viewport", async ({ page }) => {
+  // A retry has to start from a clean account: one that already exists cannot
+  // be created again, and the retry would sit forever waiting for a tenant
+  // form that never opens.
+  const owner = {
+    email: `docs${Date.now()}${Math.floor(Math.random() * 1000)}@gateway.test`,
+    password: OWNER_PASSWORD,
+  };
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("link", { name: /create an account/i }).click();
-  await page.getByLabel("Email", { exact: true }).fill(OWNER.email);
-  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
+  await page.getByLabel("Email", { exact: true }).fill(owner.email);
+  await page.getByLabel("Password", { exact: true }).fill(owner.password);
   await page.getByRole("button", { name: /^create account$/i }).click();
   await page.getByLabel("Tenant name").fill("Docs Co");
   await page.getByRole("button", { name: "Create tenant" }).click();
@@ -69,6 +76,16 @@ test("the bar groups navigation and survives a narrow viewport", async ({ page }
   // Narrow: the bar wraps onto a second row instead of hiding entries behind a
   // horizontal scroll — a nav whose tail is off-screen is a nav nobody finds.
   await page.setViewportSize({ width: 720, height: 900 });
+  // Resizing repaints asynchronously: the first frame after setViewportSize can
+  // still carry the old layout (and a webfont landing late re-flows again). Wait
+  // until the document agrees with the media query at the new width, then take
+  // the measurements — a real overflow keeps failing here, so this does not
+  // mask anything.
+  await page.waitForFunction(
+    () =>
+      window.matchMedia("(max-width: 860px)").matches &&
+      document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+  );
   const narrow = await page.locator(".topbar").boundingBox();
   expect(narrow.width).toBe(720);
   expect(

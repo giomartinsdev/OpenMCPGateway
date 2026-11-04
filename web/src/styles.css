@@ -245,7 +245,12 @@ code, .mono {
   align-items: center;
   gap: var(--s5);
   width: 100%;
-  height: 56px;
+  /* Wrap + min-height instead of a hard 56px: at the usual fonts the bar fits
+     in one row everywhere, but if the webfont is late and the fallback metrics
+     are wider (as measured on the CI runner) the row wraps instead of pushing
+     the document sideways on a narrow window. */
+  min-height: 56px;
+  flex-wrap: wrap;
   padding: 0 var(--s5);
 }
 .topbar .logo { padding: 0; gap: var(--s2); }
