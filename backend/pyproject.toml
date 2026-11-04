@@ -1,6 +1,6 @@
 [project]
 name = "openmcp-gateway"
-version = "0.27.0"
+version = "0.27.1"
 description = "Auth, authorisation, rate limiting and observability in front of any MCP server"
 requires-python = ">=3.14"
 readme = "README.md"

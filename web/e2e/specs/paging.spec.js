@@ -248,6 +248,81 @@ test("clicking a request expands it in a drawer with the whole row", async ({ pa
   await expect(drawer.getByRole("button", { name: "Filter this gateway" })).toBeVisible();
 });
 
+test("the drawer shapes the body as JSON, and hands it over as a file", async ({ page }) => {
+  await signIn(page);
+
+  // A real call with a real body, through the console gateway: the preview is
+  // stored compact, and unreadable, which is the case this formatting exists
+  // for.
+  const call = await page.evaluate(async () => {
+    const listed = await fetch("/api/gateways", { credentials: "same-origin" });
+    const gateway = (await listed.json()).gateways.find((row) =>
+      row.slug.startsWith("console"),
+    );
+    const minted = await fetch(`/api/gateways/${gateway.id}/keys`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "drawer" }),
+    });
+    if (!minted.ok) throw new Error(await minted.text());
+    const { api_key: key } = await minted.json();
+    const response = await fetch(`/g/${gateway.slug}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "e2e", version: "1" },
+        },
+      }),
+    });
+    return { slug: gateway.slug, status: response.status };
+  });
+  expect(call.status).toBe(200);
+
+  await page.goto("/#/traffic");
+  await expect
+    .poll(async () =>
+      page.evaluate(async (slug) => {
+        const response = await fetch(`/api/requests?gateway=${slug}&status=200`);
+        return (await response.json()).requests.length;
+      }, call.slug),
+    )
+    .toBeGreaterThan(0);
+  await page.reload();
+
+  await dataRows(page).filter({ hasText: call.slug }).first().click();
+  const drawer = page.getByRole("dialog", { name: "allowed" });
+  await expect(drawer).toBeVisible();
+
+  // Stored compact, shown one key per line: the space after the colon is the
+  // formatter's fingerprint, and the raw view is one button away.
+  // The last block is "What came back": the request is one line of `initialize`
+  // and the response is the one worth shaping.
+  const response = drawer.locator(".payload-block").last();
+  const body = response.locator(".payload-body");
+  await expect(body).toContainText('"jsonrpc": "');
+  await response.getByRole("button", { name: "Raw" }).click();
+  await expect(body).toContainText('"jsonrpc":"');
+  await response.getByRole("button", { name: "Format" }).click();
+  await expect(body).toContainText('"jsonrpc": "');
+
+  const [file] = await Promise.all([
+    page.waitForEvent("download"),
+    response.getByRole("button", { name: "Download" }).click(),
+  ]);
+  expect(file.suggestedFilename()).toMatch(/-response\.json$/);
+});
+
 test("the gateway page lists its own calls, filterable and openable", async ({ page }) => {
   await signIn(page);
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { download, indentJson } from "../format.js";
 import { useI18n, useT } from "../i18n.jsx";
 import { FilterRow, LoadMore, SortHeader, usePagedList, useSort } from "../paged.jsx";
 import {
@@ -76,8 +77,9 @@ function bytes(count) {
  * width is how a preview becomes unreadable exactly when someone needs it. It
  * scrolls horizontally instead of wrapping, so a long line stays one line.
  */
-function PayloadBlock({ title, body, empty }) {
+function PayloadBlock({ title, body, empty, file }) {
   const t = useT();
+  const [raw, setRaw] = useState(false);
   if (!body) {
     return (
       <div className="payload-block">
@@ -86,13 +88,29 @@ function PayloadBlock({ title, body, empty }) {
       </div>
     );
   }
+  const shaped = indentJson(body);
+  const formatted = shaped !== body;
+  const text = raw || !formatted ? body : shaped;
+  // The preview is a prefix: it ends in an ellipsis when the body was longer.
+  const cut = body.endsWith("…");
   return (
     <div className="payload-block">
-      <h3 className="payload-title">
-        {title}
-        <span className="hint">{t("{count} characters", { count: body.length })}</span>
-      </h3>
-      <pre className="payload-body">{body}</pre>
+      <div className="payload-head">
+        <h3 className="payload-title">{title}</h3>
+        <div className="row">
+          <span className="hint">{t("{count} characters", { count: body.length })}</span>
+          {formatted ? (
+            <button className="ghost sm" onClick={() => setRaw(!raw)}>
+              {raw ? t("Format") : t("Raw")}
+            </button>
+          ) : null}
+          <button className="ghost sm" onClick={() => download(file, text)}>
+            {t("Download")}
+          </button>
+        </div>
+      </div>
+      <pre className="payload-body" tabIndex={0}>{text}</pre>
+      {cut ? <p className="hint payload-note">{t("This is the kept prefix: the body was longer and was cut before it was stored.")}</p> : null}
     </div>
   );
 }
@@ -454,11 +472,13 @@ export function Traffic() {
             title={t("What went in")}
             body={open.request_preview}
             empty={t("The request body was not kept for this call.")}
+            file={`${open.event_id}-request.json`}
           />
           <PayloadBlock
             title={t("What came back")}
             body={open.response_preview}
             empty={t("The upstream sent nothing, or the call was refused before it was forwarded.")}
+            file={`${open.event_id}-response.json`}
           />
           <p className="hint" style={{ marginBottom: 0 }}>
             {open.outcome === "allowed"

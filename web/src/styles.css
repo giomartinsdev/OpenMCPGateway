@@ -891,23 +891,28 @@ label {
 .payload-block {
   margin: 0 0 var(--s4);
 }
-.payload-title {
+.payload-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--s2);
   margin: 0 0 6px;
+}
+.payload-title {
+  margin: 0;
   font-size: var(--t-label);
   font-weight: 500;
   color: var(--fg-2);
 }
+.payload-note { margin: 6px 0 0; }
 /* Scrolls sideways rather than wrapping: JSON has no paragraphs, and re-flowing
    it to the drawer width is how a preview becomes unreadable exactly when
-   someone is trying to read it. */
+   someone is trying to read it. `tabindex` because a region that scrolls has to
+   be reachable by keyboard. */
 .payload-body {
   margin: 0;
   padding: 11px 12px;
-  max-height: 260px;
+  max-height: min(52vh, 420px);
   overflow: auto;
   border-radius: var(--radius-sm);
   background: var(--bg);
