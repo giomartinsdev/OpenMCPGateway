@@ -217,15 +217,29 @@ export function useSort(defaultSort, defaults = {}) {
   return [sort, change];
 }
 
-/** The one button under a table that has more rows behind it. */
-export function LoadMore({ next, busy, onClick }) {
+/**
+ * The footer of a paged table.
+ *
+ * The list is cursor-based, so there is no page number to jump to and no total
+ * count to divide. A "1 2 3 … 12" bar would be a promise the API cannot keep;
+ * this says how many rows are on screen, whether more exist, and gives the one
+ * action that is real. `shown` is optional — a caller that does not know the
+ * count still gets the button and the "end of list" line.
+ */
+export function LoadMore({ next, busy, onClick, shown }) {
   const t = useT();
-  if (!next) return null;
+  if (!next && !shown) return null;
   return (
-    <div className="row" style={{ marginTop: "var(--s3)", justifyContent: "center" }}>
-      <button className="cta-secondary" disabled={busy} onClick={onClick}>
-        {busy ? t("Loading…") : t("Load more")}
-      </button>
+    <div className="page-bar">
+      <span className="page-bar-range">
+        {shown ? t("{count} loaded", { count: shown }) : null}
+        {next ? null : <span className="muted">{shown ? " · " : ""}{t("end of list")}</span>}
+      </span>
+      {next ? (
+        <button className="sm" disabled={busy} onClick={onClick}>
+          {busy ? t("Loading…") : t("Load more")}
+        </button>
+      ) : null}
     </div>
   );
 }

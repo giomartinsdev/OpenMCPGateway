@@ -125,7 +125,7 @@ export function Audit() {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={busy} onClick={more} />
+        <LoadMore next={next} busy={busy} onClick={more} shown={items?.length} />
       </Card>
 
       {open && (

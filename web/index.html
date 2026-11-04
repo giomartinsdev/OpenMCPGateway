@@ -1,34 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OpenMCPGateway</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#0f0e0d" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#f2f0ec" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#fbfbfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#08090c" media="(prefers-color-scheme: dark)" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Faustina:wght@300;400;500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <!-- Theme before first paint: a stored choice, else the system's. Putting
-         this in the bundle means the page flashes the wrong palette first. -->
+    <!-- Theme before first paint: a stored choice, else light. Light is the
+         default rather than the system's preference — the panel is normally
+         opened in daylight, and a first visit should not land in dark because
+         the laptop was set that way for a different app. Putting this in the
+         bundle means the page flashes the wrong palette first. -->
     <script>
       (() => {
+        let theme = "light";
         try {
-          const stored = localStorage.getItem("omg.theme");
-          const theme =
-            stored === "light" || stored === "dark"
-              ? stored
-              : matchMedia("(prefers-color-scheme: light)").matches
-                ? "light"
-                : "dark";
-          document.documentElement.dataset.theme = theme;
+          if (localStorage.getItem("omg.theme") === "dark") theme = "dark";
         } catch {
-          document.documentElement.dataset.theme = "dark";
+          // Storage can be off; light still works.
         }
+        document.documentElement.dataset.theme = theme;
       })();
     </script>
   </head>

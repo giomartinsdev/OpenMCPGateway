@@ -417,7 +417,7 @@ export function Requests({ gateway }) {
           </div>
         )}
       </Skeleton>
-      <LoadMore next={next} busy={busy} onClick={more} />
+      <LoadMore next={next} busy={busy} onClick={more} shown={items?.length} />
       {error ? <p className="hint" style={{ marginBottom: 0 }}>{error}</p> : null}
 
       {open && (

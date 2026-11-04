@@ -245,7 +245,7 @@ export function Members({ me }) {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={listBusy} onClick={more} />
+        <LoadMore next={next} busy={listBusy} onClick={more} shown={operators?.length} />
       </Card>
 
       {drawer?.kind === "new" && (

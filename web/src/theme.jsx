@@ -1,12 +1,14 @@
-// Light or dark, remembered per browser.
+// Light or dark, remembered per browser. Light is the default: this is an
+// operations panel read in daylight, and a first visit should not be a dark
+// theme nobody asked for. Dark is the preference, not the premise.
 //
 // The choice is applied by an inline script in index.html before first paint —
 // doing it here would show the wrong palette for a frame. This module only owns
 // the switch.
 //
-// A tiny external store rather than a context: the mark's animation needs to
-// repaint itself when the palette flips, and a prop threaded through every
-// caller would be a second, worse source of truth.
+// A tiny external store rather than a context: two call sites in the tree and a
+// non-React reader (`currentTheme`) both need it, and a context would thread a
+// prop through every caller to answer the same question.
 
 import { useCallback, useSyncExternalStore } from "react";
 
@@ -14,10 +16,10 @@ const KEY = "omg.theme";
 const listeners = new Set();
 
 function read() {
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
-let theme = typeof document === "undefined" ? "dark" : read();
+let theme = typeof document === "undefined" ? "light" : read();
 
 function subscribe(listener) {
   listeners.add(listener);
@@ -28,59 +30,62 @@ function getTheme() {
   return theme;
 }
 
-function setTheme(next) {
-  theme = next;
-  document.documentElement.dataset.theme = next;
+export function setTheme(next) {
+  theme = next === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = theme;
   try {
-    localStorage.setItem(KEY, next);
+    localStorage.setItem(KEY, theme);
   } catch {
     // Private mode: the choice just does not outlive the tab.
   }
   listeners.forEach((listener) => listener());
 }
 
-/** `[theme, toggle]`, shared by every component that asks. */
+/** `[theme, setTheme]`, shared by every component that asks. */
 export function useTheme() {
   const value = useSyncExternalStore(subscribe, getTheme, getTheme);
-  const toggle = useCallback(() => setTheme(value === "dark" ? "light" : "dark"), [value]);
-  return [value, toggle];
+  const update = useCallback((next) => setTheme(next), []);
+  return [value, update];
 }
 
-/** The value a non-React reader (the Lottie loader) needs at call time. */
+/** The value a non-React reader needs at call time. */
 export function currentTheme() {
   return theme;
 }
 
-/** Sun or moon, in the same 16px grid as the nav icons. */
-export function ThemeToggle({ theme: value, onToggle, className = "" }) {
-  const dark = value === "dark";
+/**
+ * Both themes, side by side.
+ *
+ * A single toggling button hides half the system: a reader who lands in light
+ * never learns there is a dark one, and the icon alone does not say which theme
+ * you would get. Two labelled states cost 90px and remove the guess.
+ */
+export function ThemeToggle({ theme: value, onSelect, className = "" }) {
   return (
-    <button
-      type="button"
-      className={`ghost icon ${className}`}
-      onClick={onToggle}
-      aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
-      title={dark ? "Light" : "Dark"}
-    >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        aria-hidden="true"
+    <div className={`seg theme-seg ${className}`} role="group" aria-label="Theme">
+      <button
+        type="button"
+        className={value === "light" ? "active" : undefined}
+        aria-pressed={value === "light"}
+        onClick={() => onSelect("light")}
       >
-        {dark ? (
-          <>
-            <circle cx="8" cy="8" r="3.1" />
-            <path d="M8 1.4v1.5M8 13.1v1.5M1.4 8h1.5M13.1 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1" />
-          </>
-        ) : (
-          <path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8Z" />
-        )}
-      </svg>
-    </button>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+          <circle cx="8" cy="8" r="3.1" />
+          <path d="M8 1.2v1.3M8 13.5v1.3M1.2 8h1.3M13.5 8h1.3M3.2 3.2l.9.9M11.9 11.9l.9.9M12.8 3.2l-.9.9M4.1 11.9l-.9.9" />
+        </svg>
+        Light
+      </button>
+      <button
+        type="button"
+        className={value === "dark" ? "active" : undefined}
+        aria-pressed={value === "dark"}
+        onClick={() => onSelect("dark")}
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+          <path d="M13.4 9.2A5.7 5.7 0 0 1 6.8 2.6a5.9 5.9 0 1 0 6.6 6.6Z" />
+        </svg>
+        Dark
+      </button>
+    </div>
   );
 }

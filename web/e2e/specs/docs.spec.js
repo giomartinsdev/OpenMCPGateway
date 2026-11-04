@@ -38,9 +38,11 @@ test("the bar groups navigation and survives a narrow viewport", async ({ page }
   await page.getByRole("button", { name: "Create tenant" }).click();
   await expect(page.getByRole("heading", { name: "Gateways" }).first()).toBeVisible();
 
-  // One icon per entry, and the animation got a box to live in.
+  // One icon per entry, and one mark: the logo is the SVG itself now, not a
+  // box waiting for a player to fill it.
   await expect(page.locator(".nav a .icon")).toHaveCount(7);
-  await expect(page.locator(".mark svg")).toHaveCount(1);
+  await expect(page.locator(".logo .mark")).toHaveCount(1);
+  await expect(page.locator(".logo .mark path")).toHaveCount(3);
 
   // Config as code sits under Settings, next to Members and Roles: a file and
   // the forms edit the same state, so they belong in one place.

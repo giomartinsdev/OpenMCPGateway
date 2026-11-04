@@ -237,7 +237,7 @@ export function Roles({ me }) {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={listBusy} onClick={more} />
+        <LoadMore next={next} busy={listBusy} onClick={more} shown={roles?.length} />
         <p className="hint" style={{ marginBottom: 0, marginTop: 12 }}>
           {t("A permission outside the catalog is refused when you save: a typo would otherwise be a role that grants nothing and says nothing.")}
         </p>

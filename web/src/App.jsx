@@ -91,7 +91,7 @@ function useVisibleNav(me) {
 function Frame({ me, page, path, isDetail, onSignOut }) {
   const t = useT();
   const groups = useVisibleNav(me);
-  const [theme, toggleTheme] = useTheme();
+  const [theme, setTheme] = useTheme();
   return (
     <div className="frame">
       <header className="topbar">
@@ -138,7 +138,7 @@ function Frame({ me, page, path, isDetail, onSignOut }) {
               </div>
             </div>
             <LanguagePicker />
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <ThemeToggle theme={theme} onSelect={setTheme} />
             <button className="ghost sm" onClick={onSignOut}>
               {t("Sign out")}
             </button>
@@ -154,7 +154,7 @@ function Frame({ me, page, path, isDetail, onSignOut }) {
 
 export function App() {
   const t = useT();
-  const [theme, toggleTheme] = useTheme();
+  const [theme, setTheme] = useTheme();
   const [me, setMe] = useState(undefined); // undefined = loading
   const path = useRoute();
 
@@ -238,7 +238,7 @@ export function App() {
             </a>
             <div className="row">
               <LanguagePicker />
-              <ThemeToggle theme={theme} onToggle={toggleTheme} />
+              <ThemeToggle theme={theme} onSelect={setTheme} />
             </div>
           </div>
           {docs}

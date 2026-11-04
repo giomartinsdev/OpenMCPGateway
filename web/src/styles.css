@@ -1,139 +1,149 @@
-/* Design system. Dark first: the panel is an operations screen, so the whole
-   palette is a warm ink scale and one accent (--apur) carries "alive" and
-   "allowed" — nothing else is allowed to be colourful.
+/* Design system v2. Light is the base palette; dark is the same set of names
+   with the ink flipped, so a component never asks which theme it is in.
 
-   Geist for interface, Faustina for page titles and figures, Geist Mono for
-   anything you would paste somewhere else.
+   One accent — a blue — for "this is the thing to touch". Green, amber and red
+   mean state and nothing else, which is why the accent is not one of them.
+
+   Inter for interface, JetBrains Mono for anything you would paste somewhere
+   else. No display serif: hierarchy here is weight and tracking, not a second
+   typeface.
 
    Geometry is three radii and one spacing ladder. Every gap, pad and margin in
    this file is a step on the ladder; a value that is not on it is a bug.
 
-   Two palettes, one set of names. `data-theme` on <html> picks the block, so a
-   component never asks which theme it is in: `--line-2` is a hairline on both.
-   The `-rgb` triples exist because a translucent chip is `rgba(var(--ok-rgb), …)`
-   and that only works if the channels are numbers, not a hex colour. */
-:root,
+   The `-rgb` triples exist because a translucent chip is
+   `rgba(var(--ok-rgb), …)` and that only works if the channels are numbers,
+   not a hex colour. */
+:root {
+  color-scheme: light;
+
+  /* brand */
+  --accent: #0066ff;
+  --accent-hover: #0052cc;
+  /* .12 and .08 of blue ink measured 4.33:1 with the accent itself as the text
+     on top; .04 measures 4.58:1. The border carries the chip, not the fill. */
+  --accent-soft: rgba(0 102 255 / 0.04);
+  --on-accent: #ffffff;
+
+  --tint: 12, 16, 23;
+  --ok-rgb: 14, 124, 74;
+  --warn-rgb: 138, 90, 0;
+  --danger-rgb: 179, 38, 30;
+  --purple-rgb: 91, 69, 201;
+
+  /* ink */
+  --bg: #fbfbfc;
+  --panel: #ffffff;
+  --panel-2: #f4f5f8;
+  --panel-3: #eaecf1;
+  --panel-4: #dfe3ea;
+  --glass: rgba(255, 255, 255, 0.86);
+  --nav-bg: rgba(251, 251, 252, 0.82);
+  --scrim: rgba(12, 16, 23, 0.38);
+  --shadow-1: rgba(12, 16, 23, 0.08);
+  --shadow-2: rgba(12, 16, 23, 0.18);
+
+  /* hairlines */
+  --line: rgba(var(--tint), 0.09);
+  --line-2: rgba(var(--tint), 0.15);
+  --line-3: rgba(var(--tint), 0.24);
+  --line-4: rgba(var(--tint), 0.36);
+
+  /* type */
+  --fg: #0c1017;
+  --fg-2: #333a47;
+  --fg-3: #4e5666;
+  /* 5.6:1 on --bg and 4.9:1 on --panel-4, the darkest light surface. `--fg-4`
+     is body-adjacent text, so the floor is 4.5 on the worst surface it lands
+     on, not on white. */
+  --fg-4: #616a79;
+  /* 5.4:1 on --bg and 4.9:1 on --panel-4. `--fg-5` is micro type (eyebrows,
+     nav labels, footer), which AA treats as body text, not as decoration. */
+  --fg-5: #676f7e;
+
+  /* state */
+  --ok: #0e7c4a;
+  --warn: #8a5a00;
+  --danger: #b3261e;
+  /* tone of a chip's own veil: .10 keeps the green text at 4.58:1, .12 drops it
+     to 4.44:1. The fill is what moves, never the text colour. */
+  --chip: 0.1;
+
+  /* the few foregrounds a chip needs to stay readable on its own tint */
+  --notice-err-fg: #8c1d18;
+  --notice-ok-fg: #0a5c37;
+  --secret-fg: #6b4a00;
+  --purple-fg: #5b45c9;
+  --code-ok-fg: #0a6b45;
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --tint: 250, 250, 249;
+  /* #0066ff measures 3.6:1 on this background; the lighter tone measures
+     6.63:1. White on #4d94ff is 3.0:1, so the solid button's ink is the
+     background colour, not white. */
+  --accent: #4d94ff;
+  --accent-hover: #79b0ff;
+  --accent-soft: rgba(77 148 255 / 0.12);
+  --on-accent: #08090c;
+
+  --tint: 245, 247, 250;
   --ok-rgb: 61, 214, 140;
   --warn-rgb: 232, 180, 58;
-  --danger-rgb: 228, 120, 79;
+  --danger-rgb: 255, 122, 107;
   --purple-rgb: 109, 74, 224;
 
-  /* ink */
-  --bg: #0f0e0d;
-  --panel: #151412;
-  --panel-2: #1b1a17;
-  --panel-3: #22201d;
-  --panel-4: #2a2723;
-  --glass: rgba(21, 20, 18, 0.93);
-  --nav-bg: rgba(15, 14, 13, 0.72);
-  --scrim: rgba(8, 8, 7, 0.55);
-  --shadow-1: rgba(0, 0, 0, 0.45);
-  --shadow-2: rgba(0, 0, 0, 0.95);
-
-  /* hairlines */
-  --line: rgba(var(--tint), 0.07);
-  --line-2: rgba(var(--tint), 0.12);
-  --line-3: rgba(var(--tint), 0.2);
-  --line-4: rgba(var(--tint), 0.32);
-
-  /* type */
-  --fg: #fafaf9;
-  --fg-2: #d6d4cf;
-  --fg-3: #a6a39c;
-  /* 6.6:1 on --bg and 5.0:1 on --panel-4: the previous #85827c measured 4.3:1
-     on --panel-4, which is where the labels actually sit. Lightened until the
-     worst case cleared AA rather than only the headline surface. */
-  --fg-4: #9a968e;
-  /* 5.99:1 on --bg, 4.56:1 on --panel-4. The previous #6f6c66 measured 3.69:1
-     on --bg — same micro type as the light variant, same 4.5 floor. */
-  --fg-5: #938f87;
-
-  /* signal */
-  --apur: #3dd68c;
-  --warn: #e8b43a;
-  --danger: #e4784f;
-
-  /* the few foregrounds a chip needs to stay readable on its own tint */
-  --notice-err-fg: #f2c6b5;
-  --notice-ok-fg: #b3ebd2;
-  --secret-fg: #f1e0b3;
-  --purple-fg: #b9a8f5;
-  --code-ok-fg: #8fd6b4;
-}
-
-/* Paper, not a washed-out dark theme: the same warm ink, inverted, and the
-   accent darkened until it clears AA on white. */
-:root[data-theme="light"] {
-  color-scheme: light;
-
-  --tint: 27, 26, 23;
-  --ok-rgb: 18, 138, 82;
-  --warn-rgb: 138, 95, 0;
-  --danger-rgb: 184, 66, 42;
-  --purple-rgb: 91, 69, 201;
-
-  --bg: #f2f0ec;
-  --panel: #fffdfa;
-  --panel-2: #fbf9f5;
-  --panel-3: #f0ede7;
-  --panel-4: #e6e2da;
-  --glass: rgba(242, 240, 236, 0.93);
-  --nav-bg: rgba(242, 240, 236, 0.78);
-  --scrim: rgba(60, 55, 45, 0.35);
-  --shadow-1: rgba(40, 35, 25, 0.14);
-  --shadow-2: rgba(40, 35, 25, 0.18);
+  --bg: #08090c;
+  --panel: #0e1116;
+  --panel-2: #141821;
+  --panel-3: #1b2029;
+  --panel-4: #232935;
+  --glass: rgba(10, 12, 16, 0.82);
+  --nav-bg: rgba(8, 9, 12, 0.72);
+  --scrim: rgba(4, 5, 7, 0.66);
+  --shadow-1: rgba(0, 0, 0, 0.5);
+  --shadow-2: rgba(0, 0, 0, 0.9);
 
   --line: rgba(var(--tint), 0.08);
   --line-2: rgba(var(--tint), 0.14);
   --line-3: rgba(var(--tint), 0.22);
   --line-4: rgba(var(--tint), 0.34);
 
-  --fg: #1b1a17;
-  --fg-2: #3f3c36;
-  --fg-3: #5c584f;
-  /* 5.40:1 on --bg and 4.76:1 on --panel-4, the darkest light surface: the
-     previous #736e64 measured 4.45:1 on --bg, just under AA, and worse on every
-     panel. `--fg-4` is body-adjacent text, so the floor is 4.5 on the worst
-     surface it lands on, not on white. */
-  --fg-4: #666158;
-  /* 5.30:1 on --bg and 4.67:1 on --panel-4, the darkest light surface. The
-     previous #8b857a measured 3.21:1 on --bg: --fg-5 is micro type (eyebrows,
-     nav labels, footer), which AA treats as body text, not as a decoration. */
-  --fg-5: #68625a;
+  --fg: #f5f7fa;
+  --fg-2: #c8ced8;
+  --fg-3: #9aa3b2;
+  --fg-4: #8b94a3;
+  --fg-5: #7e8796;
 
-  --apur: #128a52;
-  --warn: #8a5f00;
-  --danger: #b8422a;
+  --ok: #3dd68c;
+  --warn: #e8b43a;
+  --danger: #ff7a6b;
+  --chip: 0.12;
 
-  --notice-err-fg: #7a2f18;
-  --notice-ok-fg: #0d5c38;
-  --secret-fg: #6b4a00;
-  --purple-fg: #5b45c9;
-  --code-ok-fg: #1c7a55;
+  --notice-err-fg: #ffc4bc;
+  --notice-ok-fg: #b3ebd2;
+  --secret-fg: #f1e0b3;
+  --purple-fg: #b9a8f5;
+  --code-ok-fg: #8fd6b4;
 }
 
 :root {
-
-  --sans: "Geist", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --serif: "Faustina", Georgia, "Times New Roman", serif;
-  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* type scale */
-  --t-display: 38px;
-  --t-title: 30px;
-  --t-fig: 30px;
+  --t-display: 34px;
+  --t-title: 28px;
+  --t-fig: 26px;
   --t-name: 14px;
   --t-body: 13px;
   --t-label: 12px;
   --t-micro: 11px;
 
   /* geometry */
-  --radius: 16px;
-  --radius-sm: 10px;
+  --radius: 12px;
+  --radius-sm: 8px;
   --radius-xs: 6px;
   --pill: 100px;
 
@@ -147,9 +157,15 @@
   --s7: 48px;
   --s8: 72px;
 
-  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --hover: 0.13s;
+  --hover: 0.12s;
+}
+
+/* Skullet draws a bone in `--skullet-base`; without it the default is a grey
+   that belongs to no palette and reads as "broken image" on a card. */
+:root {
+  --skullet-base: var(--panel-3);
 }
 
 * { box-sizing: border-box; }
@@ -168,10 +184,10 @@ body {
 h1, h2, h3, h4, p { margin: 0; }
 h1 {
   color: var(--fg);
-  font: 400 var(--t-title) / 1.15 var(--serif);
-  letter-spacing: -0.02em;
+  font: 600 var(--t-title) / 1.15 var(--sans);
+  letter-spacing: -0.026em;
 }
-h2 { color: var(--fg); font: 500 var(--t-name) / 1.35 var(--sans); letter-spacing: -0.01em; }
+h2 { color: var(--fg); font: 600 var(--t-name) / 1.35 var(--sans); letter-spacing: -0.012em; }
 h3 { color: var(--fg-2); font: 500 var(--t-body) / 1.4 var(--sans); }
 
 a { color: var(--fg); text-decoration: none; }
@@ -249,7 +265,7 @@ code, .mono {
 .nav a:hover { color: var(--fg); background: var(--panel-2); }
 .nav a:hover .icon { opacity: 1; }
 .nav a.active { color: var(--fg); background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-2); }
-.nav a.active .icon { opacity: 1; color: var(--apur); }
+.nav a.active .icon { opacity: 1; color: var(--accent); }
 
 .topbar-side { margin-left: auto; display: flex; align-items: center; gap: var(--s3); min-width: 0; }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
@@ -296,26 +312,11 @@ code, .mono {
   border-radius: var(--radius-xs);
 }
 a.logo:hover .logo-text { color: var(--fg); }
-/* The mark's box is fixed at both sizes: the Lottie chunk replaces the dots
-   inside the same rectangle, so nothing moves when it lands. */
-.mark { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; }
-.mark svg { display: block; width: 100% !important; height: 100% !important; }
-.mark-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--apur);
-  opacity: 0.45;
-  animation: mark-pulse 2s var(--ease) infinite;
-}
-.mark-dot:nth-child(2) { background: var(--fg); animation-delay: 0.5s; }
-.mark-dot:nth-child(3) { animation-delay: 1s; }
-@keyframes mark-pulse {
-  0%, 100% { opacity: 0.45; transform: scale(0.85); }
-  30% { opacity: 1; transform: scale(1.1); }
-}
+/* The mark is one SVG path set in `currentColor`, so the logo follows the
+   accent in both themes without a second asset. */
+.mark { display: block; flex: 0 0 auto; fill: var(--accent); }
 .logo-text { color: var(--fg-2); font: 500 15px / 1 var(--sans); letter-spacing: -0.02em; transition: color var(--hover) var(--ease); }
-.logo-text span { color: var(--fg-4); }
+.logo-text span { color: var(--fg-5); }
 
 .icon { flex: 0 0 auto; opacity: 0.72; transition: opacity var(--hover) var(--ease); }
 
@@ -367,7 +368,7 @@ a.logo:hover .logo-text { color: var(--fg); }
 .card {
   position: relative;
   min-width: 0;
-  background: var(--panel-2);
+  background: var(--panel);
   border-radius: var(--radius);
   padding: var(--s4) var(--s4) var(--s4);
   box-shadow: inset 0 0 0 1px var(--line);
@@ -429,8 +430,8 @@ a.logo:hover .logo-text { color: var(--fg); }
 }
 .stat-value {
   color: var(--fg);
-  font: 300 var(--t-fig) / 1.15 var(--serif);
-  letter-spacing: -0.025em;
+  font: 600 var(--t-fig) / 1.15 var(--sans);
+  letter-spacing: -0.024em;
   font-variant-numeric: tabular-nums;
 }
 .stat-hint { color: var(--fg-4); font-size: var(--t-micro); }
@@ -440,20 +441,20 @@ a.logo:hover .logo-text { color: var(--fg); }
 table { width: 100%; border-collapse: collapse; font-size: var(--t-body); }
 th {
   text-align: left;
-  color: var(--fg-4);
+  color: var(--fg-5);
   font: 500 var(--t-micro) / 1.3 var(--sans);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   padding: 0 var(--s3) var(--s2) 0;
   border-bottom: 1px solid var(--line-2);
   white-space: nowrap;
 }
 td {
-  padding: 11px var(--s3) 11px 0;
+  padding: 10px var(--s3) 10px 0;
   border-bottom: 1px solid var(--line);
   color: var(--fg-2);
   vertical-align: middle;
 }
+tbody tr:hover td { background: var(--panel-2); }
 th:last-child, td:last-child { padding-right: 0; }
 tr:last-child td { border-bottom: 0; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -565,9 +566,9 @@ button:disabled {
 
 /* Emphasis is an inversion, not a colour: the accent stays reserved for state
    so it keeps meaning something. */
-button.primary { background: var(--fg); box-shadow: none; color: var(--bg); font-weight: 500; }
-button.primary:hover { background: var(--fg-2); box-shadow: none; }
-button.primary:active { background: var(--fg-3); }
+button.primary { background: var(--accent); box-shadow: none; color: var(--on-accent); font-weight: 600; }
+button.primary:hover { background: var(--accent-hover); box-shadow: none; }
+button.primary:active { background: var(--accent-hover); }
 button.primary:disabled { background: var(--panel-3); color: var(--fg-5); box-shadow: inset 0 0 0 1px var(--line); }
 
 button.danger { color: var(--danger); background: transparent; box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.32); }
@@ -623,7 +624,7 @@ select {
   background-repeat: no-repeat;
 }
 input:hover, select:hover, textarea:hover { box-shadow: inset 0 0 0 1px var(--line-3); }
-input:focus, select:focus, textarea:focus { box-shadow: inset 0 0 0 1px var(--fg-3); }
+input:focus, select:focus, textarea:focus { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-soft); }
 input::placeholder, textarea::placeholder { color: var(--fg-5); }
 input.mono, textarea.mono { font-family: var(--mono); font-size: var(--t-label); }
 
@@ -641,9 +642,7 @@ textarea {
 label {
   display: block;
   color: var(--fg-3);
-  font: 500 var(--t-micro) / 1.3 var(--sans);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font: 500 var(--t-label) / 1.3 var(--sans);
   margin-bottom: 6px;
 }
 .field { margin-bottom: var(--s3); }
@@ -683,7 +682,7 @@ label {
   flex: 0 0 auto;
   box-shadow: none;
   background: none;
-  accent-color: var(--apur);
+  accent-color: var(--accent);
 }
 .permission input:hover, .permission input:focus { box-shadow: none; }
 .permission .hint { margin-left: auto; }
@@ -696,7 +695,7 @@ label {
   gap: 6px;
   height: 22px;
   padding: 0 8px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--pill);
   background: var(--panel-3);
   color: var(--fg-2);
   font: 500 var(--t-label) / 1 var(--sans);
@@ -705,9 +704,9 @@ label {
 .badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 /* The accent is a fill, not a text colour: #128a52 on its own 10% tint measured
    3.69:1. `--notice-ok-fg` is the token that already exists for readable-on-tint. */
-.badge.ok { background: rgba(var(--ok-rgb), 0.1); color: var(--notice-ok-fg); box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.26); }
-.badge.warn { background: rgba(var(--warn-rgb), 0.1); color: var(--warn); box-shadow: inset 0 0 0 1px rgba(var(--warn-rgb), 0.26); }
-.badge.err { background: rgba(var(--danger-rgb), 0.1); color: var(--danger); box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.26); }
+.badge.ok { background: rgba(var(--ok-rgb), var(--chip)); color: var(--ok); box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.26); }
+.badge.warn { background: rgba(var(--warn-rgb), var(--chip)); color: var(--warn); box-shadow: inset 0 0 0 1px rgba(var(--warn-rgb), 0.26); }
+.badge.err { background: rgba(var(--danger-rgb), var(--chip)); color: var(--danger); box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.26); }
 .badge.info { background: rgba(var(--tint), 0.06); color: var(--fg-2); box-shadow: inset 0 0 0 1px var(--line-2); }
 .badge.mute { background: transparent; color: var(--fg-4); box-shadow: inset 0 0 0 1px var(--line); }
 .badge.purple { background: rgba(var(--purple-rgb), 0.14); color: var(--purple-fg); box-shadow: inset 0 0 0 1px rgba(var(--purple-rgb), 0.28); }
@@ -715,18 +714,52 @@ label {
 
 /* -- misc --------------------------------------------------------------- */
 
+/* A tone bar on the left, the rest neutral: a wall of red tells a reader which
+   kind of message it is, not what it says. */
 .notice {
   border-radius: var(--radius-sm);
-  padding: 10px 13px;
+  padding: 11px 14px;
   margin-bottom: var(--s3);
   font-size: var(--t-body);
-  background: var(--panel-3);
-  box-shadow: inset 0 0 0 1px var(--line-2);
+  line-height: 1.55;
+  background: var(--panel-2);
+  box-shadow: inset 3px 0 0 var(--line-3), inset 0 0 0 1px var(--line-2);
   color: var(--fg-2);
 }
-.notice.err { background: rgba(var(--danger-rgb), 0.09); box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.3); color: var(--notice-err-fg); }
-.notice.ok { background: rgba(var(--ok-rgb), 0.09); box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.3); color: var(--notice-ok-fg); }
-.notice.info { background: var(--panel-3); color: var(--fg-2); }
+.notice.err { box-shadow: inset 3px 0 0 var(--danger), inset 0 0 0 1px rgba(var(--danger-rgb), 0.3); color: var(--notice-err-fg); }
+.notice.warn { box-shadow: inset 3px 0 0 var(--warn), inset 0 0 0 1px rgba(var(--warn-rgb), 0.3); color: var(--fg-2); }
+.notice.ok { box-shadow: inset 3px 0 0 var(--ok), inset 0 0 0 1px rgba(var(--ok-rgb), 0.3); color: var(--notice-ok-fg); }
+.notice.info { box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 1px var(--line-2); color: var(--fg-2); }
+
+/* Title says what happened, body says what to do, action is the do. A single
+   sentence still renders: the title is optional and the body takes the row. */
+.notice-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.notice-title { color: var(--fg); font-weight: 600; line-height: 1.45; }
+.notice-text { color: inherit; }
+.notice-action { display: flex; gap: var(--s2); margin-top: var(--s2); }
+.notice code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(var(--tint), 0.06);
+  color: var(--fg);
+  font-size: var(--t-label);
+}
+
+/* A cursor list cannot fake a page number, so the footer says what is on screen
+   and gives the one action that exists. */
+.page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s3);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+  color: var(--fg-5);
+  font-size: var(--t-micro);
+}
+.page-bar-range { font-variant-numeric: tabular-nums; }
 
 .hint { color: var(--fg-4); font-size: var(--t-label); }
 .empty {
@@ -736,7 +769,7 @@ label {
   gap: 6px;
   padding: var(--s6) var(--s4);
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px var(--line);
+  border: 1px dashed var(--line-3);
   color: var(--fg-4);
   font-size: var(--t-body);
   text-align: center;
@@ -827,7 +860,7 @@ label {
   flex: 1;
   min-height: 2px;
   border-radius: 2px 2px 0 0;
-  background: var(--apur);
+  background: var(--accent);
   opacity: 0.5;
   transition: opacity var(--hover) var(--ease);
 }
@@ -851,7 +884,7 @@ label {
   width: min(560px, 100%);
   display: flex;
   flex-direction: column;
-  background: var(--panel-2);
+  background: var(--panel);
   box-shadow: -1px 0 0 var(--line-2), -24px 0 48px var(--shadow-1);
   animation: slide-in 160ms var(--ease);
 }
@@ -967,7 +1000,7 @@ label {
 .bar-track > div {
   height: 100%;
   border-radius: var(--pill);
-  background: var(--apur);
+  background: var(--accent);
   opacity: 0.55;
 }
 
@@ -984,6 +1017,23 @@ label {
   overflow-x: auto;
   max-height: 340px;
 }
+
+/* -- theme switch ------------------------------------------------------- */
+
+/* Two labelled buttons, not one icon that toggles: the icon only says what you
+   are in, and a reader who lands in light never learns dark exists. */
+.theme-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  font-size: var(--t-micro);
+  font-weight: 500;
+  color: var(--fg-4);
+}
+.theme-seg .active { color: var(--fg); }
+
 
 /* -- segmented control -------------------------------------------------- */
 
@@ -1007,6 +1057,13 @@ label {
 }
 .seg button:hover { color: var(--fg); background: rgba(var(--tint), 0.05); box-shadow: none; }
 .seg button.active { background: var(--panel-3); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line-2); }
+
+/* On a narrow bar the two words cost the nav a whole row. The icons stay, the
+   words go, and `aria-pressed` still says which theme is on. */
+@media (max-width: 700px) {
+  .theme-seg button { gap: 0; padding: 0 8px; font-size: 0; }
+  .theme-seg button svg { width: 13px; height: 13px; }
+}
 
 /* -- snippets ----------------------------------------------------------- */
 
@@ -1103,17 +1160,17 @@ pre.code {
   border-radius: var(--pill);
   background: rgba(var(--ok-rgb), 0.08);
   box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.26);
-  color: var(--apur);
+  color: var(--accent);
   font: 500 var(--t-micro) / 1 var(--sans);
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 .hero h1 {
-  font: 400 clamp(38px, 5vw, 58px) / 1.04 var(--serif);
-  letter-spacing: -0.03em;
+  font: 600 clamp(34px, 5.4vw, 52px) / 1.05 var(--sans);
+  letter-spacing: -0.032em;
   margin-bottom: var(--s4);
 }
-.hero h1 em { font-style: italic; color: var(--apur); }
+.hero h1 em { font-style: normal; color: var(--accent); }
 .hero .lead {
   max-width: 52ch;
   color: var(--fg-3);
@@ -1133,8 +1190,8 @@ pre.code {
   font-weight: 500;
   transition: background-color var(--hover) var(--ease), box-shadow var(--hover) var(--ease), color var(--hover) var(--ease);
 }
-.hero .cta-primary { background: var(--fg); color: var(--bg); }
-.hero .cta-primary:hover { background: var(--fg-2); }
+.hero .cta-primary { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.hero .cta-primary:hover { background: var(--accent-hover); }
 .hero .cta-secondary { color: var(--fg-2); box-shadow: inset 0 0 0 1px var(--line-2); }
 .hero .cta-secondary:hover { color: var(--fg); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line-3); }
 .hero .fineprint { color: var(--fg-5); font-size: var(--t-micro); margin-top: var(--s4); }
@@ -1167,7 +1224,7 @@ pre.code {
   overflow-x: auto;
 }
 .terminal .c { color: var(--fg-5); }
-.terminal .p { color: var(--apur); }
+.terminal .p { color: var(--accent); }
 .terminal .s { color: var(--code-ok-fg); }
 .terminal .d { color: var(--fg-4); }
 .terminal .w { color: var(--warn); }
@@ -1179,7 +1236,7 @@ pre.code {
   padding: 0 var(--s5) var(--s8);
 }
 .band > header { margin-bottom: var(--s5); max-width: 62ch; }
-.band h2 { font: 400 24px / 1.25 var(--serif); color: var(--fg); letter-spacing: -0.02em; margin-bottom: 6px; }
+.band h2 { font: 600 22px / 1.25 var(--sans); color: var(--fg); letter-spacing: -0.02em; margin-bottom: 6px; }
 .band > header p { color: var(--fg-3); }
 
 .signin-band {
@@ -1214,7 +1271,7 @@ pre.code {
   border-radius: var(--radius-xs);
   background: rgba(var(--ok-rgb), 0.08);
   box-shadow: inset 0 0 0 1px rgba(var(--ok-rgb), 0.22);
-  color: var(--apur);
+  color: var(--accent);
   font-family: var(--mono);
   font-size: var(--t-micro);
 }
@@ -1248,7 +1305,7 @@ pre.code {
     transform var(--hover) var(--ease);
 }
 .docs-card:hover { background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-3); transform: translateY(-1px); }
-.docs-card .eyebrow { display: block; margin-bottom: 8px; color: var(--apur); font: 500 var(--t-micro) / 1 var(--sans); letter-spacing: 0.09em; text-transform: uppercase; }
+.docs-card .eyebrow { display: block; margin-bottom: 8px; color: var(--accent); font: 500 var(--t-micro) / 1 var(--sans); letter-spacing: 0.09em; text-transform: uppercase; }
 .docs-card h3 { color: var(--fg); font: 500 15px / 1.4 var(--sans); margin-bottom: 6px; }
 .docs-card p { color: var(--fg-3); font-size: var(--t-label); line-height: 1.65; }
 
@@ -1325,14 +1382,14 @@ pre.code {
   transition: color var(--hover) var(--ease), background-color var(--hover) var(--ease);
 }
 .docs-toc a:hover { color: var(--fg); background: var(--panel-2); }
-.docs-toc a.active { color: var(--fg); background: var(--panel-2); box-shadow: inset 2px 0 0 var(--apur); }
+.docs-toc a.active { color: var(--fg); background: var(--panel-2); box-shadow: inset 2px 0 0 var(--accent); }
 
 .docs-article { min-width: 0; }
 .docs-section { padding-bottom: var(--s6); scroll-margin-top: var(--s5); }
 .docs-section + .docs-section { padding-top: var(--s6); border-top: 1px solid var(--line); }
 .docs-section h2 {
   color: var(--fg);
-  font: 400 24px / 1.25 var(--serif);
+  font: 600 22px / 1.25 var(--sans);
   letter-spacing: -0.02em;
   margin-bottom: var(--s4);
 }
@@ -1544,7 +1601,7 @@ pre.code.docs-code {
   margin: 0;
   box-shadow: none;
   background: none;
-  accent-color: var(--apur);
+  accent-color: var(--accent);
 }
 .tools-list input[type="checkbox"]:hover,
 .tools-list input[type="checkbox"]:focus { box-shadow: none; }
@@ -1705,13 +1762,13 @@ pre.code.docs-code {
   dominant-baseline: middle;
 }
 .sankey-node { fill: var(--fg-4); }
-.sankey-node.allowed { fill: var(--apur); }
+.sankey-node.allowed { fill: var(--ok); }
 .sankey-node.warn { fill: var(--warn); }
 .sankey-node.forbidden,
 .sankey-node.unauthenticated { fill: var(--danger); }
 .sankey-node.rate_limited { fill: var(--warn); }
 .sankey-link { stroke: none; fill: var(--purple-fg); opacity: 0.16; transition: opacity var(--hover) var(--ease); }
-.sankey-link.allowed { fill: var(--apur); }
+.sankey-link.allowed { fill: var(--ok); }
 .sankey-link.forbidden,
 .sankey-link.unauthenticated { fill: var(--danger); }
 .sankey-link.rate_limited { fill: var(--warn); }

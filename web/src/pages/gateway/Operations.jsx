@@ -146,7 +146,7 @@ export function HistoryPanel({ gateway, onRestored }) {
           </div>
         )}
       </Skeleton>
-      <LoadMore next={next} busy={loading} onClick={more} />
+      <LoadMore next={next} busy={loading} onClick={more} shown={items?.length} />
 
       {preview && (
         <Drawer

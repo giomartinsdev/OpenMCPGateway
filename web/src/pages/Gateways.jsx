@@ -282,7 +282,7 @@ export function Gateways({ me }) {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={busy} onClick={more} />
+        <LoadMore next={next} busy={busy} onClick={more} shown={gateways?.length} />
       </Card>
 
     </>

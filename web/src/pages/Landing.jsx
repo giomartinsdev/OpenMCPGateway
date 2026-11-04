@@ -72,7 +72,7 @@ const LOG = [
 
 export function Landing({ onLogin }) {
   const t = useT();
-  const [theme, toggleTheme] = useTheme();
+  const [theme, setTheme] = useTheme();
   return (
     <div className="landing">
       <nav className="landing-nav">
@@ -92,7 +92,7 @@ export function Landing({ onLogin }) {
             GitHub
           </a>
           <LanguagePicker />
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <ThemeToggle theme={theme} onSelect={setTheme} />
           <a className="pill-btn" href="#signin">{t("Sign in")}</a>
         </div>
       </nav>

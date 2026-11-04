@@ -2,7 +2,8 @@
 // wrapper: the whole UI is tables, cards and chips, and a design system would
 // cost more than it saves.
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Skeleton as SkulletSkeleton, SkeletonBox } from "skullet/react";
 import { getLocale, useT } from "./i18n.jsx";
 
@@ -91,9 +92,25 @@ export function Card({ title, aside, actions, children, className = "", flush = 
   );
 }
 
-export function Notice({ kind = "info", children }) {
-  if (!children) return null;
-  return <div className={`notice ${kind}`}>{children}</div>;
+/**
+ * One message: a title that says what happened, a body that says what to do.
+ *
+ * The title is optional because most call sites pass a single sentence (an API
+ * error) and splitting it would invent a heading. When there *is* a next step,
+ * `action` is where it goes — a sentence that ends in "click Settings → Keys"
+ * is a sentence the reader has to translate into a route.
+ */
+export function Notice({ kind = "info", title, action, children }) {
+  if (!children && !title) return null;
+  return (
+    <div className={`notice ${kind}`}>
+      <div className="notice-body">
+        {title ? <span className="notice-title">{title}</span> : null}
+        {children ? <span className="notice-text">{children}</span> : null}
+        {action ? <div className="notice-action">{action}</div> : null}
+      </div>
+    </div>
+  );
 }
 
 /** Copy-to-clipboard line. The endpoint is the thing people paste into a client. */
@@ -132,23 +149,51 @@ export function Empty({ title, children, action }) {
  * question the row was opened to answer. Opening a drawer keeps the list behind
  * it — the row is still there when it closes — which a detail page does not.
  *
- * Escape and the scrim both close it: a drawer with no keyboard exit is a trap
- * for anyone not using a mouse.
+ * Escape and the scrim both close it, and focus is trapped inside: a drawer
+ * with no keyboard exit is a trap for anyone not using a mouse, and a drawer
+ * that lets Tab wander into the dimmed page behind it is a trap for a screen
+ * reader. `inert` on the frame is one attribute for that, and it works with
+ * Tab, Shift+Tab and the virtual cursor without a hand-rolled keydown trap.
  */
 export function Drawer({ title, sub, onClose, actions, children }) {
   const t = useT();
+  const panel = useRef(null);
+
   useEffect(() => {
+    const opener = document.activeElement;
+    // Everything except the drawer stops existing for the keyboard. This only
+    // works because the drawer is portalled to <body>: inside #root it would be
+    // its own ancestor's descendant, and inerting the app would inert it too.
+    const siblings = [...document.body.children].filter((node) => !node.contains(panel.current));
+    siblings.forEach((node) => {
+      node.inert = true;
+    });
+
     const onKey = (event) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    panel.current?.querySelector("button, [href], input, select, textarea")?.focus();
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      siblings.forEach((node) => {
+        node.inert = false;
+      });
+      if (opener instanceof HTMLElement) opener.focus();
+    };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="drawer-wrap">
       <div className="drawer-scrim" onClick={onClose} aria-hidden="true" />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+      <aside
+        className="drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        ref={panel}
+      >
         <div className="drawer-head">
           <div>
             <h2>{title}</h2>
@@ -163,7 +208,8 @@ export function Drawer({ title, sub, onClose, actions, children }) {
         </div>
         <div className="drawer-body">{children}</div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

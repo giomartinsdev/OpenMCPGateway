@@ -402,7 +402,7 @@ export function Traffic() {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={busy} onClick={more} />
+        <LoadMore next={next} busy={busy} onClick={more} shown={requests?.length} />
       </Card>
 
       {open && (

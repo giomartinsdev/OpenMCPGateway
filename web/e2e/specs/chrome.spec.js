@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test";
 // expensive.
 test.describe.configure({ mode: "serial" });
 
-test("the favicon is served and is the three-dot mark", async ({ page }) => {
+test("the favicon is served and is the padlock mark", async ({ page }) => {
   await page.goto("/");
   const href = await page.locator('link[rel="icon"]').getAttribute("href");
   expect(href).toBe("/favicon.svg");
@@ -19,15 +19,18 @@ test("the favicon is served and is the three-dot mark", async ({ page }) => {
   expect(response.headers()["content-type"]).toContain("svg");
 
   const body = await response.text();
-  expect(body).toContain("<circle");
-  // Three dots: the mark is the same shape at 16px as it is in the topbar.
-  expect(body.match(/<circle/g)).toHaveLength(3);
+  // The same O as the topbar, on a rounded plate: the tab, the pitch and the
+  // panel are recognisably one product.
+  expect(body).toContain("<rect");
+  expect(body).toContain("fill-rule=\"evenodd\"");
+  expect(body).not.toContain("<circle");
 });
 
-test("the landing page shows the same dot mark as the panel", async ({ page }) => {
+test("the landing page shows the same mark as the panel", async ({ page }) => {
   await page.goto("/");
-  // Not the old green bar: the landing nav renders the mark component.
+  // The landing nav renders the mark component, not a hard-coded logo.
   await expect(page.locator(".landing-nav .mark")).toBeVisible();
+  await expect(page.locator(".landing-nav .mark path")).toHaveCount(3);
   await expect(page.locator(".logo-mark")).toHaveCount(0);
 });
 
@@ -106,15 +109,17 @@ test("the manual follows the language, body and all", async ({ page }) => {
 test("the theme switch flips the palette and remembers it", async ({ page }) => {
   await page.goto("/");
   const html = page.locator("html");
-  await expect(html).toHaveAttribute("data-theme", "dark");
+  // Light is the default: a first visit lands in daylight, not in a dark theme
+  // nobody asked for.
+  await expect(html).toHaveAttribute("data-theme", "light");
 
   const background = () =>
     page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  const dark = await background();
-
-  await page.getByRole("button", { name: "Switch to light theme" }).click();
-  await expect(html).toHaveAttribute("data-theme", "light");
   const light = await background();
+
+  await page.getByRole("button", { name: "Dark" }).click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  const dark = await background();
   expect(light).not.toBe(dark);
 
   // Light is paper, not a dimmer dark: the luminance actually crosses over.
@@ -144,16 +149,26 @@ test("the theme switch flips the palette and remembers it", async ({ page }) => 
   expect(contrast).toBeGreaterThan(7);
 
   await page.reload();
-  await expect(html).toHaveAttribute("data-theme", "light");
-
-  await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await expect(html).toHaveAttribute("data-theme", "dark");
+
+  await page.getByRole("button", { name: "Light" }).click();
+  await expect(html).toHaveAttribute("data-theme", "light");
 });
 
 test("the theme is applied before first paint, so there is no flash", async ({ page }) => {
   // The stored choice is read by the inline script in index.html. If that ever
-  // moves into the bundle, the page paints dark and then flips.
-  await page.addInitScript(() => localStorage.setItem("omg.theme", "light"));
+  // moves into the bundle, the page paints light and then flips.
+  await page.addInitScript(() => localStorage.setItem("omg.theme", "dark"));
   await page.goto("/");
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("the two themes are both offered by name", async ({ page }) => {
+  // A single icon that toggles says what you are in, not what you could get.
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "Dark" }).click();
+  await expect(page.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "false");
 });
