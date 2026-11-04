@@ -10,18 +10,18 @@ Feature: Reason, usage, retention, key expiry and reachability
     Given an operator "ops@example.dev" with password "correct-horse-battery"
 
   # ------------------------------------------------------------------ reason
-  # `outcome` says "forbidden"; it cannot tell an allowlist refusal from a tool
+  # `outcome` says "forbidden"; it cannot tell a tenancy refusal from a tool
   # allowlist refusal from a bad token. The guard knows which one it was, and the
   # panel cannot ask it after the fact.
 
-  Scenario: A refused subject records the allowlist as the reason
-    # Keys bypass the allowlist (their subject embeds a key id that rotation
+  Scenario: A refused subject records tenancy as the reason
+    # Keys bypass the tenancy gate (their subject embeds a key id that rotation
     # replaces), so the refusal is produced by an identity a provider vouched
-    # for: that is the caller the list is about.
+    # for: that is the caller the gate is about.
     Given a gateway "demo" with api_key auth proxying a real MCP server
-    And the principal "someone-else" is allowed
+    And the account "someone-else@example.dev" belongs to another tenant
     When an outsider calls the gateway
-    Then the traffic log records reason "subject not in allowlist"
+    Then the traffic log records reason "subject not in tenant"
 
   Scenario: A refused tool records the tool's name as the reason
     Given a gateway "demo" with api_key auth proxying a real MCP server

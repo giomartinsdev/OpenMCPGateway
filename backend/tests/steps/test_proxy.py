@@ -112,6 +112,39 @@ def gateway_oauth(container, runner, operator: str, slug: str) -> dict:
     return runner.run(create())
 
 
+@given(parsers.parse('the account "{email}" belongs to the gateway\'s tenant'))
+def account_in_gateway_tenant(container, runner, operator: str, gateway: dict,
+                              email: str) -> None:
+    """The account exists in the tenant that owns the gateway.
+
+    That is now the whole gate: there is no per-gateway list to add to.
+    """
+
+    async def ensure() -> None:
+        await _register_in_tenant(container, email, gateway["tenant_id"])
+
+    runner.run(ensure())
+
+
+@given(parsers.parse('the account "{email}" belongs to another tenant'))
+def account_in_other_tenant(container, runner, operator: str, gateway: dict,
+                            email: str) -> None:
+    async def ensure() -> None:
+        await _register_in_tenant(container, email, "tn_other")
+
+    runner.run(ensure())
+
+
+async def _register_in_tenant(container, email: str, tenant_id: str) -> None:
+    if await container.store.fetch_operator_by_email(email):
+        return
+    await container.commands.ensure_tenant(tenant_id=tenant_id, name=tenant_id)
+    await container.commands.register_operator(
+        email=email, password="correct-horse-battery", tenant_id=tenant_id
+    )
+    await container.refresh_router()
+
+
 @given(parsers.parse('the principal "{subject}" is allowed'))
 def allow_principal(container, runner, operator: str, gateway: dict,
                     subject: str) -> None:
@@ -281,7 +314,7 @@ def resolve_identity(container, runner, gateway: dict, subject: str) -> dict:
             auth.resolve = original  # type: ignore[method-assign]
 
         assert identity is not None
-        allowed = _guard_authorized(live, identity.subject)
+        allowed = await _guard_authorized(live, identity.subject)
         return {"subject": identity.subject, "allowed": allowed}
 
     return runner.run(check())
@@ -575,11 +608,11 @@ def _find_auth(live) -> object | None:
     return None
 
 
-def _guard_authorized(live, subject: str) -> bool:
+async def _guard_authorized(live, subject: str) -> bool:
     for route in live.routes:
         endpoint = getattr(route, "endpoint", None)
         if hasattr(endpoint, "_authorized"):
-            return bool(endpoint._authorized(subject))
+            return bool(await endpoint._authorized(subject))
     raise AssertionError("guard not found")
 
 

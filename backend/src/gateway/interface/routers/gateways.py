@@ -22,7 +22,6 @@ from gateway.interface.schemas import (
     GatewayCreateRequest,
     GatewayToolsRequest,
     GatewayUpdateRequest,
-    PrincipalRequest,
     QuotaRequest,
     RateLimitRequest,
     RestoreRequest,
@@ -275,42 +274,6 @@ async def enable_gateway(gateway_id: str, session: CanWriteGateways,
     await container.commands.enable_gateway(gateway_id, actor=session.email)
     await container.refresh_router()
     return {"status": "enabled"}
-
-
-# -- principals ------------------------------------------------------------
-
-
-@router.get("/gateways/{gateway_id}/principals")
-async def list_principals(gateway_id: str, session: CanReadGateways,
-                          principal: PrincipalDep,
-                          container: ContainerDep) -> dict[str, Any]:
-    del session
-    await gateways.owned(container, principal.caller, gateway_id)
-    return {"principals": await container.read_models.principals(gateway_id)}
-
-
-@router.post("/gateways/{gateway_id}/principals", status_code=201)
-async def allow_principal(gateway_id: str, payload: PrincipalRequest,
-                          session: CanWriteGateways, principal: PrincipalDep,
-                          container: ContainerDep) -> dict[str, str]:
-    await gateways.owned(container, principal.caller, gateway_id)
-    await container.commands.allow_principal(
-        gateway_id, subject=payload.subject, note=payload.note, actor=session.email
-    )
-    await container.refresh_router()
-    return {"status": "allowed"}
-
-
-@router.delete("/gateways/{gateway_id}/principals/{subject}")
-async def revoke_principal(gateway_id: str, subject: str, session: CanWriteGateways,
-                           principal: PrincipalDep,
-                           container: ContainerDep) -> dict[str, str]:
-    await gateways.owned(container, principal.caller, gateway_id)
-    await container.commands.revoke_principal(
-        gateway_id, subject=subject, actor=session.email
-    )
-    await container.refresh_router()
-    return {"status": "revoked"}
 
 
 # -- api keys --------------------------------------------------------------

@@ -157,7 +157,7 @@ export function AuthForm({ gateway, onSaved }) {
             <span>{t("Also accept API keys on this gateway")}</span>
           </label>
           <div className="hint" style={{ margin: "8px 0 var(--s4)" }}>
-            {t("A browser client logs in, a script presents a key — same URL, same allowlist, same rate limit. The gateway needs at least one issued key.")}
+            {t("A browser client logs in, a script presents a key — same URL, same gate, same rate limit. The gateway needs at least one issued key.")}
           </div>
 
           {form.verifiers.map((verifier, index) => (

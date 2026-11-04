@@ -83,11 +83,6 @@ class GatewayToolsRequest(BaseModel):
     source: str = ""
 
 
-class PrincipalRequest(BaseModel):
-    subject: str
-    note: str = ""
-
-
 class ApiKeyRequest(BaseModel):
     label: str
     #: Days from now until this key stops working. `None` means never.
@@ -147,7 +142,6 @@ __all__ = [
     "GatewayUpdateRequest",
     "LoginRequest",
     "OperatorCreateRequest",
-    "PrincipalRequest",
     "RateLimitRequest",
     "RegisterRequest",
     "RoleAssignRequest",

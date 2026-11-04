@@ -64,6 +64,8 @@ class Gateway(_Aggregate):
     #: Calls this gateway may serve per calendar month. 0 = unlimited.
     monthly_quota: int = 0
     enabled: bool = True
+    #: Retired. Kept only so streams written with `principal.allowed` still
+    #: rehydrate; the gate is tenancy (see `GuardMiddleware._authorized`).
     allowed_subjects: set[str] = Field(default_factory=set)
     api_key_ids: dict[str, str] = Field(default_factory=dict)  # key_id -> key_hash
     #: Tools the upstream may expose through this gateway. Empty means every
@@ -134,9 +136,12 @@ class Gateway(_Aggregate):
             case GatewayEnabled():
                 self.enabled = True
             case PrincipalAllowed():
-                self.allowed_subjects.add(event.subject)
+                # Replayed from history only. The gate is tenancy now (see
+                # `GuardMiddleware._authorized`), so the list is not state any
+                # more; the event stays registered so old streams still rehydrate.
+                pass
             case PrincipalRevoked():
-                self.allowed_subjects.discard(event.subject)
+                pass
             case GatewayToolsConfigured():
                 if event.source:
                     # Empty list for a source is "no exception", not "nothing
@@ -419,21 +424,6 @@ class Gateway(_Aggregate):
             )
         ]
 
-    def decide_allow(self, *, subject: str, note: str = "") -> list[Event]:
-        self._ensure_live()
-        subject = subject.strip()
-        if not subject:
-            raise DomainError("subject is required")
-        if subject in self.allowed_subjects:
-            raise DomainError(f"'{subject}' is already allowed")
-        return [PrincipalAllowed(aggregate_id=self.id, subject=subject, note=note)]
-
-    def decide_revoke(self, *, subject: str) -> list[Event]:
-        self._ensure_live()
-        if subject not in self.allowed_subjects:
-            raise DomainError(f"'{subject}' is not allowed")
-        return [PrincipalRevoked(aggregate_id=self.id, subject=subject)]
-
     def decide_disable(self, *, reason: str = "") -> list[Event]:
         self._ensure_live()
         if not self.enabled:
@@ -566,24 +556,6 @@ class Gateway(_Aggregate):
         return [ApiKeyRevoked(aggregate_id=self.id, key_id=key_id)]
 
     # -- read-side helpers ------------------------------------------------
-
-    def authorizes(self, subject: str | None) -> bool:
-        """True when this gateway lets `subject` through."""
-        if not self.enabled or self.deleted:
-            return False
-        if self.auth_mode is AuthMode.NONE:
-            return True
-        if not subject:
-            return False
-        # No allowlist configured means "any authenticated principal".
-        if not self.allowed_subjects or "*" in self.allowed_subjects:
-            return True
-        # A key is a credential minted for this gateway, not an identity a
-        # provider vouched for; its subject embeds the key id, so listing it
-        # would break on the next rotation. See `GatewayAuth`/guard.
-        if subject.startswith("api-key:"):
-            return True
-        return subject in self.allowed_subjects
 
     def matches_key_hash(self, key_hash: str) -> str | None:
         """Return the subject for a matching key hash, if any."""

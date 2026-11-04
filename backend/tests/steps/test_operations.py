@@ -114,12 +114,24 @@ def live_gateway(owner: dict, backend: BackendServer, slug: str) -> dict:
 def plain_gateway(owner: dict, slug: str, target: str) -> dict:
     return _create(owner, slug, target)
 
-@given(parsers.parse('the principal "{subject}" is allowed'))
-def allow_principal(owner: dict, gateway: dict, subject: str) -> None:
-    response = owner["browser"].post(
-        f"/api/gateways/{gateway['id']}/principals", json={"subject": subject}
-    )
-    assert response.status_code == 201, response.text
+@given(parsers.parse('the account "{email}" belongs to another tenant'))
+def account_in_another_tenant(container, runner, email: str) -> None:
+    """A real account, in a tenant that does not own the gateway.
+
+    Built with the command handler because an account can belong to exactly one
+    tenant and the panel's only exits from onboarding are create and join. The
+    read model is written by the same projection either way — what the gate
+    consults is a row, not a list.
+    """
+
+    async def ensure() -> None:
+        tenant_id = "tn_elsewhere"
+        await container.commands.ensure_tenant(tenant_id=tenant_id, name="Elsewhere")
+        await container.commands.register_operator(
+            email=email, password="correct-horse-battery", tenant_id=tenant_id
+        )
+
+    runner.run(ensure())
 
 @given(parsers.parse('the allowlist exposes only "{name}"'))
 def only_tool(owner: dict, gateway: dict, name: str) -> None:
@@ -249,7 +261,7 @@ def outsider_call(container, live_server: str, gateway: dict) -> dict:
     """A caller the guard can identify but the allowlist does not name.
 
     An API key cannot produce this: a key's subject is minted per key and the
-    allowlist does not apply to it. So the identity is supplied the way a real
+    tenancy gate does not apply to it. So the identity is supplied the way a real
     provider would supply one — `resolve` is stubbed only for the signature
     check, and the request still goes over HTTP so the guard records the row.
     """
@@ -262,7 +274,7 @@ def outsider_call(container, live_server: str, gateway: dict) -> dict:
     )
 
     async def admit(_token: str | None) -> Identity:
-        return Identity(subject="stranger", source="github")
+        return Identity(subject="someone-else@example.dev", source="github")
 
     original = endpoint.auth.resolve
     endpoint.auth.resolve = admit  # type: ignore[method-assign]

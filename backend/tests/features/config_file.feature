@@ -11,7 +11,6 @@ Feature: Declarative configuration
           name: Demo
           target_url: http://backend.test/mcp
           rate_limit: 30
-          allow: [octocat]
       """
     When the document is applied
     Then gateway "demo" exists with limit 30

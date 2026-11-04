@@ -35,8 +35,14 @@ Feature: More than one way in
   # The second issuer is not a login flow: the client already holds a token
   # from it. Accepting it means the gateway is the single resource server for
   # every provider the operator runs.
-  Scenario: A token from a second authorization server is admitted
+  #
+  # The token still names a person, and tenancy is what decides whether that
+  # person may use this gateway — so the account behind the token has to be in
+  # the owning tenant, exactly like an account that signed in through the
+  # gateway's own login.
+  Scenario: A token from a second authorization server names a member
     Given a gateway "demo" accepting tokens from a second authorization server
+    And the account "member@example.dev" belongs to the gateway's tenant
     When a caller presents a token issued by that authorization server
     Then the call is admitted
 
@@ -67,23 +73,23 @@ Feature: More than one way in
     When the operator enables API keys on it
     Then configuring it fails with "issue a key first"
 
-  # The allowlist names *people*: it is a second gate on an identity a provider
-  # vouched for. A key has no identity to vet — it is a credential the operator
-  # minted for this gateway on purpose — and its subject is derived from the key
-  # id, so requiring it in the list would break on the next rotation.
-  Scenario: An allowlisted gateway still admits its own key
+  # The allowlist names *people*: it used to be a second gate on an identity a
+  # provider vouched for. Now that gate is tenant membership, so a key — a
+  # credential the operator minted for this gateway on purpose — is compared
+  # against the owning account, and a key has no account to compare.
+  Scenario: A keyed gateway still admits its own key
     Given a gateway "demo" with oauth github auth proxying a real MCP server
-    And the principal "octocat" is allowed
+    And the account "octocat@example.dev" belongs to the gateway's tenant
     And an API key was issued for the gateway
     And the gateway also accepts API keys
     When a caller with the issued key lists the tools
     Then the backend tool "echo" is visible
 
-  Scenario: Rotating a key does not demand an allowlist edit
-    # Rotation mints a new key id, which is a new subject. If the allowlist
-    # applied to keys, every rotation would silently lock the caller out.
+  Scenario: Rotating a key does not demand a membership edit
+    # Rotation mints a new key id, which is a new subject. A gate keyed on the
+    # subject would silently lock the caller out on every rotation.
     Given a gateway "demo" with oauth github auth proxying a real MCP server
-    And the principal "octocat" is allowed
+    And the account "octocat@example.dev" belongs to the gateway's tenant
     And an API key was issued for the gateway
     And the gateway also accepts API keys
     When the operator rotates that key
@@ -96,6 +102,7 @@ Feature: More than one way in
   # narrower list can name the bot without touching the human's.
   Scenario: A credential source can have a narrower list than the gateway
     Given a gateway "demo" accepting tokens from a second authorization server
+    And the account "member@example.dev" belongs to the gateway's tenant
     And an API key was issued for the gateway
     And the gateway also accepts API keys
     When the operator allows only the tool "echo" for the source "api_key"
@@ -114,6 +121,7 @@ Feature: More than one way in
 
   Scenario: A source without a list inherits the gateway's
     Given a gateway "demo" accepting tokens from a second authorization server
+    And the account "member@example.dev" belongs to the gateway's tenant
     When the operator allows only the tool "echo"
     And a caller presents a token issued by that authorization server
     Then the listed tools are exactly "echo"
@@ -134,10 +142,10 @@ Feature: More than one way in
     When the operator allows only the tool "echo" for the source "corp"
     Then setting the allowlist fails with "unknown source"
 
-  Scenario: Keys do not widen the allowlist for people
+  Scenario: Keys do not widen the gate for people
     Given a gateway "demo" with oauth github auth
-    And the principal "octocat" is allowed
+    And the account "octocat@example.dev" belongs to the gateway's tenant
     And an API key was issued for the gateway
     And the gateway also accepts API keys
-    When the identity "stranger" is resolved against the gateway
+    When the identity "stranger@example.dev" is resolved against the gateway
     Then the identity is refused

@@ -29,23 +29,33 @@ Feature: Proxy authorisation
     When a caller with the issued key lists the tools
     Then the backend tool "echo" is visible
 
-  Scenario: An allowlisted principal passes
-    Given a gateway "demo" with oauth github auth
-    And the principal "octocat" is allowed
-    When the identity "octocat" is resolved against the gateway
-    Then the identity is accepted
-    And the resolved subject is "octocat"
+  # The gate used to be a per-gateway list of subjects where *empty* meant
+  # "anyone who authenticates" — a fail-open default behind a card that looked
+  # like a gate. Now it is belonging: the caller's account has to be in the
+  # tenant that owns the gateway. Same rule the panel already applies to
+  # managing it, so there is one answer to "who may use this", not two that
+  # drift.
 
-  Scenario: A principal outside the allowlist is forbidden, not challenged
+  Scenario: A member of the gateway's tenant passes
     Given a gateway "demo" with oauth github auth
-    And the principal "octocat" is allowed
-    When the identity "stranger" is resolved against the gateway
+    And the account "octocat@example.dev" belongs to the gateway's tenant
+    When the identity "octocat@example.dev" is resolved against the gateway
+    Then the identity is accepted
+    And the resolved subject is "octocat@example.dev"
+
+  Scenario: An authenticated identity from outside every tenant is forbidden
+    # Someone who signed up and joined nothing still gets a valid token. The
+    # tenant is what turns an identity into access, and an account without one
+    # reaches no gateway — including `rancher`, whose tools restart pods.
+    Given a gateway "demo" with oauth github auth
+    When the identity "stranger@example.dev" is resolved against the gateway
     Then the identity is refused
 
-  Scenario: An empty allowlist admits any authenticated principal
+  Scenario: A member of another tenant is forbidden
     Given a gateway "demo" with oauth github auth
-    When the identity "anyone" is resolved against the gateway
-    Then the identity is accepted
+    And the account "outsider@example.dev" belongs to another tenant
+    When the identity "outsider@example.dev" is resolved against the gateway
+    Then the identity is refused
 
   Scenario: A disabled gateway is not routed at all
     Given a gateway "demo" with api_key auth proxying a real MCP server

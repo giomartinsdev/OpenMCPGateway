@@ -4,7 +4,7 @@
       "id": "overview",
       "title": "O que é isto",
       "body": [
-        "OpenMCPGateway fica na frente de um ou mais servidores MCP. Os clientes apontam para `https://<host>/g/<slug>/mcp`; o gateway autentica quem chama, aplica uma allowlist e um orçamento por minuto, encaminha a requisição ao servidor real pela rede privada e registra o que aconteceu.",
+        "OpenMCPGateway fica na frente de um ou mais servidores MCP. Os clientes apontam para `https://<host>/g/<slug>/mcp`; o gateway autentica quem chama, aplica seu portão e um orçamento por minuto, encaminha a requisição ao servidor real pela rede privada e registra o que aconteceu.",
         "O upstream não precisa ser alcançável pela internet e não precisa saber quem é o chamador: o gateway encerra a identidade e encaminha sua própria credencial quando o upstream exige uma (`upstream_token`).",
         "O painel responde às mesmas perguntas na mesma forma: a tela de Traffic traz totais com a variação contra a janela anterior, um gráfico de volume e quebras por desfecho, gateway e chamador — e uma linha em qualquer tabela abre um drawer com o resto daquela linha em vez de navegar para fora da lista."
       ],
@@ -20,7 +20,7 @@
           ],
           [
             "Autorização",
-            "Allowlist opcional de subjects. Vazia significa qualquer chamador autenticado"
+            "Membros do tenant dono do gateway. Uma chave emitida aqui também serve."
           ],
           [
             "Rate limit",
@@ -102,10 +102,10 @@
       "body": [
         "**`none`** - sem autenticação. Aceitável em rede privada; o painel avisa enquanto qualquer gateway assim estiver habilitado.",
         "**`api_key`** - o chamador envia `Authorization: Bearer omg_...`. A chave é guardada como hash SHA-256 (é o que a autenticação compara) ao lado de uma cópia selada da plaintext, cifrada com o segredo da implantação. A resposta que a emite devolve a plaintext, e a página do gateway mostra um ícone de olho para chave que nunca foi lida: clicar decifra a cópia selada, mostra a chave uma vez e a apaga. Depois disso só resta o hash, e o único caminho de volta a uma chave legível é rotacioná-la. Uma chave pode ser emitida com validade. Depois dela a chave não autentica mais, e uma rotação herda o prazo da chave que substitui — o objetivo de rotacionar é trocar o segredo, não estender por quanto tempo ele é confiável.",
-        "**`oauth`** - o gateway é seu próprio resource server OAuth. Um cliente sem token recebe `401` com `WWW-Authenticate: Bearer resource_metadata=...`; ele descobre os documentos de metadados, registra-se e abre um navegador. O operador aprova uma vez, e o subject fica na allowlist a partir daí.",
+        "O operador aprova uma vez, e essa conta passa a ser membro a partir daí.",
         "O cliente não precisa de um token versionado em dotfile para o modo OAuth - essa é a ideia. Para o modo API-key precisa, e é por isso que a chave é por gateway e revogável isoladamente.",
-        "Um gateway também pode ter mais de uma forma de entrar. O modo `oauth` aceita chaves de API na mesma rota quando `allow_api_key` está ligado, e aceita tokens de emissores adicionais listados em `verifiers` - cada um com rótulo, emissor, audience opcional e URL do JWKS. Os emissores extras não têm fluxo de login próprio: o cliente já tem o token do seu provedor, e o gateway apenas confere assinatura, emissor e audience. Uma URL, uma allowlist, um limite, e nenhum segundo gateway por tipo de credencial.",
-        "A allowlist nomeia sujeitos que um provedor atestou. Ela não se aplica a chaves de API: o subject de uma chave embute o id da chave, então listá-la quebraria na próxima rotação. Uma chave entra quando o hash casa com uma chave viva deste gateway, e sai revogando a chave.",
+        "Um gateway também pode ter mais de uma forma de entrar. O modo `oauth` aceita chaves de API na mesma rota quando `allow_api_key` está ligado, e aceita tokens de emissores adicionais listados em `verifiers` - cada um com rótulo, emissor, audience opcional e URL do JWKS. Os emissores extras não têm fluxo de login próprio: o cliente já tem o token do seu provedor, e o gateway apenas confere assinatura, emissor e audience. Uma URL, um portão, um limite, e nenhum segundo gateway por tipo de credencial.",
+        "Quem pode chamar não é uma lista no gateway. Quem chama entra quando a conta pertence ao tenant dono do gateway - a mesma regra que o painel aplica para editá-lo, então \"quem pode usar\" tem uma resposta só, não duas que divergem. A associação é lida a cada requisição, então remover alguém ou desativar a conta fecha a porta do gateway na próxima chamada. Chaves de API são isentas porque a chave embute o próprio id em vez de nomear uma conta: uma chave entra enquanto o hash casar com uma chave viva aqui, e sai revogando a chave.",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
       ]
     },
@@ -330,7 +330,7 @@
           ],
           [
             "get_gateway",
-            "Um gateway: política, allowlist, chaves, estatísticas, chamadas recentes"
+            "Um gateway: política, chaves, estatísticas, chamadas recentes"
           ],
           [
             "search_requests",
@@ -376,7 +376,7 @@
           ],
           [
             "403 with a subject",
-            "O gateway tem uma allowlist e este subject não está nela"
+            "A conta do chamador não pertence ao tenant dono deste gateway"
           ],
           [
             "429",
