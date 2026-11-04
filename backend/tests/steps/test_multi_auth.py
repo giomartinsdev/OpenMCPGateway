@@ -134,16 +134,23 @@ def issued_key(container, runner, operator: str, gateway: dict) -> dict:
 def issued_key_step(issued_key: dict) -> dict:
     return issued_key
 
-@given(parsers.parse('the principal "{subject}" is allowed'))
-def allow_principal(container, runner, operator: str, gateway: dict,
-                    subject: str) -> None:
-    async def allow() -> None:
-        await container.commands.allow_principal(
-            gateway["id"], subject=subject, actor=operator
-        )
-        await container.refresh_router()
+@given(parsers.parse('the account "{email}" belongs to the gateway\'s tenant'))
+def account_in_gateway_tenant(container, runner, gateway: dict, email: str) -> None:
+    """The gate is tenancy now, so the account has to exist in that tenant.
 
-    runner.run(allow())
+    Registered through the command handler: the read model row is what the guard
+    looks up, and where it came from does not change the answer.
+    """
+
+    async def ensure() -> None:
+        if await container.store.fetch_operator_by_email(email):
+            return
+        await container.commands.register_operator(
+            email=email, password="correct-horse-battery",
+            tenant_id=gateway["tenant_id"],
+        )
+
+    runner.run(ensure())
 
 @given("the gateway also accepts API keys")
 def also_accepts_keys(container, runner, operator: str, gateway: dict,
@@ -242,7 +249,7 @@ def resolve_identity(container, runner, gateway: dict, subject: str) -> dict:
         )
         identity = Identity(subject=subject, source="github")
         return {"subject": subject,
-                "allowed": bool(endpoint._authorized(identity.subject))}
+                "allowed": bool(await endpoint._authorized(identity.subject))}
 
     return runner.run(check())
 
@@ -263,11 +270,14 @@ def token_from_unrelated_issuer(live_server: str, gateway: dict,
     identity, and a verifier that forgot `iss` would admit this."""
     return _probe_with(live_server, gateway, _mint(second_issuer, issuer="https://evil.example"))
 
-def _mint(idp: FakeGoogle, *, issuer: str | None = None) -> str:
+MEMBER_SUBJECT = "member@example.dev"
+
+def _mint(idp: FakeGoogle, *, issuer: str | None = None,
+          subject: str = MEMBER_SUBJECT) -> str:
     claims = {
         "iss": issuer or idp.issuer,
         "aud": idp.client_id,
-        "sub": "intruder@example.dev",
+        "sub": subject,
         "exp": int(time.time()) + 600,
         "iat": int(time.time()),
     }

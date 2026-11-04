@@ -4,7 +4,8 @@ Auth, authorisation, rate limiting and observability in front of any MCP server.
 
 Point an MCP client at the gateway instead of at the server. The gateway terminates
 OAuth (GitHub, Google, Microsoft, Discord, any OIDC provider) or verifies a bearer
-key, checks an allowlist, enforces a per-subject budget, and records every request.
+key, checks that the caller belongs to the gateway's tenant, enforces a per-subject
+budget, and records every request.
 A single gateway can do both at once, and can also accept tokens from further
 issuers it only verifies — so one URL covers browser logins, scripts with keys, and
 clients that already hold a token.
@@ -13,7 +14,7 @@ clients that already hold a token.
 MCP client ──▶ https://gateway.example.com/g/<slug>/mcp ──▶ your MCP server
                         │
                         ├─ 401 + RFC 9728 / 8414 discovery, when OAuth
-                        ├─ allowlist                403
+                        ├─ not in this tenant       403
                         ├─ requests per minute      429
                         └─ request log + stats      →  UI
 ```
@@ -235,7 +236,7 @@ above it. Two independent breakdowns cannot answer "which gateway is refusing
 everybody"; the pair can.
 
 A gateway's page puts what it exposes in one place: the endpoint, its rate limit
-and the tool allowlist, then the auth, the keys and the allowlisted subjects. The
+and the tool allowlist, then the auth, the keys and who may call. The tool
 allowlist is a grid of tiles with a search box — three tools and three hundred use
 the same component — each tile carrying its call count for the last week, so a
 tool nobody uses is visible before it becomes a decision nobody remembers. The
@@ -262,7 +263,7 @@ rows rather than derived from count/sum/max, because a mean cannot be
 un-aggregated and a percentile-shaped guess would be worse than none.
 
 A refused request says why. The guard stores the reason as an English sentence
-(`subject not in allowlist`, `tool not in allowlist`, `rate limit exceeded`,
+(`subject not in tenant`, `tool not in allowlist`, `rate limit exceeded`,
 `missing or invalid credential`, `upstream error`, `monthly quota exhausted`) so
 the log reads from `psql` too, and the drawer translates it on the way out. The
 outcome column says "forbidden"; the reason says which gate did it.
@@ -386,7 +387,7 @@ OAuth steps name endpoints the proxy itself serves.
 | Layer | Behaviour |
 | --- | --- |
 | Authentication | OAuth proxy per gateway, or bearer key hashed with SHA-256; one gateway may accept both, plus tokens from extra issuers it only verifies |
-| Authorisation | Optional allowlist of subjects; empty means "any authenticated caller" |
+| Authorisation | The caller's account must belong to the tenant that owns the gateway — the same rule the panel applies to editing one. Membership is read per request, so removing or disabling an account closes the door on its next call. API keys are exempt: a key embeds its own id instead of naming an account |
 | Tools | Optional allowlist of tool names per gateway; empty means "every tool the upstream serves". A list may be narrowed per credential source (`google`, `github`, a verifier label, `api_key`) |
 | Rate limit | Per subject, per gateway, counting JSON-RPC requests (handshakes are free) |
 | Observability | Every attempt logged with subject, outcome, status, latency, IP; counters at `GET /metrics` |

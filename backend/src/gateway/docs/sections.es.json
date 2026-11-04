@@ -4,7 +4,7 @@
       "id": "overview",
       "title": "Qué es esto",
       "body": [
-        "OpenMCPGateway se sitúa delante de uno o varios servidores MCP. Los clientes apuntan a `https://<host>/g/<slug>/mcp`; el gateway autentica al llamante, aplica una lista de permitidos y un presupuesto por minuto, reenvía la petición al servidor real por la red privada y registra lo que ha ocurrido.",
+        "OpenMCPGateway se sitúa delante de uno o varios servidores MCP. Los clientes apuntan a `https://<host>/g/<slug>/mcp`; el gateway autentica al llamante, aplica su puerta y un presupuesto por minuto, reenvía la petición al servidor real por la red privada y registra lo que ha ocurrido.",
         "El upstream no necesita ser accesible desde internet, y no necesita saber quién es el llamante: el gateway termina la identidad y reenvía su propia credencial cuando el upstream exige una (`upstream_token`).",
         "El panel responde las mismas preguntas con la misma forma: la pantalla Traffic lleva totales con la variación respecto a la ventana anterior, un gráfico de volumen y desgloses por resultado, gateway y llamante — y una fila de cualquier tabla abre un cajón con el resto de esa fila en lugar de navegar fuera de la lista."
       ],
@@ -20,7 +20,7 @@
           ],
           [
             "Autorización",
-            "Lista de permitidos opcional de sujetos. Vacía significa cualquier llamante autenticado"
+            "Miembros del tenant dueño del gateway. Una clave emitida aquí también sirve."
           ],
           [
             "Límite de tasa",
@@ -102,10 +102,10 @@
       "body": [
         "**`none`** - sin autenticación. Correcto en una red privada; el panel avisa mientras haya habilitado un gateway así.",
         "**`api_key`** - el llamador envía `Authorization: Bearer omg_...`. La clave se guarda como hash SHA-256 (eso es lo que compara la autenticación) junto a una copia sellada del texto plano, cifrada con el secreto del despliegue. La respuesta que la emite devuelve el texto plano, y la página del gateway muestra un icono de ojo para una clave que nunca se leyó: al pulsarlo se descifra la copia sellada, se muestra la clave una vez y se borra. Después de eso solo queda el hash, y el único camino de vuelta a una clave legible es rotarla. Una clave puede emitirse con caducidad. Pasada esa fecha la clave ya no autentica, y una rotación hereda el plazo de la clave que sustituye: rotar cambia el secreto, no cuánto tiempo se confía en él.",
-        "**`oauth`** - el gateway es su propio servidor de recursos OAuth. Un cliente sin token recibe un `401` con `WWW-Authenticate: Bearer resource_metadata=...`; descubre los documentos de metadatos, se registra y abre un navegador. El operador aprueba una vez, y el sujeto queda en la lista de permitidos a partir de entonces.",
+        "El operador aprueba una vez, y esa cuenta pasa a ser miembro desde entonces.",
         "El cliente no necesita un token metido en un dotfile para el modo OAuth — de eso se trata. Para el modo API-key sí lo necesita, y por eso la clave es por gateway y revocable por sí sola.",
-        "Un gateway también puede tener más de una forma de entrar. El modo `oauth` acepta claves de API en la misma ruta cuando `allow_api_key` está activo, y acepta tokens de emisores adicionales listados en `verifiers` - cada uno con etiqueta, emisor, audience opcional y URL del JWKS. Los emisores extra no tienen flujo de inicio de sesión propio: el cliente ya tiene el token de su proveedor y el gateway solo comprueba firma, emisor y audience. Una URL, una lista de permitidos, un límite, y ningún segundo gateway por tipo de credencial.",
-        "La allowlist nombra sujetos que un proveedor avaló. No se aplica a las claves de API: el sujeto de una clave incluye su id, así que listarla se rompería en la próxima rotación. Una clave entra cuando su hash coincide con una clave viva de este gateway, y se revoca revocando la clave.",
+        "Un gateway también puede tener más de una forma de entrar. El modo `oauth` acepta claves de API en la misma ruta cuando `allow_api_key` está activo, y acepta tokens de emisores adicionales listados en `verifiers` - cada uno con etiqueta, emisor, audience opcional y URL del JWKS. Los emisores extra no tienen flujo de inicio de sesión propio: el cliente ya tiene el token de su proveedor y el gateway solo comprueba firma, emisor y audience. Una URL, una puerta, un límite, y ningún segundo gateway por tipo de credencial.",
+        "Quién puede llamar no es una lista en el gateway. El llamante entra cuando su cuenta pertenece al tenant dueño del gateway — la misma regla que el panel aplica para editarlo, así que \"quién puede usarlo\" tiene una sola respuesta en vez de dos que se separan. La pertenencia se lee en cada petición, así que quitar a alguien o desactivar su cuenta cierra la puerta del gateway en su siguiente llamada. Las claves de API están exentas porque la clave incluye su propio id en lugar de nombrar una cuenta: una clave entra mientras su hash coincida con una clave viva aquí, y se revoca revocando la clave.",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
       ]
     },
@@ -330,7 +330,7 @@
           ],
           [
             "get_gateway",
-            "Un gateway: política, lista de permitidos, claves, estadísticas, llamadas recientes"
+            "Un gateway: política, claves, estadísticas, llamadas recientes"
           ],
           [
             "search_requests",
@@ -376,7 +376,7 @@
           ],
           [
             "403 con un sujeto",
-            "El gateway tiene lista de permitidos y este sujeto no está en ella"
+            "La cuenta del llamante no pertenece al tenant dueño de este gateway"
           ],
           [
             "429",

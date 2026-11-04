@@ -4,7 +4,7 @@
       "id": "overview",
       "title": "What this is",
       "body": [
-        "OpenMCPGateway sits in front of one or more MCP servers. Clients point at `https://<host>/g/<slug>/mcp`; the gateway authenticates the caller, applies an allowlist and a per-minute budget, forwards the request to the real server over the private network, and records what happened.",
+        "OpenMCPGateway sits in front of one or more MCP servers. Clients point at `https://<host>/g/<slug>/mcp`; the gateway authenticates the caller, applies its gate and a per-minute budget, forwards the request to the real server over the private network, and records what happened.",
         "The upstream does not need to be reachable from the internet, and it does not need to know who the caller is: the gateway terminates identity and forwards its own credential when the upstream demands one (`upstream_token`).",
         "The panel answers the same questions in the same shape: the Traffic screen carries totals with the change against the previous window, a volume chart, and breakdowns by outcome, gateway and caller — and a row in any table opens a drawer with the rest of that row instead of navigating away from the list."
       ],
@@ -20,7 +20,7 @@
           ],
           [
             "Authorisation",
-            "Optional allowlist of subjects. Empty means any authenticated caller"
+            "Members of the tenant that owns the gateway. A key issued here works too."
           ],
           [
             "Rate limit",
@@ -102,10 +102,10 @@
       "body": [
         "**`none`** - no authentication. Fine on a private network; the panel warns while any such gateway is enabled.",
         "**`api_key`** - the caller sends `Authorization: Bearer omg_...`. The key is stored as a SHA-256 hash (that is what authentication compares) next to a sealed copy of the plaintext, encrypted with the deployment secret. The response that mints it returns the plaintext, and the gateway's page carries an eye icon for a key that has never been read: clicking it decrypts the sealed copy, shows the key once, and wipes it. After that the hash is all that remains, and the only way back to a readable key is rotating it. A key can be issued with an expiry. Past it the key no longer authenticates, and a rotation inherits the deadline of the key it replaces — the point of rotating is to change the secret, not to extend how long it is trusted.",
-        "**`oauth`** - the gateway is its own OAuth resource server. A client with no token gets a `401` with `WWW-Authenticate: Bearer resource_metadata=...`; it discovers the metadata documents, registers itself, and opens a browser. The operator approves once, and the subject is allowlisted from then on.",
+        "The operator approves once, and that account is a member from then on.",
         "The client does not need a token checked into a dotfile for OAuth mode - that is the point. For API-key mode it does, which is why the key is per gateway and revocable on its own.",
-        "A gateway can also have more than one way in. `oauth` mode accepts API keys on the same route when `allow_api_key` is set, and accepts tokens from additional issuers listed under `verifiers` - each with a label, issuer, optional audience and JWKS URL. The extra issuers have no login flow of their own: the client already holds a token from its provider, and the gateway only verifies the signature, the issuer and the audience. One URL, one allowlist, one rate limit, and no second gateway per credential type.",
-        "The allowlist names subjects a provider vouched for. It does not apply to API keys: a key's subject embeds its key id, so listing one would break on the next rotation. A key is admitted once its hash matches a live key on this gateway, and it is revoked by revoking the key.",
+        "A gateway can also have more than one way in. `oauth` mode accepts API keys on the same route when `allow_api_key` is set, and accepts tokens from additional issuers listed under `verifiers` - each with a label, issuer, optional audience and JWKS URL. The extra issuers have no login flow of their own: the client already holds a token from its provider, and the gateway only verifies the signature, the issuer and the audience. One URL, one gate, one rate limit, and no second gateway per credential type.",
+        "Who may call is not a list on the gateway. A caller is admitted when their account belongs to the tenant that owns it - the same rule the panel applies to editing one, so 'who may use this' has one answer instead of two that drift. Membership is read per request, so removing someone or disabling their account closes the gateway door on their next call. API keys are exempt because a key embeds its own id rather than naming an account: a key is admitted while its hash matches a live key here, and revoked by revoking the key.",
         "```bash\n# API-key call\ncurl -sS https://gateway.example.com/g/rancher/mcp \\\n  -H 'Authorization: Bearer omg_...' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: application/json, text/event-stream' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"0\"}}}'\n```"
       ]
     },
@@ -330,7 +330,7 @@
           ],
           [
             "get_gateway",
-            "One gateway: policy, allowlist, keys, stats, recent calls"
+            "One gateway: policy, keys, stats, recent calls"
           ],
           [
             "search_requests",
@@ -376,7 +376,7 @@
           ],
           [
             "403 with a subject",
-            "The gateway has an allowlist and this subject is not on it"
+            "The caller's account does not belong to the tenant that owns this gateway"
           ],
           [
             "429",

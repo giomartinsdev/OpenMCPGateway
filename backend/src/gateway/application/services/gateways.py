@@ -49,7 +49,6 @@ async def detail(container: Container, caller: Caller,
     gateway = await owned(container, caller, gateway_id)
     result = public(container, gateway)
     result["pending"] = container.router.pending.get(gateway["slug"])
-    result["principals"] = await container.read_models.principals(gateway_id)
     result["api_keys"] = await container.read_models.api_keys(gateway_id)
     result["requests"] = await container.read_models.request_tail(
         gateway_id, 50, tenant_id=gateway["tenant_id"]

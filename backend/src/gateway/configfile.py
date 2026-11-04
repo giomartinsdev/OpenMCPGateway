@@ -20,7 +20,6 @@ from the file is left alone (a typo in the file must not delete production); set
           # Only when the upstream server has its own token (e.g. rancher-mcp).
           upstream_token: ${RANCHER_MCP_TOKEN}
         rate_limit: 120
-        allow: [giomartinsdev, "*"]
         api_keys:
           - label: ci
 """
@@ -93,7 +92,6 @@ class GatewaySpec(BaseModel):
     # Bearer the upstream MCP server demands; write-only, like client_secret.
     upstream_token: str | None = None
     rate_limit: int = 0
-    allow: tuple[str, ...] = ()
     api_keys: tuple[str, ...] = ()
     enabled: bool = True
 
@@ -248,7 +246,6 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
         verifiers=verifiers,
         upstream_token=auth.get("upstream_token"),
         rate_limit=int(entry.get("rate_limit") or 0),
-        allow=tuple(str(subject) for subject in (entry.get("allow") or ())),
         api_keys=tuple(str(label) for label in (entry.get("api_keys") or ())),
         enabled=bool(entry.get("enabled", True)),
     )
@@ -400,10 +397,6 @@ async def apply_document(document: ConfigDocument, commands: Any,
                         upstream_token=spec.upstream_token,
                         actor=actor,
                     )
-                for subject in spec.allow:
-                    await commands.allow_principal(
-                        gateway_id, subject=subject, actor=actor
-                    )
                 if spec.rate_limit:
                     await commands.set_rate_limit(
                         gateway_id, requests_per_minute=spec.rate_limit, actor=actor
@@ -449,20 +442,6 @@ async def apply_document(document: ConfigDocument, commands: Any,
                         current["id"], requests_per_minute=spec.rate_limit, actor=actor
                     )
                     changed.append("rate_limit")
-
-                current_subjects = {
-                    p["subject"] for p in await read_models.principals(current["id"])
-                }
-                for subject in set(spec.allow) - current_subjects:
-                    await commands.allow_principal(
-                        current["id"], subject=subject, actor=actor
-                    )
-                    changed.append(f"allow:{subject}")
-                for subject in current_subjects - set(spec.allow):
-                    await commands.revoke_principal(
-                        current["id"], subject=subject, actor=actor
-                    )
-                    changed.append(f"revoke:{subject}")
 
                 if changed:
                     updated.append(spec.slug)

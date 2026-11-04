@@ -386,20 +386,6 @@ class CommandHandler:
         events = gateway.decide_set_rate_limit(requests_per_minute=requests_per_minute)
         return await self._commit(gateway_id, events, gateway.version, actor=actor)
 
-    async def allow_principal(
-        self, gateway_id: str, *, subject: str, note: str = "", actor: str = "system"
-    ) -> list[Event]:
-        gateway = await self._load_gateway(gateway_id)
-        events = gateway.decide_allow(subject=subject, note=note)
-        return await self._commit(gateway_id, events, gateway.version, actor=actor)
-
-    async def revoke_principal(
-        self, gateway_id: str, *, subject: str, actor: str = "system"
-    ) -> list[Event]:
-        gateway = await self._load_gateway(gateway_id)
-        events = gateway.decide_revoke(subject=subject)
-        return await self._commit(gateway_id, events, gateway.version, actor=actor)
-
     async def disable_gateway(
         self, gateway_id: str, *, reason: str = "", actor: str = "system"
     ) -> list[Event]:

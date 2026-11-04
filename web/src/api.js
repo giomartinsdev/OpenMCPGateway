@@ -84,11 +84,6 @@ export const api = {
   enable: (id) => call("POST", `/gateways/${id}/enable`),
   disable: (id) => call("POST", `/gateways/${id}/disable`),
 
-  addPrincipal: (id, subject, note = "") =>
-    call("POST", `/gateways/${id}/principals`, { subject, note }),
-  removePrincipal: (id, subject) =>
-    call("DELETE", `/gateways/${id}/principals/${encodeURIComponent(subject)}`),
-
   // `expires_in_days` is optional; omitting it means the key never expires, which
   // is what every key issued before this field existed already is.
   issueKey: (id, label, expiresInDays = null) =>

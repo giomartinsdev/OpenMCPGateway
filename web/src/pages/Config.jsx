@@ -194,7 +194,7 @@ export function ConfigPage({ me }) {
         <Card title={t("What the file can declare")}>
           <p className="hint" style={{ margin: 0 }}>
             <span className="mono">gateways</span>{" "}
-            {t("— slug, target, auth, limits, allowlist and API keys.")}
+            {t("— slug, target, auth, limits and API keys.")}
             <br />
             <span className="mono">roles</span>{" "}
             {t("— a name and a permission list. Built-ins ({owner}, {viewer}) can be named but not redefined.", {

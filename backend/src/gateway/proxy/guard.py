@@ -16,6 +16,7 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from gateway.domain.events import AuthMode
 from gateway.log import log
 from gateway.observability import Metrics, RequestRecorder
 from gateway.proxy.identity import GatewayAuth, Identity, is_key_subject
@@ -97,9 +98,9 @@ class GuardMiddleware:
                 outcome, status = "unauthenticated", 401
                 reason = "missing or invalid credential"
                 response = self._unauthorized()
-            elif not self._authorized(identity.subject):
+            elif not await self._authorized(identity.subject):
                 outcome, status = "forbidden", 403
-                reason = "subject not in allowlist"
+                reason = "subject not in tenant"
                 response = JSONResponse(
                     {
                         "error": "forbidden",
@@ -258,16 +259,36 @@ class GuardMiddleware:
             return "rate_limited", 429, "monthly quota exhausted"
         return None
 
-    def _authorized(self, subject: str) -> bool:
-        allowed: list[str] = self.config.get("allowed_subjects") or []
-        if not allowed or subject in allowed or "*" in allowed:
+    async def _authorized(self, subject: str) -> bool:
+        """True when the caller's account belongs to the tenant that owns the
+        gateway.
+
+        The gate used to be a per-gateway list of subjects, where *empty* meant
+        "anyone who authenticates" — a fail-open default behind a card shaped
+        like a gate, and the only thing standing between a self-registered
+        stranger and `rancher`'s restart-pod tools. Belonging is already the
+        rule the panel applies to managing a gateway, so there is one answer to
+        "who may use this", not two that can drift.
+
+        Read fresh per request: membership changes and a disabled account take
+        effect on the next call, not on the next restart.
+        """
+        if self.config.get("auth_mode") == AuthMode.NONE.value:
             return True
-        # A key is a credential the operator minted for *this* gateway, and its
-        # subject is derived from the key id. Listing it would make every
-        # rotation a silent lockout, so the allowlist — a gate on identities a
-        # provider vouched for — does not apply. `resolve` only produces this
-        # subject after the hash matched a live key.
-        return is_key_subject(subject)
+        # A key is a credential the operator minted for *this* gateway; its
+        # subject embeds the key id, so it identifies no account to look up.
+        # Comparing it against membership would make every rotation a silent
+        # lockout.
+        if is_key_subject(subject):
+            return True
+        if self.read_models is None:
+            # Fail closed: a guard that cannot answer "whose tenant" must not
+            # guess "yes".
+            return False
+        return (
+            await self.read_models.tenant_for_subject(subject)
+            == self.config.get("tenant_id")
+        )
 
     def _blocked_tool(self, body: bytes, source: str) -> str | None:
         """The tool name this request asks for that the gateway does not expose.

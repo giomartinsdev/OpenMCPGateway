@@ -148,15 +148,8 @@ class GatewayRouter(BaseModel):
             for gateway in gateways:
                 if gateway["deleted"] or not gateway["enabled"]:
                     continue
-                principals = await self.read_models.principals(gateway["id"])
                 desired[gateway["slug"]] = (
-                    # The allowlist participates in the signature: without it, an
-                    # allow/revoke command would leave the old guard in place and
-                    # the change would only take effect after a restart.
-                    {
-                        **gateway,
-                        "allowed_subjects": [p["subject"] for p in principals],
-                    },
+                    gateway,
                     await self._credentials(gateway["id"]),
                 )
 
@@ -400,7 +393,6 @@ def _signature(gateway: dict[str, Any], credentials: dict[str, str]) -> str:
         # In the signature so a quota change reaches the live guard: the quota
         # itself is a config value, while the month's count is read per request.
         repr(gateway.get("monthly_quota")),
-        ",".join(sorted(gateway.get("allowed_subjects") or [])),
         ",".join(gateway.get("tools") or []),
         # Per-source scopes are route-relevant for the same reason the gateway
         # list is: the guard and the listing resolve them per request.

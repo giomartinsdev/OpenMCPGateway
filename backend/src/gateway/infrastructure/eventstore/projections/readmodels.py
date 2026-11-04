@@ -684,6 +684,28 @@ class ReadModels:
             ).first()
         return row[0] if row else None
 
+    async def tenant_for_subject(self, subject: str) -> str | None:
+        """The tenant the account behind an authenticated `subject` belongs to.
+
+        `subject` is the identity a provider vouched for — the gateway's own
+        login puts the session's e-mail there, an extra issuer puts whatever
+        claim `GatewayAuth` prefers. Matching on e-mail is deliberate: it is the
+        stable, readable join key the panel already stores, and it is the only
+        one the events carry (the provider's `sub` is never recorded).
+
+        `disabled` accounts answer None, so offboarding closes the gateway door
+        at the same moment it closes the panel's: the read model is what both
+        paths consult, and a check that lived in only one of them would let a
+        disabled account keep restarting pods with a token minted earlier.
+        """
+        async with self._db.session() as session:
+            return await session.scalar(
+                select(rm_operators.c.tenant_id).where(
+                    (func.lower(rm_operators.c.email) == subject.strip().lower())
+                    & rm_operators.c.disabled.is_(False)
+                )
+            )
+
     async def operator_state(self, operator_id: str) -> tuple[str, ...] | None:
         """Roles plus the disabled flag, in one read.
 

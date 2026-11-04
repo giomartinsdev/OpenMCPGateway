@@ -11,7 +11,7 @@ from typing import Any
 from gateway.domain.permissions import BUILTIN_ROLES
 
 
-def render_gateway(gateway: dict[str, Any], principals: list[dict[str, Any]],
+def render_gateway(gateway: dict[str, Any],
                    keys: list[dict[str, Any]]) -> str:
     lines = [
         f"  - slug: {gateway['slug']}",
@@ -47,9 +47,6 @@ def render_gateway(gateway: dict[str, Any], principals: list[dict[str, Any]],
                 lines.append(f"          jwks_uri: {verifier['jwks_uri']}")
     if gateway.get("requests_per_minute"):
         lines.append(f"    rate_limit: {gateway['requests_per_minute']}")
-    if principals:
-        subjects = ", ".join(repr(p["subject"]) for p in principals)
-        lines.append(f"    allow: [{subjects}]")
     if keys:
         labels = ", ".join(f"{k['label']!r}" for k in keys)
         lines.append(f"    api_keys: [{labels}]")
@@ -69,9 +66,8 @@ async def render_document(read_models: Any, tenant_id: str) -> str:
 
     entries: list[str] = []
     for gateway in await read_models.list_gateways(tenant_id):
-        principals = await read_models.principals(gateway["id"])
         keys = await read_models.api_keys(gateway["id"])
-        entries.append(render_gateway(gateway, principals, keys))
+        entries.append(render_gateway(gateway, keys))
     parts.append("gateways:\n" + "\n".join(entries) if entries else "gateways: []")
 
     # `list_roles` already drops deleted rows; one query feeds both sections.

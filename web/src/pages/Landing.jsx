@@ -14,7 +14,7 @@ const FEATURES = [
   {
     icon: "403",
     title: "Identity you already have",
-    body: "GitHub, Google, Microsoft, Discord or any OIDC provider, plus an optional subject allowlist as a second gate.",
+    body: "GitHub, Google, Microsoft, Discord or any OIDC provider. Who may call is decided by the tenant that owns the gateway.",
   },
   {
     icon: "429",

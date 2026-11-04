@@ -24,7 +24,6 @@ const SAMPLE = {
   enabled: true,
   requests_per_minute: 120,
   client_id: "…apps.googleusercontent.com",
-  principals: [{ subject: "someone@example.com", added_at: new Date().toISOString() }],
   api_keys: [
     {
       key_id: "key_0000",
@@ -309,14 +308,16 @@ export function GatewayDetail({ id, me }) {
                 <AuthBadge gateway={gateway} t={t} />
               </div>
               <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Allowlist")}</div>
-                <Badge kind={gateway.principals.length ? "ok" : "mute"}>
-                  {gateway.principals.length
-                    ? t("{count} principals", { count: gateway.principals.length })
-                    : t("any authenticated subject")}
-                </Badge>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Who may call this")}</div>
+                <Badge kind="ok">{t("Members of this tenant")}</Badge>
               </div>
             </div>
+            {/* The rule, said once, where the operator looks for it. It used to
+                be a table of subjects with a note explaining that an empty table
+                meant everyone — a gate whose default was open. */}
+            <p className="hint" style={{ margin: "0 0 14px" }}>
+              {t("Any member of this tenant may call this gateway. To revoke someone's access, remove them from the tenant, not from here.")}
+            </p>
             {canEdit ? (
               <AuthForm gateway={gateway} onSaved={(msg) => { setBanner(msg); load(); }} />
             ) : (
@@ -336,59 +337,6 @@ export function GatewayDetail({ id, me }) {
       </Card>
 
       <div className="grid-2">
-        <Card
-          title={t("Allowed subjects")}
-          actions={gateway && canEdit && (
-            <button
-              className="sm"
-              onClick={() => {
-                const subject = window.prompt(t("Subject to allow (e.g. octocat):"));
-                if (!subject) return;
-                api.addPrincipal(id, subject).then(load).catch((e) => setError(e.message));
-              }}
-            >
-              {t("Add")}
-            </button>
-          )}
-        >
-          {/* The rule, once, in the card that owns the list. It used to sit in
-              the Auth card, an explanation of a table two cards further down. */}
-          {gateway && (
-            <p className="hint" style={{ margin: "0 0 12px" }}>
-              {t("An allowlist is a second gate: a valid token still has to belong to a listed subject. Empty means \"anyone who authenticates\".")}
-            </p>
-          )}
-          {header.principals.length === 0 ? (
-            gateway ? (
-              <Empty title={t("No allowlist")} />
-            ) : (
-              <Bone height={60} radius={10} />
-            )
-          ) : (
-            <table>
-              <tbody>
-                {header.principals.map((principal) => (
-                  <tr key={principal.subject}>
-                    <td className="mono">{principal.subject}</td>
-                    <td className="num hint">{relative(principal.added_at)}</td>
-                    {canEdit && (
-                      <td className="actions">
-                        <button
-                          className="ghost sm"
-                          onClick={() => api.removePrincipal(id, principal.subject).then(load)}
-                          disabled={!gateway}
-                        >
-                          {t("remove")}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
-
         <Card
           title={t("API keys")}
           actions={gateway && canKeys && (
