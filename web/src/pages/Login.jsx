@@ -99,7 +99,7 @@ export function AuthCard({ onLogin }) {
           required
         />
         {mode === "register" && (
-          <div className="hint" style={{ marginTop: 5 }}>
+          <div className="hint" style={{ marginTop: 4 }}>
             {t("At least 12 characters.")}
           </div>
         )}

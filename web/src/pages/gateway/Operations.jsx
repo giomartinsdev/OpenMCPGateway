@@ -284,7 +284,7 @@ export function WebhooksPanel({ gateway }) {
         </table>
       )}
 
-      <form onSubmit={add} style={{ marginTop: 14 }}>
+      <form onSubmit={add} style={{ marginTop: 12 }}>
         <div className="field-row">
           <div className="field">
             <label htmlFor="hook-url">{t("URL")}</label>

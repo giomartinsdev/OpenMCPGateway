@@ -204,7 +204,7 @@ export function ToolsPanel({ gateway, me, onSaved }) {
       {catalog && !catalog.available && (
         <Notice kind="warn">
           {t("Could not read the upstream's catalog, so the list is the one already configured. New tools are allowed by default until you set a list.")}
-          <div className="hint" style={{ marginTop: 6 }}>{catalog.reason}</div>
+          <div className="hint" style={{ marginTop: 4 }}>{catalog.reason}</div>
         </Notice>
       )}
 

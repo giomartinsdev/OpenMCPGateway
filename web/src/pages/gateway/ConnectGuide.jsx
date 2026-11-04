@@ -77,7 +77,7 @@ export function ConnectGuide({ gateway }) {
         <span className="chevron" aria-hidden="true" />
       </summary>
       <div className="accordion-body">
-        <div className="row" style={{ marginBottom: 14 }}>
+        <div className="row" style={{ marginBottom: 12 }}>
           <div className="seg">
             {["curl", "python"].map((name) => (
               <button
@@ -92,7 +92,7 @@ export function ConnectGuide({ gateway }) {
         </div>
         {error ? <Notice kind="err">{error}</Notice> : null}
         {!guide && !error ? (
-          <div style={{ display: "grid", gap: 18 }}>
+          <div style={{ display: "grid", gap: 16 }}>
             {[0, 1, 2].map((i) => (
               <div key={i} style={{ display: "grid", gap: 8 }}>
                 <Bone height={12} width={i === 2 ? "28%" : "44%"} />

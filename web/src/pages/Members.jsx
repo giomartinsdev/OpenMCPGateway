@@ -126,7 +126,7 @@ export function Members({ me }) {
       <Notice kind="ok">{banner?.kind === "ok" ? banner.text : ""}</Notice>
 
       <Card title={t("Join code")}>
-        <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
+        <p className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
           {t("Anyone with this code can join {tenant} as a viewer. Share it with the people who should see these gateways.", {
             tenant: tenant?.name ?? t("this tenant"),
           })}

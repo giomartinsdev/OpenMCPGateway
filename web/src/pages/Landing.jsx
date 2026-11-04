@@ -124,7 +124,7 @@ export function Landing({ onLogin }) {
             <i />
             <i />
             <i />
-            <span style={{ marginLeft: 6 }}>gateway</span>
+            <span style={{ marginLeft: 4 }}>gateway</span>
           </div>
           <pre>
             {LOG.map((line, i) => (

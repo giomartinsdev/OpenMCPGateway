@@ -302,20 +302,20 @@ export function GatewayDetail({ id, me }) {
       <Card title={t("Auth")}>
         {gateway ? (
           <>
-            <div className="row" style={{ gap: 24, marginBottom: 14 }}>
+            <div className="row" style={{ gap: 24, marginBottom: 12 }}>
               <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Mode")}</div>
+                <div className="eyebrow" style={{ marginBottom: 4 }}>{t("Mode")}</div>
                 <AuthBadge gateway={gateway} t={t} />
               </div>
               <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>{t("Who may call this")}</div>
+                <div className="eyebrow" style={{ marginBottom: 4 }}>{t("Who may call this")}</div>
                 <Badge kind="ok">{t("Members of this tenant")}</Badge>
               </div>
             </div>
             {/* The rule, said once, where the operator looks for it. It used to
                 be a table of subjects with a note explaining that an empty table
                 meant everyone — a gate whose default was open. */}
-            <p className="hint" style={{ margin: "0 0 14px" }}>
+            <p className="hint" style={{ margin: "0 0 12px" }}>
               {t("Any member of this tenant may call this gateway. To revoke someone's access, remove them from the tenant, not from here.")}
             </p>
             {canEdit ? (
@@ -327,7 +327,7 @@ export function GatewayDetail({ id, me }) {
             )}
           </>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gap: 8 }}>
             <Bone height={22} width={260} />
             <Bone height={34} />
             <Bone height={34} width="60%" />
@@ -335,203 +335,201 @@ export function GatewayDetail({ id, me }) {
         )}
       </Card>
 
-      <div className="grid-2">
-        <Card
-          title={t("API keys")}
-          actions={gateway && canKeys && (
-            <div className="row" style={{ gap: 8 }}>
-              {/* Default "never": making every new key expire on a guess would
-                  break an integration nobody thought about. The point is that
-                  the choice is visible at mint time, not after a year of drift. */}
-              <select
-                aria-label={t("Expires in")}
-                value={keyDays}
-                onChange={(event) => setKeyDays(event.target.value)}
-                style={{ height: 26, fontSize: "var(--t-label)" }}
-              >
-                <option value="">{t("never expires")}</option>
-                <option value="30">{t("in 30 days")}</option>
-                <option value="90">{t("in 90 days")}</option>
-                <option value="365">{t("in 365 days")}</option>
-              </select>
-              <button
-                className="sm"
-                onClick={() => {
-                  api.issueKey(id, "default", keyDays ? Number(keyDays) : null)
-                    .then((issued) => {
-                      setNewKey(issued.api_key);
-                      load();
-                    })
-                    .catch((e) => setError(e.message));
-                }}
-              >
-                {t("Issue key")}
+      <Card
+        title={t("API keys")}
+        actions={gateway && canKeys && (
+          <div className="row" style={{ gap: 8 }}>
+            {/* Default "never": making every new key expire on a guess would
+                break an integration nobody thought about. The point is that
+                the choice is visible at mint time, not after a year of drift. */}
+            <select
+              aria-label={t("Expires in")}
+              value={keyDays}
+              onChange={(event) => setKeyDays(event.target.value)}
+              style={{ height: 26, fontSize: "var(--t-label)" }}
+            >
+              <option value="">{t("never expires")}</option>
+              <option value="30">{t("in 30 days")}</option>
+              <option value="90">{t("in 90 days")}</option>
+              <option value="365">{t("in 365 days")}</option>
+            </select>
+            <button
+              className="sm"
+              onClick={() => {
+                api.issueKey(id, "default", keyDays ? Number(keyDays) : null)
+                  .then((issued) => {
+                    setNewKey(issued.api_key);
+                    load();
+                  })
+                  .catch((e) => setError(e.message));
+              }}
+            >
+              {t("Issue key")}
+            </button>
+          </div>
+        )}
+      >
+        {/* Two moments produce a plaintext: minting one, and using the eye on a
+            key that was never read. Both land here, next to the table they
+            belong to, because a banner at the top of a long page is a secret
+            people scroll past. */}
+        {shownKey && (
+          <div className="secret" style={{ marginBottom: 12 }}>
+            <div className="spread" style={{ marginBottom: 6 }}>
+              <strong>{t("Last chance: this key cannot be shown again.")}</strong>
+              <button className="ghost sm" onClick={() => setShownKey("")}>
+                {t("dismiss")}
               </button>
             </div>
-          )}
-        >
-          {/* Two moments produce a plaintext: minting one, and using the eye on a
-              key that was never read. Both land here, next to the table they
-              belong to, because a banner at the top of a long page is a secret
-              people scroll past. */}
-          {shownKey && (
-            <div className="secret" style={{ marginBottom: 12 }}>
-              <div className="spread" style={{ marginBottom: 6 }}>
-                <strong>{t("Last chance: this key cannot be shown again.")}</strong>
-                <button className="ghost sm" onClick={() => setShownKey("")}>
-                  {t("dismiss")}
-                </button>
-              </div>
-              <div className="row">
-                <span className="mono" style={{ wordBreak: "break-all" }}>{shownKey}</span>
-                <button
-                  className="ghost copy"
-                  onClick={() => navigator.clipboard?.writeText(shownKey)}
-                >
-                  {t("copy")}
-                </button>
-              </div>
+            <div className="row">
+              <span className="mono" style={{ wordBreak: "break-all" }}>{shownKey}</span>
+              <button
+                className="ghost copy"
+                onClick={() => navigator.clipboard?.writeText(shownKey)}
+              >
+                {t("copy")}
+              </button>
             </div>
-          )}
-          {newKey && (
-            <div className="secret" style={{ marginBottom: 12 }}>
-              <div className="spread" style={{ marginBottom: 6 }}>
-                <strong>
-                  {t("Copy this key now. You can read it once more from this page, then it is gone.")}
-                </strong>
-                <button className="ghost sm" onClick={() => setNewKey(null)}>
-                  {t("dismiss")}
-                </button>
-              </div>
-              <div className="row">
-                <span className="mono" style={{ wordBreak: "break-all" }}>{newKey}</span>
-                <button
-                  className="ghost copy"
-                  onClick={() => navigator.clipboard?.writeText(newKey)}
-                >
-                  {t("copy")}
-                </button>
-              </div>
+          </div>
+        )}
+        {newKey && (
+          <div className="secret" style={{ marginBottom: 12 }}>
+            <div className="spread" style={{ marginBottom: 6 }}>
+              <strong>
+                {t("Copy this key now. You can read it once more from this page, then it is gone.")}
+              </strong>
+              <button className="ghost sm" onClick={() => setNewKey(null)}>
+                {t("dismiss")}
+              </button>
             </div>
-          )}
-          {header.api_keys.length === 0 ? (
-            gateway ? (
-              <Empty title={t("No keys")}>
-                {t("Issue one to authenticate with a bearer token.")}
-              </Empty>
-            ) : (
-              <Bone height={60} radius={10} />
-            )
+            <div className="row">
+              <span className="mono" style={{ wordBreak: "break-all" }}>{newKey}</span>
+              <button
+                className="ghost copy"
+                onClick={() => navigator.clipboard?.writeText(newKey)}
+              >
+                {t("copy")}
+              </button>
+            </div>
+          </div>
+        )}
+        {header.api_keys.length === 0 ? (
+          gateway ? (
+            <Empty title={t("No keys")}>
+              {t("Issue one to authenticate with a bearer token.")}
+            </Empty>
           ) : (
-            <div className="table-scroll" tabIndex={0}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("Label")}</th>
-                    <th>{t("Key id")}</th>
-                    <th className="num">{t("Issued")}</th>
-                    <th>{t("Expires")}</th>
-                    <th>{t("Seen")}</th>
-                    <th>{t("Last used")}</th>
-                    <th><span className="sr-only">{t("Operations")}</span></th>
+            <Bone height={60} radius={10} />
+          )
+        ) : (
+          <div className="table-scroll" tabIndex={0}>
+            <table>
+              <thead>
+                <tr>
+                  <th>{t("Label")}</th>
+                  <th>{t("Key id")}</th>
+                  <th className="num">{t("Issued")}</th>
+                  <th>{t("Expires")}</th>
+                  <th>{t("Seen")}</th>
+                  <th>{t("Last used")}</th>
+                  <th><span className="sr-only">{t("Operations")}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {header.api_keys.map((key) => (
+                  <tr key={key.key_id}>
+                    <td>{key.label}</td>
+                    {/* The id, not the subject: the subject is `api-key:<id>`
+                        and pasting that as a bearer is the mistake this column
+                        used to invite. */}
+                    <td className="mono hint">{key.key_id}</td>
+                    <td className="num hint">{relative(key.issued_at)}</td>
+                    <td className="hint">
+                      {(() => {
+                        const expiry = expiryLabel(t, key.expires_at);
+                        return expiry ? (
+                          <Badge kind={expiry.kind}>{expiry.text}</Badge>
+                        ) : (
+                          t("never")
+                        );
+                      })()}
+                    </td>
+                    <td className="hint">
+                      {key.revealed_at
+                        ? t("seen {when} by {who}", {
+                            when: relative(key.revealed_at),
+                            who: key.revealed_by ?? "—",
+                          })
+                        : key.recoverable
+                          ? t("never")
+                          : t("not available")}
+                    </td>
+                    {/* Read from the traffic log as far back as retention
+                        goes. "Never" here means "not since we started keeping
+                        the evidence", which is the only honest claim to make. */}
+                    <td className="hint">
+                      {key.last_used_at ? relative(key.last_used_at) : t("never")}
+                    </td>
+                    {canKeys && (
+                      <td className="actions">
+                        <button
+                          className="ghost icon"
+                          title={t("Show the key once")}
+                          aria-label={t("Show the key once")}
+                          disabled={!key.recoverable || !gateway || shownKey !== ""}
+                          onClick={() => {
+                            api.revealKey(id, key.key_id)
+                              .then((revealed) => {
+                                setShownKey(revealed.api_key);
+                                load();
+                              })
+                              .catch((e) => setError(e.message));
+                          }}
+                        >
+                          <EyeIcon />
+                        </button>
+                        <button
+                          className="ghost sm"
+                          disabled={!gateway}
+                          onClick={() => {
+                            if (!window.confirm(
+                              t("Rotate {label}? The current key stops working immediately.", {
+                                label: key.label,
+                              })
+                            )) return;
+                            api.rotateKey(id, key.key_id)
+                              .then((rotated) => {
+                                setNewKey(rotated.api_key);
+                                load();
+                              })
+                              .catch((e) => setError(e.message));
+                          }}
+                        >
+                          {t("rotate")}
+                        </button>
+                        <button
+                          className="ghost sm danger"
+                          disabled={!gateway}
+                          onClick={() => {
+                            if (!window.confirm(
+                              t("Revoke {label}? Callers using it get 401 at once.", {
+                                label: key.label,
+                              })
+                            )) return;
+                            api.revokeKey(id, key.key_id).then(load);
+                          }}
+                        >
+                          {t("revoke")}
+                        </button>
+                      </td>
+                    )}
                   </tr>
-                </thead>
-                <tbody>
-                  {header.api_keys.map((key) => (
-                    <tr key={key.key_id}>
-                      <td>{key.label}</td>
-                      {/* The id, not the subject: the subject is `api-key:<id>`
-                          and pasting that as a bearer is the mistake this column
-                          used to invite. */}
-                      <td className="mono hint">{key.key_id}</td>
-                      <td className="num hint">{relative(key.issued_at)}</td>
-                      <td className="hint">
-                        {(() => {
-                          const expiry = expiryLabel(t, key.expires_at);
-                          return expiry ? (
-                            <Badge kind={expiry.kind}>{expiry.text}</Badge>
-                          ) : (
-                            t("never")
-                          );
-                        })()}
-                      </td>
-                      <td className="hint">
-                        {key.revealed_at
-                          ? t("seen {when} by {who}", {
-                              when: relative(key.revealed_at),
-                              who: key.revealed_by ?? "—",
-                            })
-                          : key.recoverable
-                            ? t("never")
-                            : t("not available")}
-                      </td>
-                      {/* Read from the traffic log as far back as retention
-                          goes. "Never" here means "not since we started keeping
-                          the evidence", which is the only honest claim to make. */}
-                      <td className="hint">
-                        {key.last_used_at ? relative(key.last_used_at) : t("never")}
-                      </td>
-                      {canKeys && (
-                        <td className="actions">
-                          <button
-                            className="ghost icon"
-                            title={t("Show the key once")}
-                            aria-label={t("Show the key once")}
-                            disabled={!key.recoverable || !gateway || shownKey !== ""}
-                            onClick={() => {
-                              api.revealKey(id, key.key_id)
-                                .then((revealed) => {
-                                  setShownKey(revealed.api_key);
-                                  load();
-                                })
-                                .catch((e) => setError(e.message));
-                            }}
-                          >
-                            <EyeIcon />
-                          </button>
-                          <button
-                            className="ghost sm"
-                            disabled={!gateway}
-                            onClick={() => {
-                              if (!window.confirm(
-                                t("Rotate {label}? The current key stops working immediately.", {
-                                  label: key.label,
-                                })
-                              )) return;
-                              api.rotateKey(id, key.key_id)
-                                .then((rotated) => {
-                                  setNewKey(rotated.api_key);
-                                  load();
-                                })
-                                .catch((e) => setError(e.message));
-                            }}
-                          >
-                            {t("rotate")}
-                          </button>
-                          <button
-                            className="ghost sm danger"
-                            disabled={!gateway}
-                            onClick={() => {
-                              if (!window.confirm(
-                                t("Revoke {label}? Callers using it get 401 at once.", {
-                                  label: key.label,
-                                })
-                              )) return;
-                              api.revokeKey(id, key.key_id).then(load);
-                            }}
-                          >
-                            {t("revoke")}
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       {gateway ? <ConnectGuide gateway={gateway} /> : null}
 

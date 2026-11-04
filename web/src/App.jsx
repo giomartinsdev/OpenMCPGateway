@@ -175,7 +175,7 @@ export function App() {
                 OpenMCP<span>Gateway</span>
               </div>
             </div>
-            <div className="nav" style={{ gap: 10 }}>
+            <div className="nav" style={{ gap: 8 }}>
               {[0, 1, 2, 3].map((i) => (
                 <Bone key={i} height={13} width={i === 3 ? 70 : 86} />
               ))}
@@ -190,7 +190,7 @@ export function App() {
             <div className="page-head">
               <div style={{ width: "100%", maxWidth: 420 }}>
                 <Bone height={12} width={90} />
-                <Bone height={28} width={240} style={{ marginTop: 10 }} />
+                <Bone height={28} width={240} style={{ marginTop: 8 }} />
                 <Bone height={12} width="100%" style={{ marginTop: 12 }} />
               </div>
             </div>
@@ -204,7 +204,7 @@ export function App() {
             </div>
             <div className="card">
               <Bone height={14} width={140} />
-              <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+              <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
                 {[0, 1, 2, 3, 4].map((i) => (
                   <Bone key={i} height={12} width={`${95 - i * 7}%`} />
                 ))}

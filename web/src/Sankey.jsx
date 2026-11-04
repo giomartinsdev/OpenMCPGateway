@@ -9,8 +9,11 @@
 import { useT } from "./i18n.jsx";
 import { Empty, outcomeLabel } from "./ui.jsx";
 
-const WIDTH = 820;
-const LABEL = 132; // room for the gateway names on the left and outcome names right
+// 1000 wide so the drawing renders at ~1:1 inside a full-width card: a viewBox
+// that stretches makes the 11px labels come out at 14px on a laptop, and a
+// 132px gutter is not enough for "401 unauthenticated · 3".
+const WIDTH = 1000;
+const LABEL = 200; // room for the gateway names on the left and outcome names right
 const GAP = 12; // vertical space between two nodes in a column
 const PAD = 6;
 
