@@ -47,7 +47,7 @@ answers "who used this and what broke".**
 </tr>
 <tr>
 <td width="50%"><a href="site/img/panel-audit.png"><img src="site/img/panel-audit.png" alt="The audit log: who changed what, with the aggregate it touched."></a><br><sub><b>Who changed it.</b> The audit log is a different question from the traffic log, and gets its own stream.</sub></td>
-<td width="50%"><a href="site/img/panel-traffic-light.png"><img src="site/img/panel-traffic-light.png" alt="The same traffic page in the light palette."></a><br><sub><b>The same page in light.</b> Two palettes, one set of tokens — no component asks which one is active.</sub></td>
+<td width="50%"><a href="site/img/panel-traffic-dark.png"><img src="site/img/panel-traffic-dark.png" alt="The same traffic page in the dark palette."></a><br><sub><b>The same page in dark.</b> Two palettes, one set of tokens — no component asks which one is active.</sub></td>
 </tr>
 </table>
 

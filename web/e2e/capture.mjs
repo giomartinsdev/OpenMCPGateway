@@ -37,10 +37,20 @@ const context = await browser.newContext({
   baseURL: BASE,
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 2,
-  colorScheme: "dark",
   locale: "en-US",
 });
 const page = await context.newPage();
+
+// Light is the panel's default, so most captures are light; the dark one is set
+// explicitly. Relying on the context's `colorScheme` stopped working the moment
+// the theme became an explicit switch, and two "themes" that render the same
+// pixels are worse than none.
+async function theme(name) {
+  await page.evaluate((next) => {
+    localStorage.setItem("omg.theme", next);
+    document.documentElement.dataset.theme = next;
+  }, name);
+}
 
 async function shot(name, options = {}) {
   // Fonte pronta antes do clique do obturador: uma captura com fallback de
@@ -248,6 +258,7 @@ for (const block of await drawer.locator(".payload-block").all()) {
 await shot("panel-request-drawer");
 await page.keyboard.press("Escape");
 
+await theme("light");
 await page.goto("/#/");
 await page.getByRole("heading", { name: "Gateways", level: 1 }).waitFor();
 await page.waitForTimeout(1200);
@@ -280,12 +291,13 @@ await page.goto("/#/docs");
 await page.getByRole("heading", { level: 1 }).first().waitFor();
 await shot("panel-docs");
 
-// Tema claro: o mesmo painel, outra paleta. É a segunda captura do README.
-await page.evaluate(() => localStorage.setItem("omg.theme", "light"));
+// A outra paleta: o mesmo painel, os mesmos componentes, uma captura que
+// prova que o tema não é um filtro por cima e sim um conjunto de tokens.
+await theme("dark");
 await page.goto("/#/traffic");
 await page.getByRole("heading", { name: "Traffic", level: 1 }).waitFor();
 await page.waitForTimeout(1200);
-await shot("panel-traffic-light");
+await shot("panel-traffic-dark");
 
 // A landing do próprio produto, anônima: é a primeira imagem do README.
 await page.evaluate(() => localStorage.removeItem("omg.theme"));

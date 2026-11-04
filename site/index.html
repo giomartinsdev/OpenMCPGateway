@@ -9,8 +9,8 @@
       content="OpenMCPGateway puts auth, authorisation, rate limiting and a full request log in front of any MCP server. One endpoint per server, an identity provider you already run, and a call log that answers who used this and what broke."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#0f0e0d" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#f2f0ec" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#fbfbfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#08090c" media="(prefers-color-scheme: dark)" />
     <meta property="og:title" content="OpenMCPGateway" />
     <meta
       property="og:description"
@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Faustina:ital,wght@0,300;0,400;0,500;1,300&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/site.css" />
@@ -30,7 +30,11 @@
     <header class="bar">
       <div class="wrap bar-in">
         <a class="brand" href="/">
-          <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <svg class="mark" viewBox="0 0 360 420" width="22" height="26" aria-hidden="true" focusable="false">
+            <path d="M 125 130 A 55 55 0 0 1 235 130 L 235 155 L 205 155 L 205 130 A 25 25 0 0 0 155 130 L 155 155 L 125 155 Z" />
+            <path d="M 152 220 L 208 220 L 208 245 C 208 268 180 282 180 282 C 180 282 152 268 152 245 Z" />
+            <path fill-rule="evenodd" d="M 180 130 A 115 115 0 1 0 180 360 A 115 115 0 1 0 180 130 Z M 180 188 A 57 57 0 1 1 180 302 A 57 57 0 1 1 180 188 Z" />
+          </svg>
           OpenMCP<span>Gateway</span>
         </a>
         <nav aria-label="Main">
@@ -279,18 +283,19 @@ $ curl -sS …/g/postgres/mcp -H <span class="s">"Authorization: Bearer omg_…"
           </figure>
           <figure>
             <div class="shot-frame">
-              <div class="shot-bar"><i></i><i></i><i></i><span>#/traffic — light</span></div>
+              <div class="shot-bar"><i></i><i></i><i></i><span>#/traffic — dark</span></div>
               <img
-                src="/img/panel-traffic-light.png"
+                src="/img/panel-traffic-dark.png"
                 width="1440"
                 height="900"
-                alt="The same traffic page in the light palette."
+                alt="The same traffic page in the dark palette."
                 loading="lazy"
               />
             </div>
             <figcaption>
-              Two palettes, one set of names: the panel follows the system theme and
-              every colour is a token, so nothing is styled twice.
+              Light is the default and dark is one click away, both built from the
+              same tokens — so no screen is styled twice and neither theme is an
+              afterthought.
             </figcaption>
           </figure>
         </div>

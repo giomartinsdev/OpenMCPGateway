@@ -1,61 +1,69 @@
 /* The public site's palette. These values are copied from
    `web/src/styles.css` on purpose: the marketing page is published to a bucket
    of its own and must not depend on the panel's build, so it carries the same
-   warm ink, the same single accent and the same type ladder as a literal copy.
+   ink scale, the same single accent and the same type ladder as a literal copy.
 
    A token that changes there and not here is a page that stops looking like
-   the product — check both when the palette moves. */
+   the product — check both when the palette moves.
+
+   The site follows the system theme where the panel has an explicit switch:
+   a stranger has no saved preference to honour, and a page that ignores the
+   laptop's setting is the page you close. */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --tint: 250, 250, 249;
-  --ok-rgb: 61, 214, 140;
-  --danger-rgb: 228, 120, 79;
+  --accent: #0066ff;
+  --accent-hover: #0052cc;
+  --on-accent: #ffffff;
+  /* The accent as text, not as a fill: #0066ff on the tinted card surface
+     measures 4.43:1, under AA for 12px mono. The darker tone reads 6.26:1. */
+  --accent-ink: #0052cc;
 
-  --bg: #0f0e0d;
-  --panel: #151412;
-  --panel-2: #1b1a17;
-  --panel-3: #22201d;
-  --panel-4: #2a2723;
-  --glass: rgba(21, 20, 18, 0.93);
+  --tint: 12, 16, 23;
+  --ok-rgb: 14, 124, 74;
+  --danger-rgb: 179, 38, 30;
 
-  --line: rgba(var(--tint), 0.07);
-  --line-2: rgba(var(--tint), 0.12);
-  --line-3: rgba(var(--tint), 0.2);
+  --bg: #fbfbfc;
+  --panel: #ffffff;
+  --panel-2: #f4f5f8;
+  --panel-3: #eaecf1;
+  --panel-4: #dfe3ea;
+  --glass: rgba(255, 255, 255, 0.86);
+  --shadow-2: rgba(12, 16, 23, 0.18);
 
-  --fg: #fafaf9;
-  --fg-2: #d6d4cf;
-  --fg-3: #a6a39c;
-  --fg-4: #9a968e;
-  --fg-5: #938f87;
+  --line: rgba(var(--tint), 0.09);
+  --line-2: rgba(var(--tint), 0.15);
+  --line-3: rgba(var(--tint), 0.24);
 
-  --apur: #3dd68c;
-  --danger: #e4784f;
-  /* The accent darkened/lightened to read as 12px code, not as a 54px title:
-     the same split the panel makes between `--apur` and `--code-ok-fg`. */
-  --code-ok: #8fd6b4;
+  --fg: #0c1017;
+  --fg-2: #333a47;
+  --fg-3: #4e5666;
+  --fg-4: #616a79;
+  --fg-5: #676f7e;
 
-  /* The primary button is a filled accent, so its text needs its own pair: a
-     near-black on the bright accent here, the accent darkened enough for white
-     text in the light palette. */
-  --btn-bg: #3dd68c;
-  --btn-fg: #0b2a1c;
+  --ok: #0e7c4a;
+  --danger: #b3261e;
+  /* The accent reads as 12px code only at its darker tone; the same split the
+     panel makes between `--accent` and a chip's ink. */
+  --code-ok: #0a6b45;
 
-  --sans: "Geist", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --serif: "Faustina", Georgia, "Times New Roman", serif;
-  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --t-hero: 54px;
-  --t-display: 38px;
-  --t-title: 30px;
-  --t-name: 14px;
-  --t-body: 13px;
+  --t-hero: 52px;
+  --t-display: 34px;
+  --t-title: 28px;
+  --t-sub: 24px;
+  /* One step larger than the panel on purpose: a marketing page is read at a
+     distance, a table is read at 40cm. Same ladder, different rung. */
+  --t-lead: 16px;
+  --t-body: 15px;
   --t-label: 12px;
   --t-micro: 11px;
 
-  --radius: 16px;
-  --radius-sm: 10px;
+  --radius: 12px;
+  --radius-sm: 8px;
   --radius-xs: 6px;
 
   --s1: 4px;
@@ -68,40 +76,45 @@
   --s8: 72px;
   --s9: 112px;
 
-  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --hover: 0.13s;
-  --shadow-2: rgba(0, 0, 0, 0.95);
+  --hover: 0.12s;
 }
 
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
 
-    --tint: 27, 26, 23;
-    --ok-rgb: 18, 138, 82;
-    --danger-rgb: 184, 66, 42;
+    --accent: #4d94ff;
+    --accent-hover: #79b0ff;
+    --on-accent: #08090c;
+    --accent-ink: #79b0ff;
 
-    --bg: #f2f0ec;
-    --panel: #fffdfa;
-    --panel-2: #fbf9f5;
-    --panel-3: #f0ede7;
-    --panel-4: #e6e2da;
-    --glass: rgba(242, 240, 236, 0.93);
+    --tint: 245, 247, 250;
+    --ok-rgb: 61, 214, 140;
+    --danger-rgb: 255, 122, 107;
 
-    --fg: #1b1a17;
-    --fg-2: #3f3c36;
-    --fg-3: #5c584f;
-    --fg-4: #666158;
-    --fg-5: #68625a;
+    --bg: #08090c;
+    --panel: #0e1116;
+    --panel-2: #141821;
+    --panel-3: #1b2029;
+    --panel-4: #232935;
+    --glass: rgba(10, 12, 16, 0.82);
+    --shadow-2: rgba(0, 0, 0, 0.9);
 
-    --apur: #128a52;
-    --danger: #b8422a;
-    --code-ok: #1c7a55;
-    --btn-bg: #0f7a49;
-    --btn-fg: #ffffff;
+    --line: rgba(var(--tint), 0.08);
+    --line-2: rgba(var(--tint), 0.14);
+    --line-3: rgba(var(--tint), 0.22);
 
-    --shadow-2: rgba(40, 35, 25, 0.18);
+    --fg: #f5f7fa;
+    --fg-2: #c8ced8;
+    --fg-3: #9aa3b2;
+    --fg-4: #8b94a3;
+    --fg-5: #7e8796;
+
+    --ok: #3dd68c;
+    --danger: #ff7a6b;
+    --code-ok: #8fd6b4;
   }
 }
 
@@ -125,7 +138,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg-2);
-  font: 400 15px / 1.6 var(--sans);
+  font: 400 var(--t-body) / 1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -142,22 +155,23 @@ h3 {
 }
 
 h1 {
-  font: 300 clamp(34px, 5vw, var(--t-hero)) / 1.08 var(--serif);
-  letter-spacing: -0.02em;
+  font: 600 clamp(34px, 5.4vw, var(--t-hero)) / 1.05 var(--sans);
+  letter-spacing: -0.032em;
 }
 
 h1 em {
-  font-style: italic;
-  color: var(--apur);
+  font-style: normal;
+  color: var(--accent);
 }
 
 h2 {
-  font: 300 clamp(26px, 3.2vw, var(--t-display)) / 1.15 var(--serif);
-  letter-spacing: -0.02em;
+  font: 600 clamp(24px, 3vw, var(--t-display)) / 1.15 var(--sans);
+  letter-spacing: -0.026em;
 }
 
 h3 {
-  font: 500 15px / 1.4 var(--sans);
+  font: 600 var(--t-body) / 1.4 var(--sans);
+  letter-spacing: -0.01em;
 }
 
 p {
@@ -201,8 +215,8 @@ kbd {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font: 500 15px / 1 var(--sans);
+  gap: var(--s2);
+  font: 500 var(--t-body) / 1 var(--sans);
   color: var(--fg);
   letter-spacing: -0.01em;
 }
@@ -212,24 +226,12 @@ kbd {
   font-weight: 400;
 }
 
-/* The mark: three dots, one accent. Same picture as the favicon and the panel
-   nav, drawn with CSS so the page stays a single file with no player. */
+/* The mark: the padlock O, the same path set as the favicon and the panel
+   nav. Inline SVG so the page stays a single file with no player. */
 .mark {
-  display: flex;
-  align-items: center;
-  gap: 4.5px;
-}
-
-.mark i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--apur);
-}
-
-.mark i:nth-child(2) {
-  background: var(--fg);
-  opacity: 0.55;
+  display: block;
+  flex: none;
+  fill: var(--accent);
 }
 
 .bar nav {
@@ -241,7 +243,7 @@ kbd {
 }
 
 .bar nav a {
-  padding: 8px 10px;
+  padding: var(--s2);
   border-radius: var(--radius-xs);
   color: var(--fg-4);
   transition: color var(--hover) var(--ease), background-color var(--hover) var(--ease);
@@ -256,11 +258,11 @@ kbd {
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--s2);
   min-height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid var(--line-3);
+  padding: 0 var(--s3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
   color: var(--fg) !important;
   font: 500 var(--t-body) / 1 var(--sans);
   transition: border-color var(--hover) var(--ease), background-color var(--hover) var(--ease);
@@ -281,10 +283,10 @@ kbd {
 .tag {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--s2);
   height: 26px;
-  padding: 0 11px;
-  border-radius: 999px;
+  padding: 0 var(--s3);
+  border-radius: var(--pill);
   border: 1px solid var(--line-2);
   background: var(--panel-2);
   color: var(--fg-4);
@@ -297,7 +299,7 @@ kbd {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--apur);
+  background: var(--ok);
 }
 
 .hero h1 {
@@ -308,7 +310,7 @@ kbd {
 .hero .lead {
   max-width: 62ch;
   color: var(--fg-3);
-  font-size: 16px;
+  font-size: var(--t-lead);
 }
 
 .cta {
@@ -330,11 +332,13 @@ kbd {
 }
 
 .btn-primary {
-  background: var(--btn-bg);
-  color: var(--btn-fg);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
 }
 
 .btn-primary:hover {
+  background: var(--accent-hover);
   transform: translateY(-1px);
 }
 
@@ -370,7 +374,7 @@ kbd {
 .shot-bar {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--s2);
   height: 34px;
   padding: 0 var(--s3);
   border-bottom: 1px solid var(--line);
@@ -390,7 +394,7 @@ kbd {
   font: 400 var(--t-micro) / 1 var(--mono);
 }
 
-.shot img {
+.shot-frame img {
   display: block;
   width: 100%;
   height: auto;
@@ -456,8 +460,8 @@ figcaption {
   height: 32px;
   margin-bottom: var(--s3);
   border-radius: var(--radius-xs);
-  background: var(--panel-3);
-  color: var(--apur);
+  background: var(--panel-2);
+  color: var(--accent-ink);
   font: 500 var(--t-label) / 1 var(--mono);
 }
 
@@ -471,8 +475,8 @@ figcaption {
 .step b {
   display: block;
   margin-bottom: var(--s2);
-  color: var(--apur);
-  font: 400 var(--t-label) / 1 var(--mono);
+  color: var(--accent-ink);
+  font: 500 var(--t-label) / 1 var(--mono);
 }
 
 .step p {
@@ -561,6 +565,11 @@ footer {
 
 .foot-links a {
   color: var(--fg-4);
+  /* 19px of text, 24px of target (WCAG 2.5.8): the padding grows the box, the
+     negative margin keeps the footer's own rhythm. */
+  display: inline-block;
+  padding: var(--s1) 0;
+  margin: calc(var(--s1) * -1) 0;
 }
 
 .foot-links a:hover {
