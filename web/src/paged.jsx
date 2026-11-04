@@ -37,6 +37,13 @@ export function usePagedList(fetch, query = {}) {
   const [next, setNext] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Cursors already walked through to reach the current page. The first page is
+  // reached without one, so the stack holds `undefined` at index 0 and grows by
+  // one per "next". This is what makes a numbered pager honest on a cursor API:
+  // you can always go back to a page you have seen, and forward exactly one
+  // step, because that is the only step the server has told you about.
+  const [trail, setTrail] = useState([undefined]);
+  const [page, setPage] = useState(0);
 
   // The fetch and the query as refs: `load` must be stable across renders or
   // the effect below re-runs forever, and both change on every keystroke.
@@ -54,9 +61,7 @@ export function usePagedList(fetch, query = {}) {
         before,
         ...current.current,
       });
-      setItems((previous) =>
-        before && previous ? [...previous, ...page.items] : page.items,
-      );
+      setItems(page.items);
       setNext(page.next);
       setError("");
     } catch (err) {
@@ -68,19 +73,54 @@ export function usePagedList(fetch, query = {}) {
 
   useEffect(() => {
     setNext(null);
+    setTrail([undefined]);
+    setPage(0);
     load(undefined);
   }, [key, load]);
 
+  // Step forward one page. The cursor for it is the `next` the server handed
+  // back, so the trail grows by exactly one entry and the current index follows.
   const more = useCallback(() => {
-    if (next) load(next);
+    if (!next) return;
+    setTrail((stack) => [...stack, next]);
+    setPage((index) => index + 1);
+    load(next);
   }, [next, load]);
+
+  // Return to a page this client has already walked through. Index 0 is the
+  // first page and `trail[n]` is the cursor that *starts* page n. A page further
+  // than the trail has never been fetched, so there is nothing to jump to: a
+  // numbered pager that invented a cursor would be promising something the
+  // server never said.
+  const goTo = useCallback(
+    (index) => {
+      if (index < 0 || index >= trail.length) return;
+      setPage(index);
+      load(trail[index]);
+    },
+    [load, trail],
+  );
 
   // After a mutation the newest page is stale; the cursor is not. Re-reading the
   // first page is enough for "the row I just changed", and keeps the list from
   // jumping back to the top of a long scroll it did not lose.
-  const reload = useCallback(() => load(undefined), [load]);
+  const reload = useCallback(() => {
+    setTrail([undefined]);
+    setPage(0);
+    load(undefined);
+  }, [load]);
 
-  return { items, next, error, busy, more, reload };
+  return {
+    items,
+    next,
+    error,
+    busy,
+    more,
+    reload,
+    goTo,
+    page,
+    pages: trail.length,
+  };
 }
 
 /**
@@ -220,26 +260,85 @@ export function useSort(defaultSort, defaults = {}) {
 /**
  * The footer of a paged table.
  *
- * The list is cursor-based, so there is no page number to jump to and no total
- * count to divide. A "1 2 3 … 12" bar would be a promise the API cannot keep;
- * this says how many rows are on screen, whether more exist, and gives the one
- * action that is real. `shown` is optional — a caller that does not know the
- * count still gets the button and the "end of list" line.
+ * The list is cursor-based: there is no offset to ask for and no total to divide,
+ * so a "1 2 3 … 12" bar would be a promise the API cannot keep. What *is* true is
+ * that this client has walked through a known prefix of the list, and can return
+ * to any page in it. So the bar numbers exactly those pages, shows the next one
+ * as a step you can take, and says "end of list" when the server stops handing
+ * back a cursor.
+ *
+ * `pages` is how many pages this client has reached (`1` before any "next"),
+ * `page` is the zero-based current one, `goTo` returns to one already seen.
+ * `shown` is optional — a caller that does not know the count still gets the bar.
  */
-export function LoadMore({ next, busy, onClick, shown }) {
+export function LoadMore({ next, busy, onClick, shown, pages = 1, page = 0, goTo }) {
   const t = useT();
   if (!next && !shown) return null;
+  const last = pages - 1;
+  // The window of numbers, so a hundred visited pages do not become a hundred
+  // buttons. Two each side of the cursor, matching what a reader expects.
+  const numbers = [];
+  for (let index = 0; index < pages; index += 1) {
+    if (pages > 7 && index > 1 && index < last - 1 && Math.abs(index - page) > 2) {
+      if (numbers[numbers.length - 1] !== "gap") numbers.push("gap");
+      continue;
+    }
+    numbers.push(index);
+  }
   return (
     <div className="page-bar">
       <span className="page-bar-range">
         {shown ? t("{count} loaded", { count: shown }) : null}
         {next ? null : <span className="muted">{shown ? " · " : ""}{t("end of list")}</span>}
       </span>
-      {next ? (
-        <button className="sm" disabled={busy} onClick={onClick}>
-          {busy ? t("Loading…") : t("Load more")}
-        </button>
-      ) : null}
+      <nav className="page-bar-pages" aria-label={t("Pages")}>
+        {goTo ? (
+          <button
+            className="page-step"
+            disabled={busy || page === 0}
+            onClick={() => goTo(page - 1)}
+            aria-label={t("Previous page")}
+          >
+            ‹
+          </button>
+        ) : null}
+        {goTo
+          ? numbers.map((entry, index) =>
+              entry === "gap" ? (
+                <span key={`gap-${index}`} className="page-gap" aria-hidden="true">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={entry}
+                  className={entry === page ? "page-step current" : "page-step"}
+                  aria-current={entry === page ? "page" : undefined}
+                  aria-label={t("Page {number}", { number: entry + 1 })}
+                  disabled={busy}
+                  onClick={() => goTo(entry)}
+                >
+                  {entry + 1}
+                </button>
+              ),
+            )
+          : null}
+        {next ? (
+          goTo ? (
+            <button
+              className="page-step"
+              disabled={busy}
+              onClick={onClick}
+              aria-label={t("Next page")}
+            >
+              {busy ? "…" : "›"}
+            </button>
+          ) : (
+            <button className="sm" disabled={busy} onClick={onClick}>
+              {busy ? t("Loading…") : t("Load more")}
+            </button>
+          )
+        ) : null}
+      </nav>
     </div>
   );
 }

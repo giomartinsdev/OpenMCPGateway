@@ -16,7 +16,7 @@ export function Roles({ me }) {
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useSort("name", { name: "asc" });
   const {
-    items: roles, next, busy: listBusy, more, reload,
+    items: roles, next, busy: listBusy, more, reload, goTo, page, pages,
   } = usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.roles({ limit, before, ...query });
@@ -237,7 +237,7 @@ export function Roles({ me }) {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={listBusy} onClick={more} shown={roles?.length} />
+        <LoadMore next={next} busy={listBusy} onClick={more} shown={roles?.length} pages={pages} page={page} goTo={goTo} />
         <p className="hint" style={{ marginBottom: 0, marginTop: 12 }}>
           {t("A permission outside the catalog is refused when you save: a typo would otherwise be a role that grants nothing and says nothing.")}
         </p>

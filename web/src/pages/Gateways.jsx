@@ -53,7 +53,8 @@ export function Gateways({ me }) {
   const [filters, setFilters] = useState({});
   const [newConsole, setNewConsole] = useState(takeNewConsole);
   const [sort, setSort] = useSort("created_at", SORTS);
-  const { items: gateways, next, busy, more, error: listError } = usePagedList(
+  const { items: gateways, next, busy, more, error: listError, goTo, page, pages } =
+    usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.gateways({ limit, before, ...query });
       return { items: page.gateways, next: page.next };
@@ -282,7 +283,7 @@ export function Gateways({ me }) {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={busy} onClick={more} shown={gateways?.length} />
+        <LoadMore next={next} busy={busy} onClick={more} shown={gateways?.length} pages={pages} page={page} goTo={goTo} />
       </Card>
 
     </>

@@ -28,6 +28,7 @@ export function Members({ me }) {
 
   const {
     items: operators, next, busy: listBusy, more, reload, error: listError,
+    goTo, page, pages,
   } = usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.operators({ limit, before, ...query });
@@ -245,7 +246,7 @@ export function Members({ me }) {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={listBusy} onClick={more} shown={operators?.length} />
+        <LoadMore next={next} busy={listBusy} onClick={more} shown={operators?.length} pages={pages} page={page} goTo={goTo} />
       </Card>
 
       {drawer?.kind === "new" && (

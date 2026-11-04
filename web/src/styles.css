@@ -23,6 +23,7 @@
   /* .12 and .08 of blue ink measured 4.33:1 with the accent itself as the text
      on top; .04 measures 4.58:1. The border carries the chip, not the fill. */
   --accent-soft: rgba(0 102 255 / 0.04);
+  --accent-line: rgba(0 102 255 / 0.35);
   --on-accent: #ffffff;
   /* The accent as 11px text, not as a fill: #0066ff on --panel-2 measures
      4.4:1, which is AA-failing for body size. The darker tone reads 6.3:1. */
@@ -89,6 +90,7 @@
   --accent: #4d94ff;
   --accent-hover: #79b0ff;
   --accent-soft: rgba(77 148 255 / 0.12);
+  --accent-line: rgba(77 148 255 / 0.4);
   --on-accent: #08090c;
   --accent-ink: #79b0ff;
 
@@ -767,6 +769,34 @@ label {
   font-size: var(--t-micro);
 }
 .page-bar-range { font-variant-numeric: tabular-nums; }
+.page-bar-pages { display: flex; align-items: center; gap: 2px; }
+/* A page number and an arrow are the same control: one step of the same list. */
+.page-step {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 var(--s1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--fg-3);
+  font: 500 var(--t-label) / 1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color var(--hover) var(--ease), color var(--hover) var(--ease);
+}
+.page-step:hover:not(:disabled) { background: var(--panel-3); color: var(--fg); }
+.page-step[aria-current="page"] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.page-step:disabled { opacity: 0.35; cursor: not-allowed; }
+.page-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.page-gap { min-width: var(--s4); text-align: center; color: var(--fg-5); }
+.page-bar-pages button.sm { margin-left: var(--s1); }
 
 .hint { color: var(--fg-4); font-size: var(--t-label); }
 .empty {

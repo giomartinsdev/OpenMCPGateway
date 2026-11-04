@@ -140,7 +140,7 @@ export function Traffic() {
     return () => { alive = false; clearInterval(timer); };
   }, [minutes]);
 
-  const { items: requests, next, error: listError, busy, more } = usePagedList(
+  const { items: requests, next, error: listError, busy, more, goTo, page, pages } = usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.requests({ limit, before, ...query });
       return { items: page.requests, next: page.next };
@@ -402,7 +402,7 @@ export function Traffic() {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={busy} onClick={more} shown={requests?.length} />
+        <LoadMore next={next} busy={busy} onClick={more} shown={requests?.length} pages={pages} page={page} goTo={goTo} />
       </Card>
 
       {open && (

@@ -326,7 +326,7 @@ export function Requests({ gateway }) {
   const [sort, setSort] = useSort("occurred_at", SORTS);
   const [open, setOpen] = useState(null);
 
-  const { items, next, error, busy, more } = usePagedList(
+  const { items, next, error, busy, more, goTo, page, pages } = usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.requests({ limit, before, gateway_id: gateway.id, ...query });
       return { items: page.requests, next: page.next };
@@ -417,7 +417,7 @@ export function Requests({ gateway }) {
           </div>
         )}
       </Skeleton>
-      <LoadMore next={next} busy={busy} onClick={more} shown={items?.length} />
+      <LoadMore next={next} busy={busy} onClick={more} shown={items?.length} pages={pages} page={page} goTo={goTo} />
       {error ? <p className="hint" style={{ marginBottom: 0 }}>{error}</p> : null}
 
       {open && (

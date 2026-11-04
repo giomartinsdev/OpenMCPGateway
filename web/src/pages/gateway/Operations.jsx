@@ -50,7 +50,8 @@ export function HistoryPanel({ gateway, onRestored }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const { items, next, error: listError, busy: loading, more, reload } = usePagedList(
+  const { items, next, error: listError, busy: loading, more, reload, goTo, page, pages } =
+    usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.history(gateway.id, { limit, before, ...query });
       return { items: page.history, next: page.next };
@@ -146,7 +147,7 @@ export function HistoryPanel({ gateway, onRestored }) {
           </div>
         )}
       </Skeleton>
-      <LoadMore next={next} busy={loading} onClick={more} shown={items?.length} />
+      <LoadMore next={next} busy={loading} onClick={more} shown={items?.length} pages={pages} page={page} goTo={goTo} />
 
       {preview && (
         <Drawer

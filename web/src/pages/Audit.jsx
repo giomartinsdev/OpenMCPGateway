@@ -25,7 +25,7 @@ export function Audit() {
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useSort("occurred_at", SORTS);
   const [open, setOpen] = useState(null);
-  const { items, next, error, busy, more } = usePagedList(
+  const { items, next, error, busy, more, goTo, page, pages } = usePagedList(
     async ({ limit, before, ...query }) => {
       const page = await api.events({ limit, before, ...query });
       return { items: page.events, next: page.next };
@@ -125,7 +125,7 @@ export function Audit() {
             </div>
           )}
         </Skeleton>
-        <LoadMore next={next} busy={busy} onClick={more} shown={items?.length} />
+        <LoadMore next={next} busy={busy} onClick={more} shown={items?.length} pages={pages} page={page} goTo={goTo} />
       </Card>
 
       {open && (

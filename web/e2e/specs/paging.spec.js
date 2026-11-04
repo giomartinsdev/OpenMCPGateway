@@ -381,7 +381,7 @@ test("clicking an audit event expands the payload in a drawer", async ({ page })
   await expect(drawer.locator(".payload")).toContainText("{");
 });
 
-test("load more appends the next page instead of replacing the list", async ({
+test("the pager steps forward one page and back through the ones already seen", async ({
   page,
 }) => {
   await signIn(page);
@@ -419,10 +419,20 @@ test("load more appends the next page instead of replacing the list", async ({
   const rows = dataRows(page);
   await expect(rows).toHaveCount(50);
 
-  await page.getByRole("button", { name: "Load more" }).click();
-  // 60 bulk + the 5 from the previous scenarios: one more page, appended.
-  await expect(rows).toHaveCount(65);
-  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+  // One page forward: the server's cursor is the only step it vouched for, so
+  // that is what the bar offers. A numbered pager on a cursor list does not know
+  // how many pages there are -- it only knows the ones this client has walked.
+  await page.getByRole("button", { name: "Next page" }).click();
+  // 60 bulk + the 5 from the previous scenarios, minus the first 50.
+  await expect(rows).toHaveCount(15);
+  await expect(page.getByRole("button", { name: "Next page" })).toHaveCount(0);
+  await expect(page.getByText("end of list")).toBeVisible();
+
+  // And back: page 2 is reachable because it was seen on the way here.
+  await expect(page.getByRole("button", { name: "Page 1", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Page 1", exact: true }).click();
+  await expect(rows).toHaveCount(50);
+  await expect(page.getByRole("button", { name: "Next page" })).toBeVisible();
 });
 
 test("a filter nobody declared is refused, naming the ones that exist", async ({
