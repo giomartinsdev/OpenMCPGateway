@@ -176,3 +176,10 @@ Feature: Declarative configuration
       """
     When the document is applied
     Then the gateway "proxy" has an upstream token
+
+  Scenario: Environment expansion outside a credential field is refused
+    # The expanded document is echoed back by /config/validate, so anything
+    # expanded outside a credential turned that screen into a way to read the
+    # process environment — `slug: ${OMG_SESSION_SECRET}` came back as text.
+    Given a YAML document with a placeholder in the gateway "name"
+    Then parsing fails naming "gateways[0].name"
