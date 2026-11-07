@@ -72,9 +72,11 @@ def invalid_document_from_text(docstring=None, **kwargs) -> str:
         return str(exc)
     return ""
 
+
 @then(parsers.parse('parsing fails naming "{fragment}"'))
 def parsing_fails_naming(parse_error: str, fragment: str) -> None:
     assert fragment in parse_error, parse_error
+
 
 @given("a YAML document:", target_fixture="document")
 def document_from_text(datatable=None, docstring=None, **kwargs):
@@ -99,12 +101,37 @@ def document_from_text(datatable=None, docstring=None, **kwargs):
     target_fixture="parse_error",
 )
 def document_with_variable(variable: str) -> str:
+    # A credential field, because that is the only place expansion happens now:
+    # anywhere else the refusal names the field instead of the variable.
     text = f"""
 gateways:
   - slug: demo
-    name: Demo
     target_url: http://backend.test/mcp
-    description: {variable}
+    auth:
+      mode: api_key
+      upstream_token: {variable}
+"""
+    try:
+        parse_document(text)
+    except ConfigFileError as exc:
+        return str(exc)
+    return ""
+
+
+@given(
+    'a YAML document with a placeholder in the gateway "name"',
+    target_fixture="parse_error",
+)
+def document_placeholder_in_name(monkeypatch) -> str:
+    # A variable that is set, not an unset one: the point is that the value must
+    # not be substituted, so this fails loudly if expansion reaches any field
+    # other than a credential.
+    monkeypatch.setenv("LEAK_CANARY", "canary-secret-value")
+    text = """
+gateways:
+  - slug: demo
+    name: ${LEAK_CANARY}
+    target_url: http://backend.test/mcp
 """
     try:
         parse_document(text)
@@ -195,6 +222,7 @@ def delete_gateway(container, runner, operator: str, slug: str) -> None:
         await container.refresh_router()
 
     runner.run(remove())
+
 
 @when(
     parsers.parse('a document without "{slug}" is applied'),
@@ -369,7 +397,9 @@ def gateway_has_upstream_token(container, runner, slug: str) -> None:
 
     runner.run(check())
 
+
 # -- roles and members through the file ------------------------------------
+
 
 def _apply(container, runner, document, caller) -> dict:
     return runner.run(
@@ -378,6 +408,7 @@ def _apply(container, runner, document, caller) -> dict:
             tenant_id=TENANT_OF_DEPLOYMENT, actor=OPERATOR_EMAIL, caller=caller,
         )
     )
+
 
 @pytest.fixture()
 def caller(operator: str) -> Any:
@@ -398,6 +429,7 @@ def caller(operator: str) -> Any:
         permissions=frozenset(PERMISSIONS),
     )
 
+
 @given(
     parsers.parse('a YAML document defining "{name}" with "{permissions}"'),
     target_fixture="document",
@@ -411,6 +443,7 @@ roles:
 """
     )
 
+
 @when("a document without members is applied with prune enabled",
       target_fixture="apply_result")
 def apply_prune_without_members(container, runner, caller) -> dict:
@@ -420,17 +453,21 @@ def apply_prune_without_members(container, runner, caller) -> dict:
         caller,
     )
 
+
 @when("the file is applied", target_fixture="apply_result")
 def apply_file_with_caller(container, runner, caller, document) -> dict:
     return _apply(container, runner, document, caller)
+
 
 @when("the document is applied", target_fixture="apply_result")
 def apply_document_with_caller(container, runner, caller, document) -> dict:
     return _apply(container, runner, document, caller)
 
+
 @when("the same document is applied again", target_fixture="reapply_result")
 def reapply_document(container, runner, caller, document) -> dict:
     return _apply(container, runner, document, caller)
+
 
 @when("the file is applied again with:", target_fixture="apply_result")
 def apply_again_with(container, runner, caller, docstring=None, **kwargs) -> dict:
@@ -439,6 +476,7 @@ def apply_again_with(container, runner, caller, docstring=None, **kwargs) -> dic
         text = next((v for v in kwargs.values() if isinstance(v, str)), None)
     assert isinstance(text, str), "expected a YAML docstring on the step"
     return _apply(container, runner, parse_document(text), caller)
+
 
 @when(parsers.parse('the document is applied by an account without "{permission}"'),
       target_fixture="apply_result")
@@ -455,6 +493,7 @@ def apply_without_permission(container, runner, operator: str, document,
     )
     return _apply(container, runner, document, limited)
 
+
 @then(parsers.parse('the role "{name}" exists with permissions "{permissions}"'))
 def role_exists_with(container, runner, name: str, permissions: str) -> None:
     from gateway.domain.permissions import BUILTIN_ROLES, normalise
@@ -469,6 +508,7 @@ def role_exists_with(container, runner, name: str, permissions: str) -> None:
         raise AssertionError(f"role '{name}' not found")
 
     assert runner.run(check()) == normalise(permissions.split(","))
+
 
 @then(parsers.parse('the member "{email}" has the role "{role}"'))
 def member_has_role(container, runner, email: str, role: str) -> None:
@@ -486,6 +526,7 @@ def member_has_role(container, runner, email: str, role: str) -> None:
         raise AssertionError(f"member '{email}' not found")
 
     assert role in runner.run(check())
+
 
 @when("the tenant is exported and applied again", target_fixture="reapply_result")
 def export_and_reapply(container, runner, caller) -> dict:
@@ -523,6 +564,7 @@ def member_still_exists(container, runner, email: str) -> None:
         ]
 
     assert email in runner.run(check())
+
 
 @then(parsers.parse('applying fails naming "{fragment}"'))
 def apply_failed_naming(apply_result: dict, fragment: str) -> None:
