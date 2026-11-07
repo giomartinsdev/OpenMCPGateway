@@ -32,7 +32,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 
 from gateway.domain.events import AuthMode, IdentityProvider, VerifierSpec
-from gateway.domain.model import SLUG_RE, DomainError
+from gateway.domain.model import DomainError
 from gateway.domain.permissions import (
     BUILTIN_ROLES,
     DEFAULT_ROLE_IDS,
@@ -43,34 +43,17 @@ from gateway.domain.permissions import (
 
 _ENV_RE = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
 
-
 #: Fields a `${VAR}` may appear in: credentials, never something echoed back.
 _CREDENTIAL_FIELD_RE = re.compile(
     r"^(?:gateways\[\d+\]\.auth\.(?:client_id|client_secret|upstream_token)"
     r"|members\[\d+\]\.password)$"
 )
 
-
 class ConfigFileError(ValueError):
     """The YAML file is malformed or references an unset variable."""
 
-
-def _expand(value: str) -> str:
-    """Expand ${VAR} / ${VAR:-default} inside one credential field."""
-    def replace(match: re.Match[str]) -> str:
-        name, default = match.group(1), match.group(2)
-        resolved = os.environ.get(name)
-        if resolved is None:
-            if default is None:
-                raise ConfigFileError(f"environment variable {name} is not set")
-            return default
-        return resolved
-
-    return _ENV_RE.sub(replace, value)
-
-
-def _expand_document(value: Any, field: str = "") -> Any:
-    """Expand a credential field, refuse `${VAR}` anywhere else.
+def _expand(value: Any, field: str = "") -> Any:
+    """Expand ${VAR} / ${VAR:-default}, but only in a credential field.
 
     Expanding the whole document made `POST /api/config/validate` a way to read
     any variable the process holds: `slug` is echoed back after expansion and
@@ -78,26 +61,34 @@ def _expand_document(value: Any, field: str = "") -> Any:
     Refusing instead of leaving the text alone matters — an unevaluated
     placeholder would be stored and echoed as if it were the real value.
     """
-    if isinstance(value, dict):
-        return {
-            key: _expand_document(item, f"{field}.{key}" if field else str(key))
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [
-            _expand_document(item, f"{field}[{index}]")
-            for index, item in enumerate(value)
-        ]
-    if isinstance(value, str) and _ENV_RE.search(value):
-        if not _CREDENTIAL_FIELD_RE.match(field):
+    if isinstance(value, str):
+        if _ENV_RE.search(value) and not _CREDENTIAL_FIELD_RE.match(field):
             raise ConfigFileError(
                 f"{field or 'document'}: environment expansion is only allowed in "
                 "credential fields (auth.client_id, auth.client_secret, "
                 "auth.upstream_token, members[].password)"
             )
-        return _expand(value)
-    return value
 
+        def replace(match: re.Match[str]) -> str:
+            name, default = match.group(1), match.group(2)
+            resolved = os.environ.get(name)
+            if resolved is None:
+                if default is None:
+                    raise ConfigFileError(f"environment variable {name} is not set")
+                return default
+            return resolved
+
+        return _ENV_RE.sub(replace, value)
+    if isinstance(value, list):
+        return [
+            _expand(item, f"{field}[{index}]") for index, item in enumerate(value)
+        ]
+    if isinstance(value, dict):
+        return {
+            key: _expand(item, f"{field}.{key}" if field else str(key))
+            for key, item in value.items()
+        }
+    return value
 
 class GatewaySpec(BaseModel):
     """One gateway as declared in the file. Validated on construction."""
@@ -126,7 +117,6 @@ class GatewaySpec(BaseModel):
     api_keys: tuple[str, ...] = ()
     enabled: bool = True
 
-
 class RoleSpec(BaseModel):
     """A custom role. Built-ins are code; the file may name them, not change them."""
 
@@ -134,7 +124,6 @@ class RoleSpec(BaseModel):
 
     name: str
     permissions: tuple[str, ...] = ()
-
 
 class MemberSpec(BaseModel):
     """An account in the tenant, by email, plus the roles it should hold.
@@ -152,7 +141,6 @@ class MemberSpec(BaseModel):
     password: str = ""
     roles: tuple[str, ...] = ()
 
-
 class ConfigDocument(BaseModel):
     """A parsed file. `raw` is kept for echoing back what was read."""
 
@@ -164,7 +152,6 @@ class ConfigDocument(BaseModel):
     prune: bool = False
     raw: dict[str, Any] = {}
 
-
 def parse_document(text: str) -> ConfigDocument:
     try:
         loaded = yaml.safe_load(text) or {}
@@ -173,7 +160,7 @@ def parse_document(text: str) -> ConfigDocument:
     if not isinstance(loaded, dict):
         raise ConfigFileError("top level must be a mapping")
 
-    data = _expand_document(loaded)
+    data = _expand(loaded)
     entries = data.get("gateways") or []
     if not isinstance(entries, list):
         raise ConfigFileError("'gateways' must be a list")
@@ -200,7 +187,6 @@ def parse_document(text: str) -> ConfigDocument:
         raw=loaded,
     )
 
-
 def _entries(value: Any, key: str) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         raise ConfigFileError(f"'{key}' must be a list")
@@ -209,22 +195,13 @@ def _entries(value: Any, key: str) -> list[dict[str, Any]]:
             raise ConfigFileError(f"{key}[{index}] must be a mapping")
     return value
 
-
 def _parse_roles(raw: Any) -> list[RoleSpec]:
     specs: list[RoleSpec] = []
     seen: set[str] = set()
     for index, entry in enumerate(_entries(raw, "roles")):
         try:
-            name = str(entry["name"]).strip()
-            # Checked here as well as in `decide_define`: `/config/validate`
-            # echoes the name, so the format has to be right before it is
-            # returned, not only before it is stored.
-            if not name:
-                raise ValueError("role name is required")
-            if len(name) > 64:
-                raise ValueError("role name must be 64 characters or fewer")
             spec = RoleSpec(
-                name=name,
+                name=str(entry["name"]).strip(),
                 permissions=tuple(str(p) for p in (entry.get("permissions") or ())),
             )
         except (KeyError, ValueError) as exc:
@@ -234,7 +211,6 @@ def _parse_roles(raw: Any) -> list[RoleSpec]:
         seen.add(spec.name)
         specs.append(spec)
     return specs
-
 
 def _parse_members(raw: Any) -> list[MemberSpec]:
     specs: list[MemberSpec] = []
@@ -257,14 +233,8 @@ def _parse_members(raw: Any) -> list[MemberSpec]:
         )
     return specs
 
-
 def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
     slug = str(entry["slug"]).strip()
-    # Same rule `create_gateway` enforces, applied at parse time: `/config/
-    # validate` returns the slug, so it must already be a slug and not whatever
-    # a placeholder expanded to. The message names the rule, not the value.
-    if not SLUG_RE.match(slug):
-        raise ValueError("slug must be lowercase alphanumeric with hyphens, 1-63 chars")
     auth = entry.get("auth") or {}
     if auth and not isinstance(auth, dict):
         raise ValueError("'auth' must be a mapping")
@@ -301,7 +271,6 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
         enabled=bool(entry.get("enabled", True)),
     )
 
-
 def _auth_changed(current: dict[str, Any], spec: GatewaySpec) -> bool:
     """True when the declared auth block differs from what the gateway holds.
 
@@ -323,7 +292,6 @@ def _auth_changed(current: dict[str, Any], spec: GatewaySpec) -> bool:
         (v.label, v.issuer, v.audience, v.jwks_uri) for v in spec.verifiers
     ]
     return stored != declared
-
 
 async def plan_document(document: ConfigDocument, read_models: Any, *,
                         tenant_id: str) -> dict[str, Any]:
@@ -383,7 +351,6 @@ async def plan_document(document: ConfigDocument, read_models: Any, *,
         "errors": errors,
         "prune": document.prune,
     }
-
 
 async def apply_document(document: ConfigDocument, commands: Any,
                          read_models: Any, *, tenant_id: str,
@@ -536,7 +503,6 @@ async def apply_document(document: ConfigDocument, commands: Any,
         "members": member_result,
     }
 
-
 async def _role_table(read_models: Any, tenant_id: str) -> dict[str, dict[str, Any]]:
     """Role name -> {id, permissions, builtin}, for one tenant.
 
@@ -554,7 +520,6 @@ async def _role_table(read_models: Any, tenant_id: str) -> dict[str, dict[str, A
             "builtin": False,
         }
     return table
-
 
 async def _apply_roles(specs: Any, commands: Any, read_models: Any, *, tenant_id: str,
                        actor: str, permissions: Any) -> dict[str, Any]:
@@ -603,7 +568,6 @@ async def _apply_roles(specs: Any, commands: Any, read_models: Any, *, tenant_id
             result["table"][spec.name] = current
     return result
 
-
 async def _apply_members(specs: Any, commands: Any, read_models: Any, *, tenant_id: str,
                          actor: str, permissions: Any) -> dict[str, Any]:
     result: dict[str, Any] = {"created": [], "updated": [], "unchanged": [],
@@ -651,7 +615,6 @@ async def _apply_members(specs: Any, commands: Any, read_models: Any, *, tenant_
         else:
             result["unchanged"].append(spec.email)
     return result
-
 
 __all__ = ["ConfigDocument", "ConfigFileError", "GatewaySpec", "MemberSpec",
            "RoleSpec", "apply_document", "parse_document"]
