@@ -43,14 +43,32 @@ from gateway.domain.permissions import (
 
 _ENV_RE = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
 
+#: Fields a `${VAR}` may appear in: credentials, never something echoed back.
+_CREDENTIAL_FIELD_RE = re.compile(
+    r"^(?:gateways\[\d+\]\.auth\.(?:client_id|client_secret|upstream_token)"
+    r"|members\[\d+\]\.password)$"
+)
 
 class ConfigFileError(ValueError):
     """The YAML file is malformed or references an unset variable."""
 
+def _expand(value: Any, field: str = "") -> Any:
+    """Expand ${VAR} / ${VAR:-default}, but only in a credential field.
 
-def _expand(value: Any) -> Any:
-    """Expand ${VAR} / ${VAR:-default} recursively."""
+    Expanding the whole document made `POST /api/config/validate` a way to read
+    any variable the process holds: `slug` is echoed back after expansion and
+    before its format is checked, so `${OMG_SESSION_SECRET}` came back as text.
+    Refusing instead of leaving the text alone matters — an unevaluated
+    placeholder would be stored and echoed as if it were the real value.
+    """
     if isinstance(value, str):
+        if _ENV_RE.search(value) and not _CREDENTIAL_FIELD_RE.match(field):
+            raise ConfigFileError(
+                f"{field or 'document'}: environment expansion is only allowed in "
+                "credential fields (auth.client_id, auth.client_secret, "
+                "auth.upstream_token, members[].password)"
+            )
+
         def replace(match: re.Match[str]) -> str:
             name, default = match.group(1), match.group(2)
             resolved = os.environ.get(name)
@@ -62,11 +80,15 @@ def _expand(value: Any) -> Any:
 
         return _ENV_RE.sub(replace, value)
     if isinstance(value, list):
-        return [_expand(item) for item in value]
+        return [
+            _expand(item, f"{field}[{index}]") for index, item in enumerate(value)
+        ]
     if isinstance(value, dict):
-        return {key: _expand(item) for key, item in value.items()}
+        return {
+            key: _expand(item, f"{field}.{key}" if field else str(key))
+            for key, item in value.items()
+        }
     return value
-
 
 class GatewaySpec(BaseModel):
     """One gateway as declared in the file. Validated on construction."""
@@ -94,7 +116,6 @@ class GatewaySpec(BaseModel):
     rate_limit: int = 0
     api_keys: tuple[str, ...] = ()
     enabled: bool = True
-
 
 class RoleSpec(BaseModel):
     """A custom role. Built-ins are code; the file may name them, not change them."""
@@ -130,7 +151,6 @@ class ConfigDocument(BaseModel):
     members: tuple[MemberSpec, ...] = ()
     prune: bool = False
     raw: dict[str, Any] = {}
-
 
 def parse_document(text: str) -> ConfigDocument:
     try:
@@ -199,6 +219,8 @@ def _parse_members(raw: Any) -> list[MemberSpec]:
         email = str(entry.get("email") or "").strip().lower()
         if not email:
             raise ConfigFileError(f"members[{index}]: email is required")
+        if "@" not in email:
+            raise ConfigFileError(f"members[{index}]: invalid email")
         if email in seen:
             raise ConfigFileError(f"duplicate member '{email}'")
         seen.add(email)
@@ -210,7 +232,6 @@ def _parse_members(raw: Any) -> list[MemberSpec]:
             )
         )
     return specs
-
 
 def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
     slug = str(entry["slug"]).strip()
@@ -249,7 +270,6 @@ def _parse_gateway(entry: dict[str, Any]) -> GatewaySpec:
         api_keys=tuple(str(label) for label in (entry.get("api_keys") or ())),
         enabled=bool(entry.get("enabled", True)),
     )
-
 
 def _auth_changed(current: dict[str, Any], spec: GatewaySpec) -> bool:
     """True when the declared auth block differs from what the gateway holds.
@@ -331,7 +351,6 @@ async def plan_document(document: ConfigDocument, read_models: Any, *,
         "errors": errors,
         "prune": document.prune,
     }
-
 
 async def apply_document(document: ConfigDocument, commands: Any,
                          read_models: Any, *, tenant_id: str,
@@ -596,7 +615,6 @@ async def _apply_members(specs: Any, commands: Any, read_models: Any, *, tenant_
         else:
             result["unchanged"].append(spec.email)
     return result
-
 
 __all__ = ["ConfigDocument", "ConfigFileError", "GatewaySpec", "MemberSpec",
            "RoleSpec", "apply_document", "parse_document"]
